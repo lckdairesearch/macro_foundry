@@ -80,6 +80,7 @@ PostgREST, no direct DB access for clients). SQLAdmin connects as the same
 macro_foundry/
 ├── CLAUDE.md                       # agent entry (Claude Code)
 ├── AGENTS.md                       # agent entry (Codex, identical to CLAUDE.md)
+├── CONTEXT.md                      # domain glossary / canonical terminology
 ├── .env.local                      # secrets, gitignored
 ├── .env.example                    # template, committed
 ├── pyproject.toml                  # uv-managed
@@ -188,7 +189,6 @@ macro_foundry/
     ├── project_overview.md
     ├── architecture.md
     ├── code_standards.md
-    ├── glossary.md
     ├── build_plan.md
     ├── progress_tracker.md
     ├── adr/

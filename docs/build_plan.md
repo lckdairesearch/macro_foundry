@@ -22,8 +22,9 @@ Update `progress_tracker.md` when a phase completes. Do not skip the verify step
 **Deliverables:**
 
 - `CLAUDE.md` and `AGENTS.md` at the project root (identical content)
+- `CONTEXT.md` at the project root
 - `docs/project_overview.md`, `docs/architecture.md`, `docs/code_standards.md`,
-  `docs/glossary.md`, `docs/build_plan.md`, `docs/progress_tracker.md`
+  `docs/build_plan.md`, `docs/progress_tracker.md`
 - `docs/adr/0001` through `docs/adr/0006` (the decisions from the planning session)
 - `docs/schema/db_er.txt` (V3 canonical schema)
 - Matt Pocock skills installed: `grill-with-docs`, `tdd`, `diagnose`, `zoom-out`

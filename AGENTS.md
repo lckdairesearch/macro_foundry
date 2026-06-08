@@ -20,7 +20,7 @@ Before any work, load these files. They are short by design — read all of them
 
 1. `docs/project_overview.md` — what macro_foundry is, and the scope of the current phase
 2. `docs/architecture.md` — the stack, layers, and decisions
-3. `docs/CONTEXT.md` — domain language (series vs series_family vs concept vs observation, etc.)
+3. `CONTEXT.md` — domain language (series vs series_family vs concept vs observation, etc.)
 4. `docs/code_standards.md` — rules that apply to every line of code
 5. `docs/build_plan.md` — the phased implementation plan
 6. `docs/progress_tracker.md` — what's done, what's next
@@ -65,7 +65,7 @@ When you complete a phase or make a non-trivial decision:
    on deviations from the build plan.
 2. **If a new architectural decision was made**, write an ADR at
    `docs/adr/00XX-title.md` following the existing format (see ADRs 0001–0006).
-3. **If the domain language evolved**, update `docs/CONTEXT.md`.
+3. **If the domain language evolved**, update `CONTEXT.md`.
 4. **If the build plan changed**, update `docs/build_plan.md`.
 
 Do not silently change architecture decisions. If you encounter a reason to deviate

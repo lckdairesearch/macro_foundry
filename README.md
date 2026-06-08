@@ -8,6 +8,7 @@ bootstrapped around the structure defined in `docs/architecture.md`.
 - Claude entrypoint: `CLAUDE.md`
 - Codex entrypoint: `AGENTS.md`
 - Agent operating manual: `AGENTS.md`
+- Domain glossary: `CONTEXT.md`
 - Project scope: `docs/project_overview.md`
 - Architecture: `docs/architecture.md`
 - Code standards: `docs/code_standards.md`

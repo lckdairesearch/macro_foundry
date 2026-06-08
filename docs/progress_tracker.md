@@ -38,6 +38,17 @@ Phase 5 is complete. The repo now has the full V3 ORM graph, including explicit
 
 ## Log
 
+### [2026-06-08] Documentation alignment — `CONTEXT.md` moved to repo root
+
+Aligned markdown docs with the glossary move from `docs/CONTEXT.md` /
+`docs/glossary.md` to the repo-root `CONTEXT.md`:
+
+- updated `AGENTS.md` and `CLAUDE.md` so the required reading list and
+  documentation-update rules point at `CONTEXT.md`
+- updated `docs/architecture.md` and `docs/build_plan.md` so the documented repo
+  layout matches the current file location
+- updated `README.md` to list `CONTEXT.md` as a first-class project entrypoint
+
 ### [2026-06-08] Phase 5 — Complete
 
 SQLAlchemy models now cover the full V3 schema surface:
@@ -208,8 +219,8 @@ Repo skeleton aligned to `docs/architecture.md`:
   content to `docs/adr/README.md`
 - added `.gitignore`, `.env.example`, and a gitignored `.env.local`
 - added `pyproject.toml` with the Phase 1 runtime and dev dependencies
-- corrected the `docs/CONTEXT.md` references in `architecture.md` and
-  `build_plan.md` to `docs/glossary.md`, which matches the repo and `AGENTS.md`
+- corrected the glossary-path references in `architecture.md` and
+  `build_plan.md` to match the then-current repo layout
 - generated `uv.lock` and the project `.venv`
 
 Verification:
@@ -227,8 +238,8 @@ Deviation note:
 Agent infrastructure laid down:
 
 - `CLAUDE.md` and `AGENTS.md` at project root (identical content)
-- `docs/project_overview.md`, `docs/architecture.md`, `docs/code_standards.md`,
-  `docs/glossary.md`, `docs/build_plan.md`, `docs/progress_tracker.md`
+- `CONTEXT.md`, `docs/project_overview.md`, `docs/architecture.md`,
+  `docs/code_standards.md`, `docs/build_plan.md`, `docs/progress_tracker.md`
 - `docs/adr/0001-uuidv7-server-side-defaults.md` through
   `docs/adr/0006-two-role-architecture.md`
 
