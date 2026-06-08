@@ -6,6 +6,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 from fastapi import FastAPI
 
+from macro_foundry.backend import admin as admin_module
 from macro_foundry.backend.api import API_ROUTERS
 
 
@@ -25,6 +26,9 @@ for router in API_ROUTERS:
     app.include_router(router, prefix="/api/v1")
 
 
+admin = admin_module.register_admin(app)
+
+
 @app.get("/healthz")
 async def healthcheck() -> dict[str, str]:
     """Minimal process-health endpoint."""
@@ -32,4 +36,4 @@ async def healthcheck() -> dict[str, str]:
     return {"status": "ok"}
 
 
-__all__ = ["app"]
+__all__ = ["admin", "app"]

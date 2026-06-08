@@ -12,11 +12,14 @@ Most recent at the top.
 
 ## Current phase
 
-**Phase 8 — Seed data + CLI** (next).
+**Phase 8 — Seed data + CLI** (in progress).
 
 Phase 7 is complete. The repo now has the full Pydantic schema surface aligned
 to the V3 ORM graph, including schema-side validation for the documented
-cross-field checks.
+cross-field checks. Phase 8 now also includes a curated default provider /
+provider-catalog seed set in addition to geographies and tags. Phase 9 was
+completed out of order to unblock API wiring while the Phase 8 seed work
+continues.
 
 ## Phase status
 
@@ -30,14 +33,122 @@ cross-field checks.
 | 5     | Models                         | ✅ Complete |
 | 6     | Alembic + initial migrations   | ✅ Complete |
 | 7     | Pydantic schemas               | ✅ Complete |
-| 8     | Seed data + CLI                | ⏳ Next     |
-| 9     | CRUD generator + simple routes | ⏳          |
+| 8     | Seed data + CLI                | 🚧 In progress |
+| 9     | CRUD generator + simple routes | ✅ Complete |
 | 10    | Hand-tuned routes              | ⏳          |
-| 11    | SQLAdmin                       | ⏳          |
+| 11    | SQLAdmin                       | ✅ Complete |
 | 12    | Tests                          | ⏳          |
 | 13    | Neon parity verification       | ⏳          |
 
 ## Log
+
+### [2026-06-08] Phase 11 — Complete (implemented out of order)
+
+SQLAdmin now exists as a mounted admin surface ahead of Phases 8-10 because its
+documented dependency is only the Phase 5 model graph:
+
+- added `src/macro_foundry/backend/admin/_base.py` with shared `BaseModelView`
+  defaults, relationship-label helpers, and an admin-specific form converter so
+  foreign-key selects render meaningful labels instead of model reprs
+- added `src/macro_foundry/backend/admin/auth.py` with a single-user
+  `BasicAuthBackend` wired to the existing `settings.admin.*` credentials and
+  session secret
+- added domain view modules under `src/macro_foundry/backend/admin/views/`
+  covering all 19 V3 tables, including project-default form exclusions,
+  relationship formatters, JSONB textarea widget overrides, and read-only admin
+  treatment for append-only observations and run logs
+- added `src/macro_foundry/backend/admin/register.py` and mounted SQLAdmin at
+  `/admin` from `src/macro_foundry/backend/main.py`
+
+Deviation note:
+
+- completed Phase 11 before Phase 10 because the user asked to implement the
+  admin surface directly, and Phase 11 depends only on the Phase 5 model graph
+
+Verification:
+
+- `.venv/bin/ruff check src/macro_foundry/backend/admin
+  src/macro_foundry/backend/main.py` exited 0
+- `.venv/bin/python -c "from macro_foundry.backend.main import app, admin;
+  print('routes=', len(app.routes)); print('admin=', type(admin).__name__)"`
+  printed `routes= 91` and `admin= Admin`
+- an unsandboxed FastAPI `TestClient` smoke script loaded `/admin/login`,
+  authenticated with the configured admin credentials, created a concept
+  through `/admin/concept/create`, verified the row in Postgres, deleted the
+  temporary concept, and printed `admin-smoke-ok`
+- an unsandboxed follow-up smoke script inserted two temporary geographies,
+  loaded `/admin/geography-membership/create`, confirmed the foreign-key select
+  rendered a human-readable `CODE - Name` label, cleaned up the temporary rows,
+  and printed `admin-fk-label-ok ...`
+
+### [2026-06-08] Phase 9 — Complete (out of order ahead of Phase 8)
+
+FastAPI entrypoint scaffolding and the thin CRUD layer now exist for the simple
+tables:
+
+- added `src/macro_foundry/backend/crud.py` with one generator covering list,
+  get, create, patch, and delete routes
+- added `src/macro_foundry/backend/deps.py` with bearer-token auth and the
+  shared session dependency surface
+- added one router module per simple table under `src/macro_foundry/backend/api/`
+  and registered them centrally for `/api/v1`
+- added `src/macro_foundry/backend/main.py` with the FastAPI app entrypoint and
+  a minimal `/healthz` route
+- taught the generator to handle simple equality filters and composite-key
+  junction tables so `series_family_members` and `series_tags` do not need a
+  separate routing pattern
+- added `uvicorn` to the runtime dependencies so the documented app startup
+  command is actually available
+
+Deviation note:
+
+- completed Phase 9 before Phase 8 because the user asked to start API work
+  immediately; the seed data and CLI work remains in progress
+
+Verification:
+
+- `/Users/leodai/Development/macro_foundry/.uv-bootstrap/bin/uv run ruff check src/macro_foundry/backend`
+  exited 0
+- `/Users/leodai/Development/macro_foundry/.uv-bootstrap/bin/uv run python -c "from macro_foundry.backend.main import app; print(len(app.routes))"`
+  printed `90`
+- a live ASGI-backed smoke script against the local Postgres database completed
+  list/create/filter/patch/delete on `/api/v1/concepts/` and printed
+  `crud-smoke-ok`
+- `/Users/leodai/Development/macro_foundry/.uv-bootstrap/bin/uv run uvicorn macro_foundry.backend.main:app --host 127.0.0.1 --port 8001`
+  started successfully, and `curl http://127.0.0.1:8001/healthz` returned
+  `{"status":"ok"}`
+
+### [2026-06-08] Phase 8 — In progress
+
+Phase 8 implementation is underway with the following scope clarifications now
+captured in code and docs:
+
+- expanded the seed scope beyond the original geography/tag baseline to include
+  a curated default provider and provider-catalog seed set
+- fixed the geography curation boundary to all ISO 3166-1 geographies, US
+  states plus DC, Japan prefectures, and the 8 Japan `chiho` regions
+- fixed the tag taxonomy to the normalized 7-category subject set used in
+  `src/macro_foundry/seed/data/tags.py`
+- fixed the provider naming convention for country-scoped official sources to
+  use 3-letter geography prefixes in the canonical provider name (`USA FRED`,
+  `HKG Census and Statistics Department`, `JPN e-Stat`)
+- fixed the default membership policy to current memberships by default, with
+  explicit historical EU change tracking for the last 20 years including Brexit
+- added the explicit `AU` geography exception so the seeded G20 membership can
+  match the current official composition
+- deferred two follow-up items to a later V2-style pass rather than changing
+  V3 mid-phase: a nullable provider→geography link and a scheduled checker for
+  EU membership expansion/retraction drift
+
+Verification so far:
+
+- `uv run python - <<'PY' ...` imported the Phase 8 seed data modules and
+  printed the expected counts for countries, subnationals, memberships,
+  providers, catalogs, and tags
+- `uv run pytest -q tests/test_seed_data.py tests/test_schemas.py`
+  exited 0 with `15 passed`
+- per user request, `uv run macrodb seed` itself has **not** been executed yet,
+  so Phase 8 is not marked complete
 
 ### [2026-06-08] Phase 7 — Complete
 
