@@ -113,8 +113,6 @@ import asyncio; from sqlalchemy import text; asyncio.run(async_engine.begin().__
   `geography.py`, `series.py`, `provider.py`, `derivation.py`, `run.py`,
   `governance.py`
 - `src/macro_foundry/enums/__init__.py` re-exports the public surface
-- Tags remain curated seed data and are intentionally excluded from the enum
-  package
 
 **Cross-reference for completeness:**
 
