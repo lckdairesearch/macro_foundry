@@ -109,10 +109,12 @@ import asyncio; from sqlalchemy import text; asyncio.run(async_engine.begin().__
 
 **Deliverables:**
 
-- All ~22 enum classes in `src/macro_foundry/enums/`, organized by domain:
+- All V3 enum classes in `src/macro_foundry/enums/`, organized by domain:
   `geography.py`, `series.py`, `provider.py`, `derivation.py`, `run.py`,
-  `governance.py`, `tag.py`
+  `governance.py`
 - `src/macro_foundry/enums/__init__.py` re-exports the public surface
+- Tags remain curated seed data and are intentionally excluded from the enum
+  package
 
 **Cross-reference for completeness:**
 

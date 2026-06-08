@@ -14,29 +14,41 @@ Most recent at the top.
 
 **Phase 5 — Models** (next).
 
-Phase 4 is complete. The repo now has V3-aligned enum classes organized by
-domain and re-exported from `macro_foundry.enums`.
+Phase 4 is complete. The repo now has V3-aligned enum classes for
+code-routing and CHECK-constrained domains, re-exported from
+`macro_foundry.enums`.
 
 ## Phase status
 
-| Phase | Title                          | Status         |
-| ----- | ------------------------------ | -------------- |
-| 0     | Agent infrastructure           | ✅ Complete    |
-| 1     | Repo bootstrap                 | ✅ Complete    |
-| 2     | Docker + Postgres + roles      | ✅ Complete    |
-| 3     | Config + session + base        | ✅ Complete    |
-| 4     | Enums                          | ✅ Complete    |
-| 5     | Models                         | ⏳ Next        |
-| 6     | Alembic + initial migrations   | ⏳             |
-| 7     | Pydantic schemas               | ⏳             |
-| 8     | Seed data + CLI                | ⏳             |
-| 9     | CRUD generator + simple routes | ⏳             |
-| 10    | Hand-tuned routes              | ⏳             |
-| 11    | SQLAdmin                       | ⏳             |
-| 12    | Tests                          | ⏳             |
-| 13    | Neon parity verification       | ⏳             |
+| Phase | Title                          | Status      |
+| ----- | ------------------------------ | ----------- |
+| 0     | Agent infrastructure           | ✅ Complete |
+| 1     | Repo bootstrap                 | ✅ Complete |
+| 2     | Docker + Postgres + roles      | ✅ Complete |
+| 3     | Config + session + base        | ✅ Complete |
+| 4     | Enums                          | ✅ Complete |
+| 5     | Models                         | ⏳ Next     |
+| 6     | Alembic + initial migrations   | ⏳          |
+| 7     | Pydantic schemas               | ⏳          |
+| 8     | Seed data + CLI                | ⏳          |
+| 9     | CRUD generator + simple routes | ⏳          |
+| 10    | Hand-tuned routes              | ⏳          |
+| 11    | SQLAdmin                       | ⏳          |
+| 12    | Tests                          | ⏳          |
+| 13    | Neon parity verification       | ⏳          |
 
 ## Log
+
+### [2026-06-08] Phase 4 correction — removed mistaken tag enum placeholder
+
+Corrected a Phase 4 artifact that contradicted ADR 0002:
+
+- removed `src/macro_foundry/enums/tag.py`; it was an empty placeholder with no
+  runtime callers
+- updated the architecture and build plan so the enum package only covers
+  code-routing and CHECK-constrained values
+- made the tags exception explicit in current progress notes: tags are curated
+  seed data, not Python enums
 
 ### [2026-06-08] Ingestion feed taxonomy — `file_upload` renamed to `file`
 
@@ -72,14 +84,14 @@ Enum scaffolding landed for the full V3 schema surface:
   series, providers, derivations, run logs, and governance workflows
 - re-exported the public enum surface from `src/macro_foundry/enums/__init__.py`
   so models and schemas can import from one stable package entrypoint
-- added `src/macro_foundry/enums/tag.py` as an explicit placeholder documenting
-  the settled exception that tags are curated seed data, not a Python enum
+- kept tags out of the enum package because they are curated seed data rather
+  than code-routing enums
 
 Verification:
 
 - `.uv-bootstrap/bin/uv run ruff check src/macro_foundry/enums` exited 0
 - `.uv-bootstrap/bin/uv run python -c "from macro_foundry.enums import Frequency;
-  print(Frequency.MONTHLY.value)"` printed `M`
+print(Frequency.MONTHLY.value)"` printed `M`
 
 ### [2026-06-08] Agent manual — Commit message guidance added
 

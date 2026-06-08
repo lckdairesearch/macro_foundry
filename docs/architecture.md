@@ -104,7 +104,7 @@ macro_foundry/
 │   │   ├── base.py                 # declarative Base + TimestampedBase + CreatedAtBase
 │   │   └── session.py              # async engine, AsyncSessionLocal, get_session()
 │   │
-│   ├── enums/                      # Python str-Enum classes, single source of truth
+│   ├── enums/                      # Python str-Enum classes for code-routing and CHECK-constrained values
 │   │   ├── __init__.py
 │   │   ├── geography.py
 │   │   ├── series.py
@@ -112,7 +112,6 @@ macro_foundry/
 │   │   ├── derivation.py
 │   │   ├── run.py
 │   │   ├── governance.py
-│   │   └── tag.py
 │   │
 │   ├── models/                     # SQLAlchemy ORM — V3 tables
 │   │   ├── __init__.py             # exports all models so Alembic sees metadata
@@ -273,6 +272,10 @@ class SeriesCreate(BaseModel):
 The DB stores the value as a `VARCHAR` with a named CHECK constraint. Adding new
 enum values later requires a hand-written Alembic migration (autogenerate is
 unreliable for CHECK changes). This tradeoff is accepted.
+
+`tags` are the explicit exception: they are curated lookup data seeded into the
+database, not Python enums, because application code does not branch on a fixed
+tag taxonomy.
 
 ## Seed strategy
 
