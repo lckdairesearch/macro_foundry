@@ -42,6 +42,31 @@ the Phase 8 seed work continues.
 
 ## Log
 
+### [2026-06-08] SQLAdmin hardening — filters + tab coverage + navigation cleanup
+
+The SQLAdmin surface was hardened after the first real browser pass exposed a
+runtime break in list-page filters:
+
+- fixed the shared admin base so raw `column_filters` declarations are
+  normalized into concrete SQLAdmin filter objects, which restores enum,
+  boolean, date, and numeric filtering across the admin list pages
+- added `tests/test_admin.py` coverage for the full mounted admin surface,
+  logging in and asserting that every registered `/admin/<identity>/list`
+  route renders successfully against `macrodb_test`
+- reorganized the admin sidebar around the domain layers already described in
+  the project docs (`Core Curation`, `Provider Layer`, `Series Catalog`,
+  `Observation Layer`, `Governance`) instead of leaving 19 flat tabs in one
+  undifferentiated list
+- added sensible default list ordering for operator-facing pages so catalog
+  tables open alphabetically and log / observation / governance views open
+  newest-first
+
+Verification:
+
+- `uv run ruff check src/macro_foundry/backend/admin tests/test_admin.py`
+  exited 0
+- `uv run pytest tests/test_admin.py -q` exited 0 with `20 passed`
+
 ### [2026-06-08] Environment naming — local dev/test + cloud prod
 
 Clarified and partially implemented the physical database naming model without

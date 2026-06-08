@@ -7,6 +7,8 @@ from macro_foundry.models import ComputationRunLog, IngestionRunLog
 class IngestionRunLogAdmin(BaseModelView, model=IngestionRunLog):
     name = "Ingestion run log"
     name_plural = "Ingestion run logs"
+    category = "Observation Layer"
+    category_icon = "ti ti-database"
     can_create = False
     can_edit = False
     can_delete = False
@@ -28,6 +30,7 @@ class IngestionRunLogAdmin(BaseModelView, model=IngestionRunLog):
     ]
     column_filters = [IngestionRunLog.status, IngestionRunLog.triggered_by]
     column_sortable_list = [IngestionRunLog.started_at, IngestionRunLog.finished_at, IngestionRunLog.created_at]
+    column_default_sort = [(IngestionRunLog.started_at, True)]
     column_formatters = {IngestionRunLog.ingestion_feed: relation_formatter("ingestion_feed")}
     form_columns = [
         IngestionRunLog.ingestion_feed,
@@ -52,6 +55,8 @@ class IngestionRunLogAdmin(BaseModelView, model=IngestionRunLog):
 class ComputationRunLogAdmin(BaseModelView, model=ComputationRunLog):
     name = "Computation run log"
     name_plural = "Computation run logs"
+    category = "Observation Layer"
+    category_icon = "ti ti-database"
     can_create = False
     can_edit = False
     can_delete = False
@@ -77,6 +82,7 @@ class ComputationRunLogAdmin(BaseModelView, model=ComputationRunLog):
         ComputationRunLog.output_mode,
     ]
     column_sortable_list = [ComputationRunLog.started_at, ComputationRunLog.finished_at, ComputationRunLog.created_at]
+    column_default_sort = [(ComputationRunLog.started_at, True)]
     column_formatters = {ComputationRunLog.derived_series: relation_formatter("derived_series")}
     form_columns = [
         ComputationRunLog.derived_series,

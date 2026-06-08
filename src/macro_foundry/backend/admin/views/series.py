@@ -7,6 +7,8 @@ from macro_foundry.models import Series, SeriesFamily, SeriesFamilyMember
 class SeriesAdmin(BaseModelView, model=Series):
     name = "Series"
     name_plural = "Series"
+    category = "Series Catalog"
+    category_icon = "ti ti-chart-line"
     column_list = [
         Series.code,
         Series.name,
@@ -20,6 +22,7 @@ class SeriesAdmin(BaseModelView, model=Series):
     column_searchable_list = [Series.code, Series.name, "geography.code", "geography.name"]
     column_filters = [Series.origin_type, Series.frequency, Series.measure, Series.is_active]
     column_sortable_list = [Series.code, Series.name, Series.updated_at]
+    column_default_sort = [(Series.code, False)]
     column_formatters = {
         Series.geography: relation_formatter("geography"),
         Series.replaced_by_series: relation_formatter("replaced_by_series"),
@@ -54,6 +57,8 @@ class SeriesAdmin(BaseModelView, model=Series):
 class SeriesFamilyAdmin(BaseModelView, model=SeriesFamily):
     name = "Series family"
     name_plural = "Series families"
+    category = "Series Catalog"
+    category_icon = "ti ti-chart-line"
     column_list = [
         SeriesFamily.code,
         SeriesFamily.name,
@@ -63,6 +68,7 @@ class SeriesFamilyAdmin(BaseModelView, model=SeriesFamily):
     ]
     column_searchable_list = [SeriesFamily.code, SeriesFamily.name, "concept.code", "concept.name", "geography.code"]
     column_sortable_list = [SeriesFamily.code, SeriesFamily.name, SeriesFamily.updated_at]
+    column_default_sort = [(SeriesFamily.code, False)]
     column_formatters = {
         SeriesFamily.concept: relation_formatter("concept"),
         SeriesFamily.geography: relation_formatter("geography"),
@@ -79,6 +85,8 @@ class SeriesFamilyAdmin(BaseModelView, model=SeriesFamily):
 class SeriesFamilyMemberAdmin(BaseModelView, model=SeriesFamilyMember):
     name = "Series family member"
     name_plural = "Series family members"
+    category = "Series Catalog"
+    category_icon = "ti ti-chart-line"
     column_list = [
         SeriesFamilyMember.family,
         SeriesFamilyMember.series,
@@ -89,6 +97,7 @@ class SeriesFamilyMemberAdmin(BaseModelView, model=SeriesFamilyMember):
     column_searchable_list = ["family.code", "family.name", "series.code", "series.name", SeriesFamilyMember.variant]
     column_filters = [SeriesFamilyMember.is_primary]
     column_sortable_list = [SeriesFamilyMember.variant, SeriesFamilyMember.updated_at]
+    column_default_sort = [(SeriesFamilyMember.updated_at, True)]
     column_formatters = {
         SeriesFamilyMember.family: relation_formatter("family"),
         SeriesFamilyMember.series: relation_formatter("series"),

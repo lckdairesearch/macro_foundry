@@ -7,6 +7,8 @@ from macro_foundry.models import ChangeProposal, ChangeProposalItem
 class ChangeProposalAdmin(BaseModelView, model=ChangeProposal):
     name = "Change proposal"
     name_plural = "Change proposals"
+    category = "Governance"
+    category_icon = "ti ti-shield-check"
     column_list = [
         ChangeProposal.title,
         ChangeProposal.proposal_type,
@@ -24,6 +26,7 @@ class ChangeProposalAdmin(BaseModelView, model=ChangeProposal):
         ChangeProposal.risk_level,
     ]
     column_sortable_list = [ChangeProposal.title, ChangeProposal.updated_at]
+    column_default_sort = [(ChangeProposal.updated_at, True)]
     column_formatters = {
         ChangeProposal.superseded_by_proposal: relation_formatter("superseded_by_proposal"),
     }
@@ -48,6 +51,8 @@ class ChangeProposalAdmin(BaseModelView, model=ChangeProposal):
 class ChangeProposalItemAdmin(BaseModelView, model=ChangeProposalItem):
     name = "Change proposal item"
     name_plural = "Change proposal items"
+    category = "Governance"
+    category_icon = "ti ti-shield-check"
     column_list = [
         ChangeProposalItem.proposal,
         ChangeProposalItem.item_type,
@@ -64,6 +69,7 @@ class ChangeProposalItemAdmin(BaseModelView, model=ChangeProposalItem):
         ChangeProposalItem.validation_status,
     ]
     column_sortable_list = [ChangeProposalItem.updated_at]
+    column_default_sort = [(ChangeProposalItem.updated_at, True)]
     column_formatters = {ChangeProposalItem.proposal: relation_formatter("proposal")}
     form_columns = [
         ChangeProposalItem.proposal,

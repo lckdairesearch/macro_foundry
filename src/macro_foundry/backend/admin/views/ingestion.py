@@ -7,6 +7,8 @@ from macro_foundry.models import IngestionFeed
 class IngestionFeedAdmin(BaseModelView, model=IngestionFeed):
     name = "Ingestion feed"
     name_plural = "Ingestion feeds"
+    category = "Provider Layer"
+    category_icon = "ti ti-building-bank"
     column_list = [
         IngestionFeed.series_source,
         IngestionFeed.feed_method,
@@ -24,6 +26,7 @@ class IngestionFeedAdmin(BaseModelView, model=IngestionFeed):
     ]
     column_filters = [IngestionFeed.feed_method, IngestionFeed.is_active]
     column_sortable_list = [IngestionFeed.feed_method, IngestionFeed.updated_at]
+    column_default_sort = [(IngestionFeed.updated_at, True)]
     column_formatters = {IngestionFeed.series_source: relation_formatter("series_source")}
     form_columns = [
         IngestionFeed.series_source,

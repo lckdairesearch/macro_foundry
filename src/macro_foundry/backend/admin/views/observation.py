@@ -7,6 +7,8 @@ from macro_foundry.models import Observation
 class ObservationAdmin(BaseModelView, model=Observation):
     name = "Observation"
     name_plural = "Observations"
+    category = "Observation Layer"
+    category_icon = "ti ti-database"
     can_create = False
     can_edit = False
     can_delete = False
@@ -23,6 +25,7 @@ class ObservationAdmin(BaseModelView, model=Observation):
     column_searchable_list = ["series.code", "series.name"]
     column_filters = [Observation.period_start, Observation.vintage_date]
     column_sortable_list = [Observation.period_start, Observation.vintage_date, Observation.created_at]
+    column_default_sort = [(Observation.created_at, True)]
     column_formatters = {
         Observation.series: relation_formatter("series"),
         Observation.ingestion_run_log: relation_formatter("ingestion_run_log"),

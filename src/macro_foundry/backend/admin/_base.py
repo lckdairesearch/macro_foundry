@@ -8,7 +8,10 @@ from enum import Enum
 from typing import Any
 
 import anyio
+from sqlalchemy import Boolean
 from sqlalchemy import select
+from sqlalchemy.sql.sqltypes import Enum as SAEnum
+from sqladmin.filters import BooleanFilter, OperationColumnFilter, StaticValuesFilter
 from sqladmin import ModelView
 from sqladmin.forms import ModelConverter
 from sqladmin.helpers import is_async_session_maker
@@ -160,6 +163,35 @@ class BaseModelView(ModelView):
     use_pretty_export = True
     form_excluded_columns = ["id", "created_at", "updated_at"]
     form_converter = AdminModelConverter
+
+    def _build_filter(self, filter_: Any) -> Any:
+        if hasattr(filter_, "parameter_name"):
+            return filter_
+
+        column = getattr(self.model, filter_) if isinstance(filter_, str) else filter_
+        column_type = column.property.columns[0].type
+
+        if isinstance(column_type, Boolean):
+            return BooleanFilter(column)
+
+        if isinstance(column_type, SAEnum) and column_type.enum_class is not None:
+            values = [
+                (str(member.value), str(member.value))
+                for member in column_type.enum_class
+            ]
+            return StaticValuesFilter(column, values=values)
+
+        return OperationColumnFilter(column)
+
+    def get_filters(self) -> list[Any]:
+        filters = getattr(self, "_normalized_column_filters", None)
+        if filters is not None:
+            return filters
+
+        raw_filters = getattr(self, "column_filters", None) or []
+        filters = [self._build_filter(filter_) for filter_ in raw_filters]
+        self._normalized_column_filters = filters
+        return filters
 
 
 __all__ = [
