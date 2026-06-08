@@ -122,7 +122,8 @@ import asyncio; from sqlalchemy import text; asyncio.run(async_engine.begin().__
   `ReferenceKind`
 - `provider.py`: `ProviderType`, `ProviderRole`, `FeedMethod`
 - `derivation.py`: `ExecutionPolicy`, `InputVintagePolicy`, `OutputMode`
-- `run.py`: `RunStatus`, `TriggeredBy`
+- `run.py`: `IngestionRunStatus`, `ComputationRunStatus`,
+  `IngestionTriggeredBy`, `ComputationTriggeredBy`
 - `governance.py`: `ProposalType`, `ProposalStatus`, `RequestedBy`, `RiskLevel`,
   `ItemType`, `TargetType`, `Action`, `ValidationStatus`
 

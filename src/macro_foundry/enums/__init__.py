@@ -17,7 +17,12 @@ from macro_foundry.enums.governance import (
     ValidationStatus,
 )
 from macro_foundry.enums.provider import FeedMethod, ProviderRole, ProviderType
-from macro_foundry.enums.run import RunStatus, TriggeredBy
+from macro_foundry.enums.run import (
+    ComputationRunStatus,
+    ComputationTriggeredBy,
+    IngestionRunStatus,
+    IngestionTriggeredBy,
+)
 from macro_foundry.enums.series import (
     Frequency,
     Measure,
@@ -34,10 +39,14 @@ from macro_foundry.enums.series import (
 __all__ = [
     "Action",
     "CodeStandard",
+    "ComputationRunStatus",
+    "ComputationTriggeredBy",
     "ExecutionPolicy",
     "FeedMethod",
     "Frequency",
     "GeographyType",
+    "IngestionRunStatus",
+    "IngestionTriggeredBy",
     "InputVintagePolicy",
     "ItemType",
     "Measure",
@@ -52,11 +61,9 @@ __all__ = [
     "ReferenceKind",
     "RequestedBy",
     "RiskLevel",
-    "RunStatus",
     "SeasonalAdjustment",
     "TargetType",
     "TemporalStockFlow",
-    "TriggeredBy",
     "UnitKind",
     "UnitScale",
     "ValidationStatus",
