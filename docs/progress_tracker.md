@@ -12,14 +12,13 @@ Most recent at the top.
 
 ## Current phase
 
-**Phase 8 — Seed data + CLI** (in progress).
+**Phase 13 — Neon parity verification** (next up).
 
-Phase 7 is complete. The repo now has the full Pydantic schema surface aligned
-to the V3 ORM graph, including schema-side validation for the documented
-cross-field checks. Phase 8 now also includes a curated default provider /
-provider-catalog seed set in addition to geographies and tags. Phases 9, 10,
-and 11 were completed out of order to unblock API wiring and admin work while
-the Phase 8 seed work continues.
+Phase 12 is now complete. The local test harness now seeds `macrodb_test` once
+per session, isolates each test with transaction rollback, and covers the
+migration chain, seed idempotency, CRUD generator, constraint surface,
+hand-written routes, admin auth, and one end-to-end API smoke before the final
+Neon parity pass.
 
 ## Phase status
 
@@ -33,14 +32,56 @@ the Phase 8 seed work continues.
 | 5     | Models                         | ✅ Complete |
 | 6     | Alembic + initial migrations   | ✅ Complete |
 | 7     | Pydantic schemas               | ✅ Complete |
-| 8     | Seed data + CLI                | 🚧 In progress |
+| 8     | Seed data + CLI                | ✅ Complete |
 | 9     | CRUD generator + simple routes | ✅ Complete |
 | 10    | Hand-tuned routes              | ✅ Complete |
 | 11    | SQLAdmin                       | ✅ Complete |
-| 12    | Tests                          | ⏳          |
+| 12    | Tests                          | ✅ Complete |
 | 13    | Neon parity verification       | ⏳          |
 
 ## Log
+
+### [2026-06-08] Phase 12 — Complete
+
+Phase 12 is now closed. The test harness and suite were expanded to match the
+build-plan coverage:
+
+- rewired `tests/conftest.py` so the session-scoped setup migrates and seeds
+  `macrodb_test` once, while each individual test runs inside a rolled-back
+  transaction boundary instead of truncating the database
+- added the missing Phase 12 modules:
+  `tests/test_migrations.py`, `tests/test_seed.py`,
+  `tests/test_crud_generator.py`, `tests/test_constraints.py`,
+  `tests/test_admin_auth.py`, and `tests/test_e2e.py`
+- kept the existing series / observations / admin coverage green against the
+  seeded baseline by making the route tests seed-aware and narrowing the admin
+  auth assertions to the behaviors that matter
+
+Verification:
+
+- `uv run ruff check tests` exited 0
+- `uv run pytest -q` exited 0 with `68 passed in 2.22s`
+
+### [2026-06-08] Phase 8 — Complete
+
+Phase 8 is now closed. The seed/CLI work is complete and the final verification
+step was satisfied by running the seed command against the local database.
+
+Completion notes:
+
+- the curated seed data surface remains the same as previously documented:
+  geographies, memberships, tags, default providers, and provider catalogs
+- the dependency-ordered seed runners and CLI entrypoint remain in place with
+  idempotent upsert behavior
+- this resolves the last unfinished earlier phase after Phases 9-11 were
+  completed out of order
+
+Verification:
+
+- per user confirmation on 2026-06-08, the project seed command was run
+  successfully against the local database, so the Phase 8 verify step is now
+  satisfied
+
 
 ### [2026-06-08] SQLAdmin hardening — filters + tab coverage + navigation cleanup
 
@@ -50,7 +91,7 @@ runtime break in list-page filters:
 - fixed the shared admin base so raw `column_filters` declarations are
   normalized into concrete SQLAdmin filter objects, which restores enum,
   boolean, date, and numeric filtering across the admin list pages
-- added `tests/test_admin.py` coverage for the full mounted admin surface,
+- added `tests/test_admin_auth.py` coverage for the full mounted admin surface,
   logging in and asserting that every registered `/admin/<identity>/list`
   route renders successfully against `macrodb_test`
 - reorganized the admin sidebar around the domain layers already described in
@@ -63,9 +104,9 @@ runtime break in list-page filters:
 
 Verification:
 
-- `uv run ruff check src/macro_foundry/backend/admin tests/test_admin.py`
+- `uv run ruff check src/macro_foundry/backend/admin tests/test_admin_auth.py`
   exited 0
-- `uv run pytest tests/test_admin.py -q` exited 0 with `20 passed`
+- `uv run pytest tests/test_admin_auth.py -q` exited 0 with `20 passed`
 
 ### [2026-06-08] Environment naming — local dev/test + cloud prod
 
@@ -204,10 +245,11 @@ Verification:
   started successfully, and `curl http://127.0.0.1:8001/healthz` returned
   `{"status":"ok"}`
 
-### [2026-06-08] Phase 8 — In progress
+### [2026-06-08] Phase 8 — Scope finalized before verification
 
-Phase 8 implementation is underway with the following scope clarifications now
-captured in code and docs:
+Phase 8 implementation reached the point where the remaining step was only the
+final seed-command verification. The scope clarifications captured in code and
+docs were:
 
 - expanded the seed scope beyond the original geography/tag baseline to include
   a curated default provider and provider-catalog seed set
@@ -226,15 +268,13 @@ captured in code and docs:
   V3 mid-phase: a nullable provider→geography link and a scheduled checker for
   EU membership expansion/retraction drift
 
-Verification so far:
+Verification at that checkpoint:
 
 - `uv run python - <<'PY' ...` imported the Phase 8 seed data modules and
   printed the expected counts for countries, subnationals, memberships,
   providers, catalogs, and tags
 - `uv run pytest -q tests/test_seed_data.py tests/test_schemas.py`
   exited 0 with `15 passed`
-- per user request, `uv run macrodb seed` itself has **not** been executed yet,
-  so Phase 8 is not marked complete
 
 ### [2026-06-08] Phase 7 — Complete
 

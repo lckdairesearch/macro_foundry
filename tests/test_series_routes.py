@@ -25,6 +25,10 @@ from macro_foundry.models import Geography, Series, SeriesTag, Tag
 
 
 async def _create_country(session: AsyncSession, *, code: str = "USA", name: str = "United States") -> Geography:
+    existing = await session.scalar(select(Geography).where(Geography.code == code))
+    if existing is not None:
+        return existing
+
     geography = Geography(
         code=code,
         name=name,

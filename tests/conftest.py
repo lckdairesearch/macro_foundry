@@ -1,7 +1,8 @@
-"""Shared async test fixtures for API route coverage."""
+"""Shared async test fixtures for the seeded test database."""
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator, Iterator
 import os
 
@@ -10,13 +11,37 @@ import pytest_asyncio
 from alembic import command
 from alembic.config import Config
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import text
 from sqlalchemy.engine import URL, make_url
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from macro_foundry.backend.deps import get_session
 from macro_foundry.backend.main import app
 from macro_foundry.config import settings
+from macro_foundry.seed import run_seed
+
+_TRUNCATE_ALL_TABLES_SQL = """
+TRUNCATE TABLE
+    change_proposal_items,
+    change_proposals,
+    observations,
+    computation_run_logs,
+    ingestion_run_logs,
+    derivation_inputs,
+    derived_series,
+    ingestion_feeds,
+    series_sources,
+    series_tags,
+    series_family_members,
+    series_families,
+    series,
+    provider_catalogs,
+    providers,
+    geography_memberships,
+    tags,
+    concepts,
+    geographies
+RESTART IDENTITY CASCADE
+"""
 
 
 def _owner_test_url() -> str:
@@ -32,6 +57,37 @@ def _alembic_config(url: str) -> Config:
     return config
 
 
+async def _truncate_all_tables(url: str) -> None:
+    engine = create_async_engine(url, pool_pre_ping=True)
+    try:
+        async with engine.begin() as conn:
+            await conn.exec_driver_sql(_TRUNCATE_ALL_TABLES_SQL)
+    finally:
+        await engine.dispose()
+
+
+async def _seed_test_database(url: str) -> None:
+    engine = create_async_engine(
+        url,
+        pool_pre_ping=True,
+        pool_recycle=300,
+        pool_size=5,
+        max_overflow=10,
+    )
+    session_factory = async_sessionmaker(
+        bind=engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autoflush=False,
+    )
+    try:
+        async with session_factory() as session:
+            await run_seed(session)
+            await session.commit()
+    finally:
+        await engine.dispose()
+
+
 @pytest.fixture(scope="session", autouse=True)
 def migrated_test_db() -> Iterator[None]:
     original_owner_url = settings.db_owner_url
@@ -43,11 +99,18 @@ def migrated_test_db() -> Iterator[None]:
 
     config = _alembic_config(owner_test_url)
     command.upgrade(config, "head")
+    asyncio.run(_truncate_all_tables(owner_test_url))
+    asyncio.run(_seed_test_database(settings.db.test_url))
     yield
 
     settings.db_owner_url = original_owner_url
     settings.__dict__.pop("db", None)
     os.environ["MACRODB_OWNER_URL"] = original_owner_url
+
+
+@pytest.fixture(scope="session")
+def alembic_config(migrated_test_db: None) -> Config:
+    return _alembic_config(_owner_test_url())
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -74,61 +137,37 @@ async def test_engine(migrated_test_db: None) -> AsyncIterator[AsyncEngine]:
         await engine.dispose()
 
 
-@pytest_asyncio.fixture(autouse=True)
-async def clean_database(owner_test_engine: AsyncEngine) -> AsyncIterator[None]:
-    truncate_sql = """
-    TRUNCATE TABLE
-        change_proposal_items,
-        change_proposals,
-        observations,
-        computation_run_logs,
-        ingestion_run_logs,
-        derivation_inputs,
-        derived_series,
-        ingestion_feeds,
-        series_sources,
-        series_tags,
-        series_family_members,
-        series_families,
-        series,
-        provider_catalogs,
-        providers,
-        geography_memberships,
-        tags,
-        concepts,
-        geographies
-    RESTART IDENTITY CASCADE
-    """
-    async with owner_test_engine.begin() as conn:
-        await conn.execute(text(truncate_sql))
-    yield
-    async with owner_test_engine.begin() as conn:
-        await conn.execute(text(truncate_sql))
-
-
 @pytest_asyncio.fixture
-async def session(test_engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
-    session_factory = async_sessionmaker(
-        bind=test_engine,
+async def db_connection(test_engine: AsyncEngine) -> AsyncIterator[AsyncConnection]:
+    async with test_engine.connect() as connection:
+        transaction = await connection.begin()
+        try:
+            yield connection
+        finally:
+            await transaction.rollback()
+
+
+@pytest.fixture
+def test_session_factory(db_connection: AsyncConnection) -> async_sessionmaker[AsyncSession]:
+    return async_sessionmaker(
+        bind=db_connection,
         class_=AsyncSession,
         expire_on_commit=False,
         autoflush=False,
+        join_transaction_mode="create_savepoint",
     )
-    async with session_factory() as db_session:
+
+
+@pytest_asyncio.fixture
+async def session(test_session_factory: async_sessionmaker[AsyncSession]) -> AsyncIterator[AsyncSession]:
+    async with test_session_factory() as db_session:
         yield db_session
 
 
 @pytest_asyncio.fixture
-async def client(test_engine: AsyncEngine) -> AsyncIterator[AsyncClient]:
-    session_factory = async_sessionmaker(
-        bind=test_engine,
-        class_=AsyncSession,
-        expire_on_commit=False,
-        autoflush=False,
-    )
-
+async def client(test_session_factory: async_sessionmaker[AsyncSession]) -> AsyncIterator[AsyncClient]:
     async def override_get_session() -> AsyncIterator[AsyncSession]:
-        async with session_factory() as db_session:
+        async with test_session_factory() as db_session:
             try:
                 yield db_session
             except Exception:

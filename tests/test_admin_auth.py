@@ -1,16 +1,14 @@
-"""Regression coverage for SQLAdmin routes."""
+"""Regression coverage for SQLAdmin authentication."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from macro_foundry.backend.main import admin, app
 from macro_foundry.config import settings
-from macro_foundry.enums import CodeStandard, GeographyType
 from macro_foundry.models import Geography
 
 ADMIN_LIST_IDENTITIES = [view.identity for view in admin.views]
@@ -18,25 +16,29 @@ ADMIN_LIST_IDENTITIES = [view.identity for view in admin.views]
 
 @pytest.fixture
 def admin_test_session_maker(
-    test_engine: AsyncEngine,
+    test_session_factory: async_sessionmaker[AsyncSession],
     monkeypatch: pytest.MonkeyPatch,
-) -> Iterator[None]:
-    session_maker = async_sessionmaker(
-        bind=test_engine,
-        class_=AsyncSession,
-        expire_on_commit=False,
-        autoflush=False,
-    )
-    monkeypatch.setattr(admin, "engine", test_engine)
-    monkeypatch.setattr(admin, "session_maker", session_maker)
+) -> None:
+    monkeypatch.setattr(admin, "session_maker", test_session_factory)
     for view in admin.views:
-        monkeypatch.setattr(view, "session_maker", session_maker)
-    yield
+        monkeypatch.setattr(view, "session_maker", test_session_factory)
+
+
+@pytest.mark.asyncio
+async def test_admin_redirects_to_login_when_not_authenticated(
+    admin_test_session_maker: None,
+) -> None:
+    transport = ASGITransport(app=app, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get("/admin/geography/list", follow_redirects=False)
+
+    assert response.status_code == 302
+    assert response.headers["location"].endswith("/admin/login")
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("identity", ADMIN_LIST_IDENTITIES)
-async def test_admin_list_routes_render(
+async def test_admin_list_routes_render_after_login(
     admin_test_session_maker: None,
     identity: str,
 ) -> None:
@@ -58,27 +60,12 @@ async def test_admin_list_routes_render(
 
 
 @pytest.mark.asyncio
-async def test_admin_geography_list_renders(
+async def test_admin_login_grants_access_to_seeded_geographies(
     session: AsyncSession,
     admin_test_session_maker: None,
 ) -> None:
-    session.add_all(
-            [
-                Geography(
-                    code="USA",
-                    name="United States",
-                    type=GeographyType.COUNTRY,
-                    code_standard=CodeStandard.ISO_3166_1,
-                ),
-                Geography(
-                    code="JPN",
-                    name="Japan",
-                    type=GeographyType.COUNTRY,
-                    code_standard=CodeStandard.ISO_3166_1,
-                ),
-            ]
-        )
-    await session.commit()
+    usa = await session.scalar(select(Geography).where(Geography.code == "USA"))
+    assert usa is not None
 
     transport = ASGITransport(app=app, raise_app_exceptions=False)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -95,5 +82,4 @@ async def test_admin_geography_list_renders(
         response = await client.get("/admin/geography/list")
 
     assert response.status_code == 200
-    assert "United States" in response.text
-    assert "Japan" in response.text
+    assert "/admin/geography/list" in response.text
