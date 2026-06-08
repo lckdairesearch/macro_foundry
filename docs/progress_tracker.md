@@ -12,11 +12,10 @@ Most recent at the top.
 
 ## Current phase
 
-**Phase 3 — Config + session + base** (next).
+**Phase 4 — Enums** (next).
 
-Phase 2 is complete. Local Postgres 18.4 now boots through Docker Compose,
-initializes `macrodb_owner` / `macrodb_app`, and provisions both `macrodb`
-and `macrodb_test`.
+Phase 3 is complete. The repo now has typed settings, shared SQLAlchemy base
+mixins, and async session wiring validated against the local Postgres instance.
 
 ## Phase status
 
@@ -25,8 +24,8 @@ and `macrodb_test`.
 | 0     | Agent infrastructure           | ✅ Complete    |
 | 1     | Repo bootstrap                 | ✅ Complete    |
 | 2     | Docker + Postgres + roles      | ✅ Complete    |
-| 3     | Config + session + base        | ⏳ Next        |
-| 4     | Enums                          | ⏳             |
+| 3     | Config + session + base        | ✅ Complete    |
+| 4     | Enums                          | ⏳ Next        |
 | 5     | Models                         | ⏳             |
 | 6     | Alembic + initial migrations   | ⏳             |
 | 7     | Pydantic schemas               | ⏳             |
@@ -38,6 +37,33 @@ and `macrodb_test`.
 | 13    | Neon parity verification       | ⏳             |
 
 ## Log
+
+### [2026-06-08] Phase 3 — Complete
+
+Core runtime scaffolding landed:
+
+- added `src/macro_foundry/config.py` with a typed `Settings` object that reads
+  `.env.local`, exposes `settings.db`, `settings.admin`, and `settings.api`,
+  and configures the project logger
+- added `src/macro_foundry/db/base.py` with the shared declarative `Base`,
+  `TimestampedBase`, and `CreatedAtBase` mixins using server-side `uuidv7()`
+  and timestamp defaults
+- added `src/macro_foundry/db/session.py` with the async engine, async
+  sessionmaker, and request-scoped `get_session()` dependency using the agreed
+  Neon-safe pool settings and `expire_on_commit=False`
+- updated `src/macro_foundry/db/__init__.py` exports to expose the shared DB
+  primitives cleanly
+- expanded `.env.example` with the API/admin/logging placeholders used by the
+  new settings module
+- populated the local gitignored `.env.local` from the example so Phase 3 can
+  be verified end-to-end on this machine
+
+Verification:
+
+- `.uv-bootstrap/bin/uv run ruff check src/macro_foundry/config.py src/macro_foundry/db`
+  exited 0
+- `.uv-bootstrap/bin/uv run python ...` using `macro_foundry.db.session.async_engine`
+  executed `SELECT 1` successfully against the local database
 
 ### [2026-06-08] Phase 2 — Complete
 
