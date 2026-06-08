@@ -188,10 +188,10 @@ publisher), `redistributor` (e.g. FRED carrying a BLS series), `harmonized`
 ### Ingestion feed
 
 The runtime configuration for actually pulling data from a `series_source`. One
-feed per source (typically). Specifies `feed_method` (api or file_upload),
-endpoint URL, request params, response mapping, optional file path pattern,
-and optional `cron_schedule` (metadata for an external scheduler — **not** for
-`pg_cron`).
+feed per source (typically). Specifies `feed_method` (`api`, `file`, or
+`scrape`), endpoint URL, request params, response mapping, optional file path
+pattern, and optional `cron_schedule` (metadata for an external scheduler —
+**not** for `pg_cron`).
 
 ### Ingestion run log
 

@@ -205,7 +205,7 @@ observations [icon: database, color: red] {
 ingestion_feeds [icon: rss, color: blue] {
   id uuid pk
   series_source_id uuid fk      // FK -> series_sources.id
-  feed_method string              // ENUM: api | file_upload
+  feed_method string              // ENUM: api | file | scrape
   endpoint_url string             // nullable
   request_params jsonb            // nullable; omit end_date for ongoing series — script uses today at runtime
   file_path_pattern string        // nullable; e.g. /data/uploads/wb_wdi_*.csv

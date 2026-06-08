@@ -22,7 +22,8 @@ class ProviderRole(str, Enum):
 
 class FeedMethod(str, Enum):
     API = "api"
-    FILE_UPLOAD = "file_upload"
+    FILE = "file"
+    SCRAPE = "scrape"
 
 
 __all__ = ["FeedMethod", "ProviderRole", "ProviderType"]

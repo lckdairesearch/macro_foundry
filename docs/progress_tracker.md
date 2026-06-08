@@ -38,6 +38,18 @@ domain and re-exported from `macro_foundry.enums`.
 
 ## Log
 
+### [2026-06-08] Ingestion feed taxonomy — `file_upload` renamed to `file`
+
+Refined `FeedMethod` so the enum describes acquisition mechanism rather than
+operator workflow:
+
+- renamed `file_upload` to `file` to cover uploads, watched paths, and other
+  file-based ingestion paths
+- added `scrape` as a distinct future ingestion method alongside `api` and
+  `file`
+- updated the glossary and canonical schema comments to match the broader
+  ingestion-method vocabulary
+
 ### [2026-06-08] Geography taxonomy — Added `subnational_region`
 
 Recorded a new ADR and updated the domain language for country-scoped grouping
