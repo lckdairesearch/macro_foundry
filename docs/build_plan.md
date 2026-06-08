@@ -70,12 +70,12 @@ asking "what is macro_foundry?" produces an answer consistent with
 
 - `docker-compose.yml` running Postgres 18.4 with persistent volume
 - `docker/postgres/init/01_roles.sql` creating `macrodb_owner` and `macrodb_app`
-  roles, both `macrodb` and `macrodb_test` databases, and the appropriate grants
+  roles, both `macrodb_dev` and `macrodb_test` databases, and the appropriate grants
 - `.env.example` updated with `MACRODB_OWNER_URL`, `MACRODB_APP_URL`, `MACRODB_TEST_URL`
 
 **Depends on:** Phase 1.
 
-**Verify:** `docker compose up -d` succeeds. `psql $MACRODB_OWNER_URL -c '\du'`
+**Verify:** `docker compose --env-file .env.local up -d` succeeds. `psql $MACRODB_OWNER_URL -c '\du'`
 shows both roles. `psql $MACRODB_APP_URL -c 'SELECT current_user'` confirms app
 role connection.
 
@@ -199,7 +199,7 @@ prints `19`.
 
 **Depends on:** Phase 5.
 
-**Verify:** `alembic upgrade head` succeeds on a fresh `macrodb` database.
+**Verify:** `alembic upgrade head` succeeds on a fresh local `macrodb_dev` database.
 `psql -c '\dt'` shows all 19 tables. `psql -c '\dv'` shows the
 `latest_observations` view. `alembic downgrade base && alembic upgrade head`
 round-trips cleanly.
@@ -253,9 +253,9 @@ need care.
 **Depends on:** Phase 7 (uses schemas to validate seed data on the way in;
 optional but recommended) and Phase 6 (schema must exist to seed into).
 
-**Verify:** `uv run macrodb seed` on a fresh DB succeeds. Re-running it produces
-no errors, no duplicates. Edit a name in `data/geographies.py`, re-run, confirm
-the row is updated.
+**Verify:** `uv run macrodb seed` on a fresh local `macrodb_dev` DB succeeds.
+Re-running it produces no errors, no duplicates. Edit a name in
+`data/geographies.py`, re-run, confirm the row is updated.
 
 **Effort:** 1 day. Most of the time is curating the geography data.
 
@@ -362,10 +362,12 @@ works and persists. FKs show meaningful labels, not UUIDs.
 **Deliverables:**
 
 - A Neon project created (PG 18 default)
+- A cloud production database named `macrodb_prod` created as an explicit
+  infrastructure step outside this repo
 - Both roles set up on Neon (the project owner serves as `macrodb_owner`
   equivalent; `macrodb_app` created via SQL on first connect)
 - `MACRODB_OWNER_URL` and `MACRODB_APP_URL` updated locally to point at Neon's
-  direct endpoint
+  direct endpoint for `macrodb_prod`
 - `alembic upgrade head` succeeds against Neon
 - `uv run macrodb seed` succeeds against Neon
 - `uv run pytest` succeeds (or a documented subset, if any tests are intentionally

@@ -19,6 +19,7 @@ references and supersedes the old one — don't edit the old one.
 | [0006](0006-two-role-architecture.md) | Two-role database architecture | Accepted |
 | [0007](0007-subnational-regions-as-country-scoped-groupings.md) | Subnational regions as country-scoped grouping geographies | Accepted |
 | [0008](0008-foreign-key-delete-policy.md) | Foreign key delete policy | Accepted |
+| [0009](0009-physical-database-naming-by-environment.md) | Physical database naming by environment | Accepted |
 
 ## Format
 

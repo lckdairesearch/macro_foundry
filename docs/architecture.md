@@ -214,11 +214,13 @@ DROP data. Migrations always run as a separate role with explicit credentials.
 
 ## Database connection details
 
-- **Local:** one Postgres 18.4 container with two databases inside (`macrodb`,
-  `macrodb_test`). Both roles exist in both DBs.
-- **Neon:** use the **direct endpoint** (not the `-pooler` suffix). Normal SQLAlchemy
-  pooling. `psycopg3` doesn't aggressively use prepared statements, so the
-  PgBouncer-transaction-mode compatibility issue that affects `asyncpg` doesn't apply.
+- **Local:** one Postgres 18.4 container with two databases inside
+  (`macrodb_dev`, `macrodb_test`). Both roles exist in both DBs.
+- **Neon / cloud production:** use one physical production database,
+  `macrodb_prod`, via the **direct endpoint** (not the `-pooler` suffix).
+  Normal SQLAlchemy pooling. `psycopg3` doesn't aggressively use prepared
+  statements, so the PgBouncer-transaction-mode compatibility issue that affects
+  `asyncpg` doesn't apply.
 - **Engine config:** `pool_pre_ping=True`, `pool_recycle=300`, `pool_size=5`,
   `max_overflow=10`. The pre-ping and recycle are required for Neon's scale-to-zero
   behavior — connections can be killed during idle suspend.

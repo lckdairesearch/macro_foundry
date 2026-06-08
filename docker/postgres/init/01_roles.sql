@@ -33,11 +33,11 @@ WHERE NOT EXISTS (
 
 ALTER ROLE macrodb_app WITH LOGIN PASSWORD :'macrodb_app_password';
 
-SELECT 'CREATE DATABASE macrodb OWNER macrodb_owner'
+SELECT 'CREATE DATABASE macrodb_dev OWNER macrodb_owner'
 WHERE NOT EXISTS (
     SELECT 1
     FROM pg_database
-    WHERE datname = 'macrodb'
+    WHERE datname = 'macrodb_dev'
 ) \gexec
 
 SELECT 'CREATE DATABASE macrodb_test OWNER macrodb_owner'
@@ -47,13 +47,13 @@ WHERE NOT EXISTS (
     WHERE datname = 'macrodb_test'
 ) \gexec
 
-ALTER DATABASE macrodb OWNER TO macrodb_owner;
+ALTER DATABASE macrodb_dev OWNER TO macrodb_owner;
 ALTER DATABASE macrodb_test OWNER TO macrodb_owner;
 
-GRANT CONNECT ON DATABASE macrodb TO macrodb_app;
+GRANT CONNECT ON DATABASE macrodb_dev TO macrodb_app;
 GRANT CONNECT ON DATABASE macrodb_test TO macrodb_app;
 
-\connect macrodb
+\connect macrodb_dev
 
 GRANT USAGE ON SCHEMA public TO macrodb_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO macrodb_app;

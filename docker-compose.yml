@@ -7,8 +7,8 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
-      MACRODB_OWNER_URL: ${MACRODB_OWNER_URL:-postgresql+psycopg://macrodb_owner:change_me@localhost:5432/macrodb}
-      MACRODB_APP_URL: ${MACRODB_APP_URL:-postgresql+psycopg://macrodb_app:change_me@localhost:5432/macrodb}
+      MACRODB_OWNER_URL: ${MACRODB_OWNER_URL:-postgresql+psycopg://macrodb_owner:change_me@localhost:5432/macrodb_dev}
+      MACRODB_APP_URL: ${MACRODB_APP_URL:-postgresql+psycopg://macrodb_app:change_me@localhost:5432/macrodb_dev}
     volumes:
       # Postgres 18 expects the parent directory mounted, not /var/lib/postgresql/data.
       - macrodb_postgres_data_v18:/var/lib/postgresql

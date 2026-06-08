@@ -42,6 +42,33 @@ the Phase 8 seed work continues.
 
 ## Log
 
+### [2026-06-08] Environment naming — local dev/test + cloud prod
+
+Clarified and partially implemented the physical database naming model without
+changing the logical `macrodb` system name:
+
+- local Docker now uses `macrodb_dev` for the working database and
+  `macrodb_test` for the isolated test database
+- cloud / Neon is documented as production-only for now, using one physical
+  database named `macrodb_prod`
+- the existing `MACRODB_OWNER_URL`, `MACRODB_APP_URL`, and `MACRODB_TEST_URL`
+  config surface remains unchanged; only the physical DB names behind those URLs
+  changed
+- `.env.example`, local bootstrap defaults, and the local `.env.local` on this
+  machine were updated to point at `macrodb_dev` instead of `macrodb`
+- because the local Postgres named volume preserves physical databases, existing
+  local users need a full local DB reset / volume recreation rather than a
+  plain container restart to pick up the renamed local databases
+- local Docker commands must use `docker compose --env-file .env.local ...`
+  unless a real `.env` file is added, because Compose does not read `.env.local`
+  automatically and will otherwise fall back to placeholder passwords
+
+Follow-on documentation work:
+
+- ADR 0009 records the environment-specific physical database naming decision
+- ADR 0006 remains the source of truth for the two-role split itself; the new
+  ADR supersedes only the older physical database naming examples
+
 ### [2026-06-08] Phase 10 — Complete (implemented out of order)
 
 The hand-written API surface now covers the two Phase 10 hotspots:

@@ -8,7 +8,9 @@ It is built to be the data layer of a larger macro research workflow — eventua
 serving independent macro researchers, sub-institutional funds, solo quants, and
 AI agent developers who are priced out of enterprise tools like Macrobond or Haver.
 
-The **system** is `macro_foundry`. The **database** inside it is `macrodb`.
+The **system** is `macro_foundry`. The **logical database** inside it is
+`macrodb`. Physical Postgres database names are environment-specific:
+`macrodb_dev` and `macrodb_test` locally, `macrodb_prod` in cloud production.
 
 ## What problem it solves
 
@@ -30,7 +32,8 @@ layer for proposed changes.
 
 This phase builds the **database layer and backend skeleton**. Specifically:
 
-- Postgres 18.4 in Docker locally, deploy-ready for Neon (PG 18 default).
+- Postgres 18.4 in Docker locally (`macrodb_dev` + `macrodb_test`), deploy-ready
+  for Neon production as `macrodb_prod` (PG 18 default).
 - Two roles: `macrodb_owner` for migrations, `macrodb_app` for everything else.
 - All 19 V3 tables as async SQLAlchemy models.
 - Alembic migrations including the `latest_observations` view.
@@ -49,7 +52,7 @@ This phase builds the **database layer and backend skeleton**. Specifically:
 On a fresh clone, this sequence succeeds end-to-end:
 
 ```bash
-docker compose up -d
+docker compose --env-file .env.local up -d
 uv sync
 alembic upgrade head
 uv run macrodb seed
@@ -57,7 +60,8 @@ uv run pytest
 ```
 
 And the same five commands succeed when `MACRODB_OWNER_URL` and `MACRODB_APP_URL`
-point at a Neon project — no code changes, no restructuring, no skipped tests.
+point at the cloud production database `macrodb_prod` on a Neon project — no
+code changes, no restructuring, no skipped tests.
 
 ## Explicitly out of scope for this phase
 
@@ -77,9 +81,11 @@ point at a Neon project — no code changes, no restructuring, no skipped tests.
 ## Who is the user
 
 A single macro researcher (and one or two agents working on their behalf) using
-the system locally, with the intent to host on Neon for shared dev/staging access
-later. No external users, no public API, no auth beyond basic-auth and a single
-bearer token, for this phase.
+the system locally, with the intent to host on Neon for production later. Local
+Docker is the development environment, `macrodb_test` is the local test
+environment, and cloud production is a separate environment. No external users,
+no public API, no auth beyond basic-auth and a single bearer token, for this
+phase.
 
 ## Why this scope, in this order
 
