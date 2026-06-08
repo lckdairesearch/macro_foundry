@@ -277,6 +277,14 @@ unreliable for CHECK changes). This tradeoff is accepted.
 database, not Python enums, because application code does not branch on a fixed
 tag taxonomy.
 
+## Foreign-key deletion policy
+
+Every V3 foreign key declares an explicit `ON DELETE` rule. The default is
+`RESTRICT` for canonical entities, hierarchy links, lineage-bearing rows, and
+audit/history rows. `CASCADE` is reserved for pure membership rows and owned
+extensions that have no standalone meaning. The canonical per-edge policy lives
+in `docs/schema/db_er.txt`; rationale lives in ADR 0008.
+
 ## Seed strategy
 
 Alembic owns schema. A separate Typer CLI owns seed data. They do not mix.

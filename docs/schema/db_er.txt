@@ -310,43 +310,44 @@ change_proposal_items [icon: list-checks, color: purple] {
 // Relationships
 // All written as child.fk > parent.id (arrow points child → parent)
 // Gives eraser.io a consistent signal: parents render above children
+// `ON DELETE` annotations below are canonical for Phase 5 models and Phase 6 migrations.
 // =============================================================
 
 // ---- Geography hierarchy ----
-geographies.parent_geography_id > geographies.id
-geographies.id < geography_memberships.member_geography_id
-geographies.id < geography_memberships.group_geography_id 
+geographies.parent_geography_id > geographies.id // ON DELETE RESTRICT
+geographies.id < geography_memberships.member_geography_id // ON DELETE CASCADE
+geographies.id < geography_memberships.group_geography_id // ON DELETE CASCADE
 
 // ---- Series core (anchor table + direct attributes) ----
-series.geography_id > geographies.id
-series.replaced_by_series_id - series.id
-series_tags.series_id > series.id
-series_tags.tag_id > tags.id
+series.geography_id > geographies.id // ON DELETE RESTRICT
+series.replaced_by_series_id - series.id // ON DELETE RESTRICT
+series_tags.series_id > series.id // ON DELETE CASCADE
+series_tags.tag_id > tags.id // ON DELETE CASCADE
 
 // ---- Concept / family cluster ----
-series_families.concept_id > concepts.id
-series_families.geography_id > geographies.id
-series_family_members.family_id > series_families.id
-series_family_members.series_id - series.id
+series_families.concept_id > concepts.id // ON DELETE RESTRICT
+series_families.geography_id > geographies.id // ON DELETE RESTRICT
+series_family_members.family_id > series_families.id // ON DELETE CASCADE
+series_family_members.series_id - series.id // ON DELETE CASCADE
 
 // ---- Provider / ingestion chain ----
-provider_catalogs.provider_id > providers.id
-series_sources.provider_catalog_id > provider_catalogs.id
-series_sources.series_id > series.id
-ingestion_feeds.series_source_id > series_sources.id
-ingestion_run_logs.ingestion_feed_id > ingestion_feeds.id
+provider_catalogs.provider_id > providers.id // ON DELETE RESTRICT
+series_sources.provider_catalog_id > provider_catalogs.id // ON DELETE RESTRICT
+series_sources.series_id > series.id // ON DELETE CASCADE
+ingestion_feeds.series_source_id > series_sources.id // ON DELETE CASCADE
+ingestion_run_logs.ingestion_feed_id > ingestion_feeds.id // ON DELETE RESTRICT
 
 // ---- Derivation chain ----
-derived_series.series_id - series.id
-derivation_inputs.derived_series_id > derived_series.id
-derivation_inputs.input_series_id > series.id
-computation_run_logs.derived_series_id > derived_series.id
+derived_series.series_id - series.id // ON DELETE CASCADE
+derivation_inputs.derived_series_id > derived_series.id // ON DELETE CASCADE
+derivation_inputs.input_series_id > series.id // ON DELETE RESTRICT
+computation_run_logs.derived_series_id > derived_series.id // ON DELETE RESTRICT
 
 // ---- Observations (joins ingestion + derivation back to series) ----
-observations.series_id > series.id
-observations.ingestion_run_log_id > ingestion_run_logs.id
-observations.computation_run_log_id > computation_run_logs.id
+observations.series_id > series.id // ON DELETE RESTRICT
+observations.ingestion_run_log_id > ingestion_run_logs.id // ON DELETE RESTRICT
+observations.computation_run_log_id > computation_run_logs.id // ON DELETE RESTRICT
 
 // ---- Governance (intentionally isolated) ----
-change_proposals.superseded_by_proposal_id > change_proposals.id
-change_proposal_items.proposal_id > change_proposals.id
+change_proposals.superseded_by_proposal_id > change_proposals.id // ON DELETE RESTRICT
+change_proposal_items.proposal_id > change_proposals.id // ON DELETE CASCADE

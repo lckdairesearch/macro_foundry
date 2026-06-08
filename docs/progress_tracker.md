@@ -39,6 +39,16 @@ code-routing and CHECK-constrained domains, re-exported from
 
 ## Log
 
+### [2026-06-08] Foreign-key deletion policy — ADR 0008
+
+Resolved an ambiguity that blocked Phase 5 models and Phase 6 migration review:
+
+- added ADR 0008 defining explicit `ON DELETE` behavior for every V3 foreign key
+- updated the canonical schema relationships section so each FK now carries its
+  delete policy inline
+- updated the architecture and build plan so Phase 5/6 no longer assume an
+  unstated deletion policy
+
 ### [2026-06-08] Phase 4 correction — removed mistaken tag enum placeholder
 
 Corrected a Phase 4 artifact that contradicted ADR 0002:

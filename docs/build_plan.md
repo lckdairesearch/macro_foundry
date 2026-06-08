@@ -146,6 +146,8 @@ print(Frequency.MONTHLY.value)"` prints `"M"`.
 - Every model has UNIQUE constraints, CHECK constraints (single-column via
   `Enum(native_enum=False)`, cross-column via `CheckConstraint` in
   `__table_args__`), FKs, and the three one-to-one UNIQUEs from V3's `-` notation
+- Every FK declares explicit `ondelete=...` behavior aligned with ADR 0008 and
+  the canonical relationships section in `docs/schema/db_er.txt`
 - `src/macro_foundry/models/__init__.py` exports every model so Alembic sees
   the full metadata graph
 
@@ -188,7 +190,8 @@ prints `18`.
   - All 18 tables created
   - All UNIQUE constraints present and named
   - All CHECK constraints (single-column + cross-column) present and named
-  - All FKs present with correct ON DELETE behavior
+  - All FKs present with ADR-0008-aligned `ON DELETE` behavior, explicitly
+    declared rather than left to database defaults
 - Migration `0002_latest_observations_view.py` — hand-written, raw SQL for
   CREATE VIEW / DROP VIEW
 

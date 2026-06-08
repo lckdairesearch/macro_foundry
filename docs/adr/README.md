@@ -18,6 +18,7 @@ references and supersedes the old one — don't edit the old one.
 | [0005](0005-no-native-pg-enums.md) | No native Postgres ENUM types | Accepted |
 | [0006](0006-two-role-architecture.md) | Two-role database architecture | Accepted |
 | [0007](0007-subnational-regions-as-country-scoped-groupings.md) | Subnational regions as country-scoped grouping geographies | Accepted |
+| [0008](0008-foreign-key-delete-policy.md) | Foreign key delete policy | Accepted |
 
 ## Format
 
