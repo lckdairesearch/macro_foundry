@@ -12,10 +12,11 @@ Most recent at the top.
 
 ## Current phase
 
-**Phase 6 — Alembic + initial migrations** (next).
+**Phase 7 — Pydantic schemas** (next).
 
-Phase 5 is complete. The repo now has the full V3 ORM graph, including explicit
-`ondelete` behavior from ADR 0008 and V3-native composite-key junction tables.
+Phase 6 is complete. The repo now has Alembic wired to `MACRODB_OWNER_URL`, the
+initial schema migration, and the `latest_observations` view migration verified
+with a downgrade/upgrade round-trip.
 
 ## Phase status
 
@@ -27,8 +28,8 @@ Phase 5 is complete. The repo now has the full V3 ORM graph, including explicit
 | 3     | Config + session + base        | ✅ Complete |
 | 4     | Enums                          | ✅ Complete |
 | 5     | Models                         | ✅ Complete |
-| 6     | Alembic + initial migrations   | ⏳ Next     |
-| 7     | Pydantic schemas               | ⏳          |
+| 6     | Alembic + initial migrations   | ✅ Complete |
+| 7     | Pydantic schemas               | ⏳ Next     |
 | 8     | Seed data + CLI                | ⏳          |
 | 9     | CRUD generator + simple routes | ⏳          |
 | 10    | Hand-tuned routes              | ⏳          |
@@ -37,6 +38,35 @@ Phase 5 is complete. The repo now has the full V3 ORM graph, including explicit
 | 13    | Neon parity verification       | ⏳          |
 
 ## Log
+
+### [2026-06-08] Phase 6 — Complete
+
+Alembic scaffolding and the initial migration chain now exist and verify cleanly:
+
+- added `alembic.ini`, `alembic/env.py`, and `alembic/script.py.mako`, with
+  Alembic bound to `MACRODB_OWNER_URL` rather than the app role
+- generated and reviewed `alembic/versions/0001_initial_schema.py` from
+  `Base.metadata`, covering all 19 V3 tables with named UNIQUE constraints,
+  cross-column CHECK constraints, enum CHECK constraints, and explicit
+  ADR-0008-aligned `ondelete` behavior
+- added handwritten migration `alembic/versions/0002_latest_observations_view.py`
+  to create and drop the `latest_observations` view via raw SQL
+- corrected the shared enum helper during migration review so enum columns now
+  persist enum values rather than member names, and emit real DB CHECK
+  constraints via `create_constraint=True`
+
+Verification:
+
+- `.venv/bin/ruff check alembic src/macro_foundry/models/_schema_policy.py`
+  exited 0
+- `.venv/bin/python -c ...` confirmed `tables=19`, `Series.frequency` stores
+  `['D', 'W', 'M', 'Q', 'S', 'A']`, and the enum type has
+  `create_constraint=True`
+- `.venv/bin/alembic upgrade head` succeeded against the local owner database
+- `.venv/bin/alembic downgrade base && .venv/bin/alembic upgrade head`
+  round-tripped cleanly
+- a verification query after the round-trip confirmed 19 domain tables plus the
+  `latest_observations` view in `public`
 
 ### [2026-06-08] Schema policy refactor — complete before Phase 6
 

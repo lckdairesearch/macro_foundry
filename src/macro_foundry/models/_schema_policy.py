@@ -10,6 +10,12 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import MappedColumn, mapped_column
 
 
+def _enum_values(enum_type: type[Enum]) -> list[str]:
+    """Persist CHECK-constrained enums by their string values, not member names."""
+
+    return [str(member.value) for member in enum_type]
+
+
 def enum_column(
     table_name: str,
     column_name: str,
@@ -25,6 +31,8 @@ def enum_column(
             native_enum=False,
             name=f"ck_{table_name}_{column_name}",
             validate_strings=True,
+            create_constraint=True,
+            values_callable=_enum_values,
         ),
         nullable=nullable,
     )
