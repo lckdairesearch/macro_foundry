@@ -38,6 +38,15 @@ mixins, and async session wiring validated against the local Postgres instance.
 
 ## Log
 
+### [2026-06-08] Agent manual — Commit message guidance added
+
+Updated `AGENTS.md` and `CLAUDE.md` with a shared commit-message standard:
+
+- use a short `type(scope): subject` format when it improves clarity
+- write for a developer who understands the domain but has not read the diff
+- explain behavioral, schema, or architectural impact rather than listing files
+- avoid vague subjects and patch-summary bodies
+
 ### [2026-06-08] Phase 3 — Complete
 
 Core runtime scaffolding landed:

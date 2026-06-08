@@ -79,6 +79,45 @@ from `architecture.md`, **stop and discuss with the user before changing it**.
   them, but inline tests are welcome throughout the build.
 - When in doubt about scope, do less, not more. Confirm with the user before expanding.
 
+## Commit messages
+
+When making a commit, write the message for a developer who understands the
+macro_foundry domain but has not read the diff yet.
+
+Use this format:
+
+`<type>(<scope>): <what changed>`
+
+Optional body:
+
+- why this change was needed
+- the key behavioral, schema, or architectural impact
+- any important constraint, tradeoff, or follow-up
+
+Rules:
+
+- Use the imperative mood: `add`, `fix`, `rename`, `enforce`, `wire up`.
+- Keep the subject specific and readable in isolation.
+- Prefer scopes such as `db`, `models`, `schemas`, `api`, `seed`, `admin`,
+  `tests`, `docs`, `agents`.
+- Describe the intent and effect, not the editing mechanics.
+- Mention user-visible behavior, schema impact, or architectural impact when relevant.
+- Do not write vague subjects like `update stuff`, `misc fixes`, `wip`, or
+  `address comments`.
+- Do not turn the body into a file list or patch summary.
+- If the commit changes a settled architectural decision, stop and discuss it
+  with the user before committing.
+
+Use these types when they help: `feat`, `fix`, `refactor`, `test`, `docs`,
+`chore`. Do not force a type if it makes the message worse.
+
+Examples:
+
+- `feat(db): add async session factory with Neon-safe pool settings`
+- `fix(models): enforce currency_code for currency-denominated series`
+- `docs(agents): clarify two-role database rule for migrations`
+- `test(api): cover latest_observations route with vintage revisions`
+
 ## Skills (Pocock)
 
 Installed via `npx skills@latest add mattpocock/skills`. Use them where they fit:
