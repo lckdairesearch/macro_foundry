@@ -7,11 +7,11 @@ from datetime import date
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import CheckConstraint, Date, ForeignKey, Numeric, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import CheckConstraint, Date, Numeric, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from macro_foundry.db.base import CreatedAtBase
+from macro_foundry.models._schema_policy import fk_uuid
 
 if TYPE_CHECKING:
     from macro_foundry.models.run_log import ComputationRunLog, IngestionRunLog
@@ -27,23 +27,23 @@ class Observation(CreatedAtBase):
         CheckConstraint("period_end >= period_start", name="ck_observations_period_bounds"),
     )
 
-    series_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("series.id", ondelete="RESTRICT"),
+    series_id: Mapped[uuid.UUID] = fk_uuid(
+        "series.id",
+        ondelete="RESTRICT",
         nullable=False,
     )
     period_start: Mapped[date] = mapped_column(Date, nullable=False)
     period_end: Mapped[date] = mapped_column(Date, nullable=False)
     value: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
     vintage_date: Mapped[date] = mapped_column(Date, nullable=False)
-    ingestion_run_log_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("ingestion_run_logs.id", ondelete="RESTRICT"),
+    ingestion_run_log_id: Mapped[uuid.UUID | None] = fk_uuid(
+        "ingestion_run_logs.id",
+        ondelete="RESTRICT",
         nullable=True,
     )
-    computation_run_log_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("computation_run_logs.id", ondelete="RESTRICT"),
+    computation_run_log_id: Mapped[uuid.UUID | None] = fk_uuid(
+        "computation_run_logs.id",
+        ondelete="RESTRICT",
         nullable=True,
     )
 

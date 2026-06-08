@@ -5,12 +5,13 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Boolean, Enum as SAEnum, ForeignKey, String
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import Boolean, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from macro_foundry.db.base import TimestampedBase
 from macro_foundry.enums import FeedMethod
+from macro_foundry.models._schema_policy import enum_column, fk_uuid
 
 if TYPE_CHECKING:
     from macro_foundry.models.provider import SeriesSource
@@ -22,13 +23,15 @@ class IngestionFeed(TimestampedBase):
 
     __tablename__ = "ingestion_feeds"
 
-    series_source_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("series_sources.id", ondelete="CASCADE"),
+    series_source_id: Mapped[uuid.UUID] = fk_uuid(
+        "series_sources.id",
+        ondelete="CASCADE",
         nullable=False,
     )
-    feed_method: Mapped[FeedMethod] = mapped_column(
-        SAEnum(FeedMethod, native_enum=False, name="ck_ingestion_feeds_feed_method", validate_strings=True),
+    feed_method: Mapped[FeedMethod] = enum_column(
+        "ingestion_feeds",
+        "feed_method",
+        FeedMethod,
         nullable=False,
     )
     endpoint_url: Mapped[str | None] = mapped_column(String(), nullable=True)

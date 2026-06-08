@@ -6,7 +6,7 @@ import uuid
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, Enum as SAEnum, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -23,6 +23,7 @@ from macro_foundry.enums import (
     UnitKind,
     UnitScale,
 )
+from macro_foundry.models._schema_policy import enum_column, fk_uuid
 
 if TYPE_CHECKING:
     from macro_foundry.models.concept import Concept
@@ -53,69 +54,79 @@ class Series(TimestampedBase):
     code: Mapped[str] = mapped_column(String(), nullable=False)
     name: Mapped[str] = mapped_column(String(), nullable=False)
     description: Mapped[str | None] = mapped_column(String(), nullable=True)
-    origin_type: Mapped[OriginType] = mapped_column(
-        SAEnum(OriginType, native_enum=False, name="ck_series_origin_type", validate_strings=True),
+    origin_type: Mapped[OriginType] = enum_column(
+        "series",
+        "origin_type",
+        OriginType,
         nullable=False,
     )
-    geography_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("geographies.id", ondelete="RESTRICT"),
+    geography_id: Mapped[uuid.UUID] = fk_uuid(
+        "geographies.id",
+        ondelete="RESTRICT",
         nullable=False,
     )
-    frequency: Mapped[Frequency] = mapped_column(
-        SAEnum(Frequency, native_enum=False, name="ck_series_frequency", validate_strings=True),
+    frequency: Mapped[Frequency] = enum_column(
+        "series",
+        "frequency",
+        Frequency,
         nullable=False,
     )
-    temporal_stock_flow: Mapped[TemporalStockFlow] = mapped_column(
-        SAEnum(
-            TemporalStockFlow,
-            native_enum=False,
-            name="ck_series_temporal_stock_flow",
-            validate_strings=True,
-        ),
+    temporal_stock_flow: Mapped[TemporalStockFlow] = enum_column(
+        "series",
+        "temporal_stock_flow",
+        TemporalStockFlow,
         nullable=False,
     )
-    unit_kind: Mapped[UnitKind] = mapped_column(
-        SAEnum(UnitKind, native_enum=False, name="ck_series_unit_kind", validate_strings=True),
+    unit_kind: Mapped[UnitKind] = enum_column(
+        "series",
+        "unit_kind",
+        UnitKind,
         nullable=False,
     )
-    unit_scale: Mapped[UnitScale] = mapped_column(
-        SAEnum(UnitScale, native_enum=False, name="ck_series_unit_scale", validate_strings=True),
+    unit_scale: Mapped[UnitScale] = enum_column(
+        "series",
+        "unit_scale",
+        UnitScale,
         nullable=False,
     )
     unit_label: Mapped[str | None] = mapped_column(String(), nullable=True)
-    price_basis: Mapped[PriceBasis | None] = mapped_column(
-        SAEnum(PriceBasis, native_enum=False, name="ck_series_price_basis", validate_strings=True),
+    price_basis: Mapped[PriceBasis | None] = enum_column(
+        "series",
+        "price_basis",
+        PriceBasis,
         nullable=True,
     )
     currency_code: Mapped[str | None] = mapped_column(String(), nullable=True)
-    measure: Mapped[Measure] = mapped_column(
-        SAEnum(Measure, native_enum=False, name="ck_series_measure", validate_strings=True),
+    measure: Mapped[Measure] = enum_column(
+        "series",
+        "measure",
+        Measure,
         nullable=False,
     )
-    measure_horizon: Mapped[MeasureHorizon | None] = mapped_column(
-        SAEnum(MeasureHorizon, native_enum=False, name="ck_series_measure_horizon", validate_strings=True),
+    measure_horizon: Mapped[MeasureHorizon | None] = enum_column(
+        "series",
+        "measure_horizon",
+        MeasureHorizon,
         nullable=True,
     )
     annualized: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    seasonal_adjustment: Mapped[SeasonalAdjustment] = mapped_column(
-        SAEnum(
-            SeasonalAdjustment,
-            native_enum=False,
-            name="ck_series_seasonal_adjustment",
-            validate_strings=True,
-        ),
+    seasonal_adjustment: Mapped[SeasonalAdjustment] = enum_column(
+        "series",
+        "seasonal_adjustment",
+        SeasonalAdjustment,
         nullable=False,
     )
-    reference_kind: Mapped[ReferenceKind | None] = mapped_column(
-        SAEnum(ReferenceKind, native_enum=False, name="ck_series_reference_kind", validate_strings=True),
+    reference_kind: Mapped[ReferenceKind | None] = enum_column(
+        "series",
+        "reference_kind",
+        ReferenceKind,
         nullable=True,
     )
     reference_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     reference_label: Mapped[str | None] = mapped_column(String(), nullable=True)
-    replaced_by_series_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("series.id", ondelete="RESTRICT"),
+    replaced_by_series_id: Mapped[uuid.UUID | None] = fk_uuid(
+        "series.id",
+        ondelete="RESTRICT",
         nullable=True,
     )
     start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -192,14 +203,14 @@ class SeriesFamily(TimestampedBase):
     code: Mapped[str] = mapped_column(String(), nullable=False)
     name: Mapped[str] = mapped_column(String(), nullable=False)
     description: Mapped[str | None] = mapped_column(String(), nullable=True)
-    concept_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("concepts.id", ondelete="RESTRICT"),
+    concept_id: Mapped[uuid.UUID] = fk_uuid(
+        "concepts.id",
+        ondelete="RESTRICT",
         nullable=False,
     )
-    geography_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("geographies.id", ondelete="RESTRICT"),
+    geography_id: Mapped[uuid.UUID] = fk_uuid(
+        "geographies.id",
+        ondelete="RESTRICT",
         nullable=False,
     )
 

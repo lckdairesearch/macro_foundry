@@ -38,6 +38,32 @@ Phase 5 is complete. The repo now has the full V3 ORM graph, including explicit
 
 ## Log
 
+### [2026-06-08] Schema policy refactor — complete before Phase 6
+
+Deepened the ORM graph's shared schema policy without starting Alembic work:
+
+- added a private helper module at `src/macro_foundry/models/_schema_policy.py`
+  with the two agreed seams only: `enum_column(...)` and `fk_uuid(...)`
+- updated `docs/code_standards.md` to anchor the allowed helper boundary in
+  writing before the refactor
+- applied the seam across the repeated enum and non-PK UUID foreign-key shapes
+  in the Phase 5 model graph
+- kept composite-key junction structure local in model modules; the
+  `series_tags` and `series_family_members` FK columns remain inline because
+  `primary_key=True` is part of the local table structure rather than shared FK
+  policy
+- did not add relationship, CHECK, UNIQUE, scalar-column, or PK helpers
+
+Verification:
+
+- `.uv-bootstrap/bin/uv run ruff check src/macro_foundry/models` exited 0
+- `.uv-bootstrap/bin/uv run python -c "from macro_foundry.models import *;
+  print('imports-ok')"` printed `imports-ok`
+- `.uv-bootstrap/bin/uv run python -c "from macro_foundry.models import *; from
+  sqlalchemy.orm import configure_mappers; configure_mappers(); from
+  macro_foundry.db.base import Base; print(f'tables={len(Base.metadata.tables)}')"`
+  printed `tables=19`
+
 ### [2026-06-08] Documentation alignment — `CONTEXT.md` moved to repo root
 
 Aligned markdown docs with the glossary move from `docs/CONTEXT.md` /

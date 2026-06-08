@@ -5,12 +5,13 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Boolean, Enum as SAEnum, ForeignKey, String, UniqueConstraint
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import Boolean, String, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from macro_foundry.db.base import TimestampedBase
 from macro_foundry.enums import ExecutionPolicy
+from macro_foundry.models._schema_policy import enum_column, fk_uuid
 
 if TYPE_CHECKING:
     from macro_foundry.models.run_log import ComputationRunLog
@@ -23,15 +24,17 @@ class DerivedSeries(TimestampedBase):
     __tablename__ = "derived_series"
     __table_args__ = (UniqueConstraint("series_id", name="uq_derived_series_series_id"),)
 
-    series_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("series.id", ondelete="CASCADE"),
+    series_id: Mapped[uuid.UUID] = fk_uuid(
+        "series.id",
+        ondelete="CASCADE",
         nullable=False,
     )
     formula_config: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     description: Mapped[str] = mapped_column(String(), nullable=False)
-    execution_policy: Mapped[ExecutionPolicy] = mapped_column(
-        SAEnum(ExecutionPolicy, native_enum=False, name="ck_derived_series_execution_policy", validate_strings=True),
+    execution_policy: Mapped[ExecutionPolicy] = enum_column(
+        "derived_series",
+        "execution_policy",
+        ExecutionPolicy,
         nullable=False,
     )
     is_deterministic: Mapped[bool] = mapped_column(Boolean, nullable=False)
@@ -65,14 +68,14 @@ class DerivationInput(TimestampedBase):
         UniqueConstraint("derived_series_id", "input_series_id", name="uq_derivation_inputs_output_input"),
     )
 
-    derived_series_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("derived_series.id", ondelete="CASCADE"),
+    derived_series_id: Mapped[uuid.UUID] = fk_uuid(
+        "derived_series.id",
+        ondelete="CASCADE",
         nullable=False,
     )
-    input_series_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("series.id", ondelete="RESTRICT"),
+    input_series_id: Mapped[uuid.UUID] = fk_uuid(
+        "series.id",
+        ondelete="RESTRICT",
         nullable=False,
     )
     notes: Mapped[str | None] = mapped_column(String(), nullable=True)

@@ -6,12 +6,12 @@ import uuid
 from datetime import date
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ARRAY, CheckConstraint, Date, Enum as SAEnum, ForeignKey, String, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import ARRAY, CheckConstraint, Date, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from macro_foundry.db.base import TimestampedBase
 from macro_foundry.enums import CodeStandard, GeographyType
+from macro_foundry.models._schema_policy import enum_column, fk_uuid
 
 if TYPE_CHECKING:
     from macro_foundry.models.series import Series, SeriesFamily
@@ -32,17 +32,21 @@ class Geography(TimestampedBase):
     code: Mapped[str] = mapped_column(String(), nullable=False)
     name: Mapped[str] = mapped_column(String(), nullable=False)
     alt_name: Mapped[list[str] | None] = mapped_column(ARRAY(Text()), nullable=True)
-    type: Mapped[GeographyType] = mapped_column(
-        SAEnum(GeographyType, native_enum=False, name="ck_geographies_type", validate_strings=True),
+    type: Mapped[GeographyType] = enum_column(
+        "geographies",
+        "type",
+        GeographyType,
         nullable=False,
     )
-    code_standard: Mapped[CodeStandard] = mapped_column(
-        SAEnum(CodeStandard, native_enum=False, name="ck_geographies_code_standard", validate_strings=True),
+    code_standard: Mapped[CodeStandard] = enum_column(
+        "geographies",
+        "code_standard",
+        CodeStandard,
         nullable=False,
     )
-    parent_geography_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("geographies.id", ondelete="RESTRICT"),
+    parent_geography_id: Mapped[uuid.UUID | None] = fk_uuid(
+        "geographies.id",
+        ondelete="RESTRICT",
         nullable=True,
     )
     notes: Mapped[str | None] = mapped_column(String(), nullable=True)
@@ -94,14 +98,14 @@ class GeographyMembership(TimestampedBase):
 
     __tablename__ = "geography_memberships"
 
-    member_geography_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("geographies.id", ondelete="CASCADE"),
+    member_geography_id: Mapped[uuid.UUID] = fk_uuid(
+        "geographies.id",
+        ondelete="CASCADE",
         nullable=False,
     )
-    group_geography_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("geographies.id", ondelete="CASCADE"),
+    group_geography_id: Mapped[uuid.UUID] = fk_uuid(
+        "geographies.id",
+        ondelete="CASCADE",
         nullable=False,
     )
     start_date: Mapped[date | None] = mapped_column(Date, nullable=True)

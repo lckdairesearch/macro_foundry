@@ -36,13 +36,24 @@ When in doubt, follow these. When tempted to deviate, propose first.
 - `created_at` and `updated_at` are always server-side defaults
   (`server_default=func.now()`). `updated_at` additionally uses
   SQLAlchemy `onupdate=func.now()`. **No DB triggers.**
-- FKs are declared with `ForeignKey("table.id")` and `Mapped[uuid.UUID]`. The
-  relationship companion is declared separately as `Mapped["Target"] = relationship(...)`.
+- FKs use `ForeignKey("table.id")` and `Mapped[uuid.UUID]`, whether open-coded
+  in the model or centralized through the private helper seam. The relationship
+  companion is declared separately as `Mapped["Target"] = relationship(...)`.
+- Repeated column policy may be centralized only in the private module
+  `src/macro_foundry/models/_schema_policy.py`. Keep the interface narrow:
+  `fk_uuid(target, *, ondelete, nullable)` for UUID foreign keys, and no
+  relationship, PK, CHECK, or UNIQUE helpers.
 - UNIQUE constraints (single-column or composite) live in `__table_args__`,
   not as `unique=True` on the column (consistency).
 - CHECK constraints (cross-column) live in `__table_args__` as `CheckConstraint(...)`.
-- All ENUM columns use `SAEnum(MyEnum, native_enum=False, name="ck_<table>_<col>")`.
-  Never `String` with manual CHECK; never native PG enum.
+- All ENUM columns use `SAEnum(MyEnum, native_enum=False, name="ck_<table>_<col>")`,
+  whether open-coded or returned by the private helper seam. Never `String`
+  with manual CHECK; never native PG enum.
+- Repeated enum policy may be centralized only in the private module
+  `src/macro_foundry/models/_schema_policy.py` as
+  `enum_column(table_name, column_name, enum_type, *, nullable)`. Keep
+  `table_name`, `column_name`, and `nullable` explicit at the call site so the
+  CHECK-constraint name remains obvious in the model module.
 
 ### Sessions
 
