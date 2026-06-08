@@ -17,9 +17,9 @@ Most recent at the top.
 Phase 7 is complete. The repo now has the full Pydantic schema surface aligned
 to the V3 ORM graph, including schema-side validation for the documented
 cross-field checks. Phase 8 now also includes a curated default provider /
-provider-catalog seed set in addition to geographies and tags. Phase 9 was
-completed out of order to unblock API wiring while the Phase 8 seed work
-continues.
+provider-catalog seed set in addition to geographies and tags. Phases 9, 10,
+and 11 were completed out of order to unblock API wiring and admin work while
+the Phase 8 seed work continues.
 
 ## Phase status
 
@@ -35,12 +35,46 @@ continues.
 | 7     | Pydantic schemas               | ✅ Complete |
 | 8     | Seed data + CLI                | 🚧 In progress |
 | 9     | CRUD generator + simple routes | ✅ Complete |
-| 10    | Hand-tuned routes              | ⏳          |
+| 10    | Hand-tuned routes              | ✅ Complete |
 | 11    | SQLAdmin                       | ✅ Complete |
 | 12    | Tests                          | ⏳          |
 | 13    | Neon parity verification       | ⏳          |
 
 ## Log
+
+### [2026-06-08] Phase 10 — Complete (implemented out of order)
+
+The hand-written API surface now covers the two Phase 10 hotspots:
+
+- added `src/macro_foundry/backend/api/series.py` with explicit create/update
+  handling for canonical series, including merged-state revalidation on PATCH,
+  proactive duplicate-code detection, and a detail GET route that eager-loads
+  geography plus attached tags
+- added `src/macro_foundry/backend/api/observations.py` with filtered list
+  reads plus `POST /observations/bulk`, which validates each row individually,
+  rejects duplicate keys within a single request, checks referenced IDs before
+  writing, and upserts on `(series_id, period_start, vintage_date)` conflicts
+- extended the schema surface with `SeriesReadDetail`, observation-bulk result
+  models, and router registration so the new endpoints are mounted under
+  `/api/v1`
+- added focused route coverage in `tests/conftest.py`,
+  `tests/test_series_routes.py`, and `tests/test_observations_routes.py` using
+  the real `macrodb_test` database with Alembic migrations applied
+
+Deviation note:
+
+- completed Phase 10 before finishing Phase 8 because the user asked to
+  implement the hand-tuned routes directly; seed/CLI work remains in progress
+
+Verification:
+
+- `.uv-bootstrap/bin/uv run ruff check src/macro_foundry/backend/api/series.py
+  src/macro_foundry/backend/api/observations.py src/macro_foundry/schemas/series.py
+  src/macro_foundry/schemas/observation.py src/macro_foundry/schemas/__init__.py
+  tests/conftest.py tests/test_series_routes.py tests/test_observations_routes.py`
+  exited 0
+- `.uv-bootstrap/bin/uv run pytest tests/test_series_routes.py
+  tests/test_observations_routes.py` exited 0 with `8 passed`
 
 ### [2026-06-08] Phase 11 — Complete (implemented out of order)
 

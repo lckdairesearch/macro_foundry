@@ -40,7 +40,14 @@ from macro_foundry.schemas.ingestion import (
     IngestionFeedRead,
     IngestionFeedUpdate,
 )
-from macro_foundry.schemas.observation import ObservationBase, ObservationCreate, ObservationRead, ObservationUpdate
+from macro_foundry.schemas.observation import (
+    ObservationBase,
+    ObservationBulkError,
+    ObservationBulkResult,
+    ObservationCreate,
+    ObservationRead,
+    ObservationUpdate,
+)
 from macro_foundry.schemas.provider import (
     ProviderBase,
     ProviderCatalogBase,
@@ -80,6 +87,7 @@ from macro_foundry.schemas.series import (
     SeriesFamilyReadDetail,
     SeriesFamilyUpdate,
     SeriesRead,
+    SeriesReadDetail,
     SeriesUpdate,
 )
 from macro_foundry.schemas.tag import (
@@ -139,6 +147,8 @@ __all__ = [
     "IngestionRunLogRead",
     "IngestionRunLogUpdate",
     "ObservationBase",
+    "ObservationBulkError",
+    "ObservationBulkResult",
     "ObservationCreate",
     "ObservationRead",
     "ObservationUpdate",
@@ -164,6 +174,7 @@ __all__ = [
     "SeriesFamilyReadDetail",
     "SeriesFamilyUpdate",
     "SeriesRead",
+    "SeriesReadDetail",
     "SeriesSourceBase",
     "SeriesSourceCreate",
     "SeriesSourceRead",

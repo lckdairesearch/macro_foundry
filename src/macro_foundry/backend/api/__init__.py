@@ -10,8 +10,10 @@ from macro_foundry.backend.api.geographies import router as geographies_router
 from macro_foundry.backend.api.geography_memberships import router as geography_memberships_router
 from macro_foundry.backend.api.ingestion_feeds import router as ingestion_feeds_router
 from macro_foundry.backend.api.ingestion_run_logs import router as ingestion_run_logs_router
+from macro_foundry.backend.api.observations import router as observations_router
 from macro_foundry.backend.api.provider_catalogs import router as provider_catalogs_router
 from macro_foundry.backend.api.providers import router as providers_router
+from macro_foundry.backend.api.series import router as series_router
 from macro_foundry.backend.api.series_families import router as series_families_router
 from macro_foundry.backend.api.series_family_members import router as series_family_members_router
 from macro_foundry.backend.api.series_sources import router as series_sources_router
@@ -29,8 +31,10 @@ API_ROUTERS = (
     geography_memberships_router,
     ingestion_feeds_router,
     ingestion_run_logs_router,
+    observations_router,
     provider_catalogs_router,
     providers_router,
+    series_router,
     series_families_router,
     series_family_members_router,
     series_sources_router,

@@ -24,6 +24,9 @@ dependencies = [
     "itsdangerous>=2.2",
 ]
 
+[project.scripts]
+macrodb = "macro_foundry.cli:app"
+
 [dependency-groups]
 dev = [
     "pytest>=8",
@@ -35,4 +38,3 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/macro_foundry"]
-

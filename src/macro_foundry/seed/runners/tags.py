@@ -1,0 +1,34 @@
+"""Tag seed runner."""
+
+from __future__ import annotations
+
+from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from macro_foundry.models import Tag
+from macro_foundry.schemas import TagCreate
+from macro_foundry.seed._shared import SeedOutcome
+from macro_foundry.seed.data.tags import TAGS
+
+
+async def seed_tags(session: AsyncSession) -> SeedOutcome:
+    """Seed the normalized Phase 8 tag taxonomy."""
+
+    payloads = [TagCreate(name=name).model_dump() for name in TAGS]
+    existing_names = set((await session.execute(select(Tag.name).where(Tag.name.in_(TAGS)))).scalars())
+
+    statement = insert(Tag).values(payloads)
+    statement = statement.on_conflict_do_update(
+        index_elements=[Tag.name],
+        set_={"name": statement.excluded.name, "updated_at": func.now()},
+    )
+    await session.execute(statement)
+    await session.flush()
+    return SeedOutcome(
+        inserted=len(TAGS) - len(existing_names),
+        updated=len(existing_names),
+    )
+
+
+__all__ = ["seed_tags"]

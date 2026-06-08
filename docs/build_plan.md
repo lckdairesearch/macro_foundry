@@ -237,11 +237,15 @@ need care.
 - `src/macro_foundry/seed/data/geographies.py` with COUNTRIES (all ISO 3166-1),
   SUBNATIONALS (US states at minimum), curated SUBNATIONAL_REGIONS where the
   project chooses to support them, BLOCS (G7, G20, OECD, EMU, EU, EFTA, BRICS,
-  ASEAN, MERCOSUR, World)
+  ASEAN, MERCOSUR, World), plus the explicit `AU` exception needed to model the
+  current G20 membership accurately
 - `src/macro_foundry/seed/data/tags.py` with the 7 fixed categories
+- `src/macro_foundry/seed/data/providers.py` with a small default provider set
+  and initial provider catalogs for the sources chosen in Phase 8 curation
 - `src/macro_foundry/seed/data/memberships.py` with curated geography-group
-  mappings (bloc → member, plus subnational_region → subnational where modeled)
-- `src/macro_foundry/seed/runners/` with idempotent `ON CONFLICT DO UPDATE` logic
+  mappings (bloc → member, plus subnational_region → subnational where modeled),
+  using current memberships by default with explicit dated EU changes where curated
+- `src/macro_foundry/seed/runners/` with idempotent upsert logic
 - `src/macro_foundry/seed/run.py` orchestrator (dependency-ordered)
 - `src/macro_foundry/cli.py` with `macrodb seed [--only X] [--dry-run] [--reset]`
 - `pyproject.toml` exposes `macrodb` as a script entry point

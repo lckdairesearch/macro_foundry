@@ -39,7 +39,7 @@ This phase builds the **database layer and backend skeleton**. Specifically:
   hand-tuned routes for `series` and `observations`.
 - SQLAdmin mounted under `/admin` with basic auth.
 - Typer CLI for seeding (`uv run macrodb seed`).
-- Idempotent seed data for geographies and tags.
+- Idempotent seed data for geographies, tags, and default providers/provider catalogs.
 - A focused test suite (~28 tests) covering migrations, seed idempotency,
   the CRUD generator, constraint enforcement, hand-tuned routes, and one
   end-to-end smoke test.

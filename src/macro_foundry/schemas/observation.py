@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-from typing import Self
+from typing import Any, Self
 from uuid import UUID
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 
 from macro_foundry.schemas._base import CreatedAtReadSchema, SchemaModel
 
@@ -60,8 +60,28 @@ class ObservationRead(CreatedAtReadSchema, ObservationBase):
     """API read model for an observation."""
 
 
+class ObservationBulkError(SchemaModel):
+    """Per-row validation or deduplication error from a bulk ingest request."""
+
+    index: int
+    detail: str | list[dict[str, Any]]
+
+
+class ObservationBulkResult(SchemaModel):
+    """Summary of a bulk observation upsert request."""
+
+    received: int
+    accepted: int
+    inserted: int
+    updated: int
+    invalid: int
+    errors: list[ObservationBulkError] = Field(default_factory=list)
+
+
 __all__ = [
     "ObservationBase",
+    "ObservationBulkError",
+    "ObservationBulkResult",
     "ObservationCreate",
     "ObservationRead",
     "ObservationUpdate",

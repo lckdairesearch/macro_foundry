@@ -152,11 +152,16 @@ CHECK.
 ### Provider
 
 An organization that publishes data. Examples: `World Bank`, `International
-Monetary Fund`, `FRED (Federal Reserve Bank of St. Louis)`, `Alpha Vantage`.
+Monetary Fund`, `USA FRED`, `JPN e-Stat`, `Alpha Vantage`.
 
 Identified by a unique `name`. Has a `type` (official, international_organization,
 vendor, internal, other), homepage and doc URLs, an API base URL, and a
 `credentials_ref` for managed secrets.
+
+For country-scoped official publishers, the canonical provider `name` may
+include a 3-letter geography prefix when that makes the source unambiguous.
+Examples: `USA FRED`, `HKG Census and Statistics Department`, `JPN e-Stat`.
+This is a naming convention, not a separate foreign-key field.
 
 ### Provider catalog
 

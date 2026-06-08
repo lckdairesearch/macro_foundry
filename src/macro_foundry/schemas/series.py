@@ -21,6 +21,8 @@ from macro_foundry.enums import (
     UnitScale,
 )
 from macro_foundry.schemas._base import ReadSchema, SchemaModel, TimestampedReadSchema
+from macro_foundry.schemas.geography import GeographyRead
+from macro_foundry.schemas.tag import TagRead
 
 
 def _validate_series_constraints(
@@ -127,6 +129,13 @@ class SeriesRead(TimestampedReadSchema, SeriesBase):
     """API read model for a series."""
 
 
+class SeriesReadDetail(SeriesRead):
+    """Series read model including selected cross-domain relationships."""
+
+    geography: GeographyRead
+    tags: list[TagRead] = Field(default_factory=list)
+
+
 class SeriesFamilyBase(SchemaModel):
     """Shared series-family fields."""
 
@@ -203,5 +212,6 @@ __all__ = [
     "SeriesFamilyReadDetail",
     "SeriesFamilyUpdate",
     "SeriesRead",
+    "SeriesReadDetail",
     "SeriesUpdate",
 ]

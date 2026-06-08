@@ -143,8 +143,8 @@ macro_foundry/
 │   │   └── governance.py
 │   │
 │   ├── seed/                       # idempotent seed data
-│   │   ├── data/                   # typed Python data (COUNTRIES, BLOCS, TAGS, MEMBERSHIPS)
-│   │   ├── runners/                # ON CONFLICT DO UPDATE logic, async
+│   │   ├── data/                   # typed Python data (COUNTRIES, BLOCS, TAGS, PROVIDERS, PROVIDER_CATALOGS, MEMBERSHIPS)
+│   │   ├── runners/                # async upsert / natural-key reconciliation logic
 │   │   └── run.py                  # orchestrator, dependency order
 │   │
 │   ├── ingestion/                  # scaffold only this phase; HTTP clients later
@@ -292,14 +292,17 @@ Alembic owns schema. A separate Typer CLI owns seed data. They do not mix.
 
 Seed data lives in `src/macro_foundry/seed/data/` as typed Python (not YAML/JSON —
 the data is curated by developers and benefits from type-checked enum constants).
-Runners use `INSERT ... ON CONFLICT DO UPDATE` for idempotency. Re-running
+Where the schema exposes a stable natural key (`geographies.code`, `tags.name`,
+`providers.name`), runners use `INSERT ... ON CONFLICT DO UPDATE`. Where V3 does
+not expose a uniqueness constraint (`provider_catalogs`, `geography_memberships`),
+the seed runner reconciles by curated natural keys before insert/update. Re-running
 `uv run macrodb seed` on an existing DB is safe and updates any fields whose
 values have changed in the data files.
 
 In-scope for this phase: geographies (ISO countries + major blocs + key
 subnationals + selected subnational regions where curated)
-and tags (the 7 fixed categories). Concepts, providers, series, families all come
-later via the API/admin.
+and tags (the 7 fixed categories), plus a small default provider/provider-catalog
+seed set. Concepts, series, and families still come later via the API/admin.
 
 ## Testing philosophy
 
