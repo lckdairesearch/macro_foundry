@@ -12,11 +12,11 @@ Most recent at the top.
 
 ## Current phase
 
-**Phase 7 — Pydantic schemas** (next).
+**Phase 8 — Seed data + CLI** (next).
 
-Phase 6 is complete. The repo now has Alembic wired to `MACRODB_OWNER_URL`, the
-initial schema migration, and the `latest_observations` view migration verified
-with a downgrade/upgrade round-trip.
+Phase 7 is complete. The repo now has the full Pydantic schema surface aligned
+to the V3 ORM graph, including schema-side validation for the documented
+cross-field checks.
 
 ## Phase status
 
@@ -29,8 +29,8 @@ with a downgrade/upgrade round-trip.
 | 4     | Enums                          | ✅ Complete |
 | 5     | Models                         | ✅ Complete |
 | 6     | Alembic + initial migrations   | ✅ Complete |
-| 7     | Pydantic schemas               | ⏳ Next     |
-| 8     | Seed data + CLI                | ⏳          |
+| 7     | Pydantic schemas               | ✅ Complete |
+| 8     | Seed data + CLI                | ⏳ Next     |
 | 9     | CRUD generator + simple routes | ⏳          |
 | 10    | Hand-tuned routes              | ⏳          |
 | 11    | SQLAdmin                       | ⏳          |
@@ -38,6 +38,30 @@ with a downgrade/upgrade round-trip.
 | 13    | Neon parity verification       | ⏳          |
 
 ## Log
+
+### [2026-06-08] Phase 7 — Complete
+
+Pydantic schemas now cover the full V3 table surface:
+
+- added `src/macro_foundry/schemas/` modules for concepts, geographies, tags,
+  providers, series, observations, derived-series metadata, ingestion feeds,
+  run logs, and governance
+- implemented `Base` / `Create` / `Update` / `Read` variants for each table,
+  plus detail read models where same-domain nested rows are useful
+- added schema-side validators mirroring the Phase 5 cross-field constraints:
+  subnational parent requirement, growth-series horizon requirement,
+  currency-series currency-code requirement, and observation period bounds
+- exported the public schema surface from `src/macro_foundry/schemas/__init__.py`
+- added focused Phase 7 coverage in `tests/test_schemas.py`
+
+Verification:
+
+- `/Users/leodai/Development/macro_foundry/.uv-bootstrap/bin/uv run ruff check src/macro_foundry/schemas tests/test_schemas.py`
+  exited 0
+- `/Users/leodai/Development/macro_foundry/.uv-bootstrap/bin/uv run pytest tests/test_schemas.py`
+  exited 0 with `7 passed`
+- `/Users/leodai/Development/macro_foundry/.uv-bootstrap/bin/uv run python -c "... from macro_foundry.schemas import SeriesCreate ..."`
+  printed `schemas-ok`
 
 ### [2026-06-08] Phase 6 — Complete
 
