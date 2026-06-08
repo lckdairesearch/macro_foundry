@@ -56,8 +56,9 @@ Each was considered explicitly and rejected. ADRs cover the reasoning.
                             │
 ┌─────────────────────────────────────────────────────────┐
 │  SQLAlchemy async models                (data model)    │
-│  - V3 schema, 18 tables                                  │
-│  - mixin pattern for id/timestamps                       │
+│  - V3 schema, 19 tables                                  │
+│  - mixin pattern for id/timestamps, with                 │
+│    schema-native composite-PK junction exceptions        │
 │  - CHECK constraints via Enum(native_enum=False)         │
 └─────────────────────────────────────────────────────────┘
                             │

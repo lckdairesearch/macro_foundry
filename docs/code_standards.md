@@ -25,9 +25,12 @@ When in doubt, follow these. When tempted to deviate, propose first.
 
 - Use SQLAlchemy 2.x style: `Mapped[T]` + `mapped_column(...)`. No legacy
   `Column(...)` syntax.
-- Every model inherits from either `TimestampedBase` (id + created_at + updated_at)
-  or `CreatedAtBase` (id + created_at only, for append-only tables like
-  `observations` and run logs).
+- Models with a synthetic UUID primary key inherit from either `TimestampedBase`
+  (id + created_at + updated_at) or `CreatedAtBase` (id + created_at only, for
+  append-only tables like `observations` and run logs).
+- V3 composite-key junction tables keep their schema-native keys instead of
+  gaining a synthetic `id`. Today that applies to `series_tags` and
+  `series_family_members`.
 - `id` is always `uuid.UUID` with `server_default=text("uuidv7()")`. Never
   generate UUIDs in Python.
 - `created_at` and `updated_at` are always server-side defaults

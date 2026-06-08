@@ -6,7 +6,7 @@
 
 ## Context
 
-V3 has 18 tables. Most are pure CRUD; a few have real semantic logic (`series`,
+V3 has 19 tables. Most are pure CRUD; a few have real semantic logic (`series`,
 `observations`, the proposal lifecycle). We needed a strategy for exposing them
 as an API without writing 90 repetitive route handlers and 60+ schema classes
 by hand, while preserving control over the routes that need it.
@@ -29,7 +29,7 @@ entirely (PostgREST/Supabase) or stay with FastAPI as the front door.
   `src/macro_foundry/backend/crud.py` (~150 lines) produces standard
   GET-list / GET-by-id / POST / PATCH / DELETE routes with consistent
   conventions (404 handling, pagination, error shape).
-- **Simple tables (~14 of 18)** register via one-liner: `router = crud_router(
+- **Simple tables (~15 of 19)** register via one-liner: `router = crud_router(
   model=Concept, create_schema=ConceptCreate, ...)`.
 - **Complex tables** (`series` with cross-field validation, `observations` with
   bulk insert and vintage handling, governance lifecycle endpoints) get

@@ -12,11 +12,10 @@ Most recent at the top.
 
 ## Current phase
 
-**Phase 5 — Models** (next).
+**Phase 6 — Alembic + initial migrations** (next).
 
-Phase 4 is complete. The repo now has V3-aligned enum classes for
-code-routing and CHECK-constrained domains, re-exported from
-`macro_foundry.enums`.
+Phase 5 is complete. The repo now has the full V3 ORM graph, including explicit
+`ondelete` behavior from ADR 0008 and V3-native composite-key junction tables.
 
 ## Phase status
 
@@ -27,8 +26,8 @@ code-routing and CHECK-constrained domains, re-exported from
 | 2     | Docker + Postgres + roles      | ✅ Complete |
 | 3     | Config + session + base        | ✅ Complete |
 | 4     | Enums                          | ✅ Complete |
-| 5     | Models                         | ⏳ Next     |
-| 6     | Alembic + initial migrations   | ⏳          |
+| 5     | Models                         | ✅ Complete |
+| 6     | Alembic + initial migrations   | ⏳ Next     |
 | 7     | Pydantic schemas               | ⏳          |
 | 8     | Seed data + CLI                | ⏳          |
 | 9     | CRUD generator + simple routes | ⏳          |
@@ -38,6 +37,32 @@ code-routing and CHECK-constrained domains, re-exported from
 | 13    | Neon parity verification       | ⏳          |
 
 ## Log
+
+### [2026-06-08] Phase 5 — Complete
+
+SQLAlchemy models now cover the full V3 schema surface:
+
+- added model modules for geography, concepts, tags, providers, series,
+  observations, derived-series metadata, ingestion feeds, run logs, and
+  governance
+- implemented the V3 cross-column CHECK constraints and the three one-to-one
+  UNIQUE constraints called out in the build plan
+- wired every foreign key with explicit ADR-0008-aligned `ondelete` behavior
+  and exported the full model graph from `src/macro_foundry/models/__init__.py`
+- kept `series_tags` and `series_family_members` schema-native instead of
+  forcing synthetic IDs, because V3 defines them as composite-key tables
+- corrected stale docs that said V3 had 18 tables; the canonical schema
+  currently defines 19
+
+Verification:
+
+- `.uv-bootstrap/bin/uv run ruff check src/macro_foundry/models` exited 0
+- `.uv-bootstrap/bin/uv run python -c "from macro_foundry.models import *; from
+  macro_foundry.db.base import Base; print(len(Base.metadata.tables))"` printed
+  `19`
+- `.uv-bootstrap/bin/uv run python -c "from macro_foundry.models import *; from
+  sqlalchemy.orm import configure_mappers; configure_mappers(); print('mappers-ok')"`
+  printed `mappers-ok`
 
 ### [2026-06-08] Foreign-key deletion policy — ADR 0008
 

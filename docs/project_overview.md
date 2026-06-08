@@ -32,7 +32,7 @@ This phase builds the **database layer and backend skeleton**. Specifically:
 
 - Postgres 18.4 in Docker locally, deploy-ready for Neon (PG 18 default).
 - Two roles: `macrodb_owner` for migrations, `macrodb_app` for everything else.
-- All 18 V3 tables as async SQLAlchemy models.
+- All 19 V3 tables as async SQLAlchemy models.
 - Alembic migrations including the `latest_observations` view.
 - Pydantic schemas (Base / Create / Update / Read pattern) for every table.
 - FastAPI routes: a thin in-repo CRUD generator for ~80% of tables,
