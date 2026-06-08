@@ -6,6 +6,7 @@ from enum import Enum
 class GeographyType(str, Enum):
     COUNTRY = "country"
     SUBNATIONAL = "subnational"
+    SUBNATIONAL_REGION = "subnational_region"
     REGION = "region"
     BLOC = "bloc"
     WORLD = "world"

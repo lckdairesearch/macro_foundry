@@ -26,12 +26,12 @@
 
 geographies [icon: globe, color: orange] {
   id uuid pk
-  code string unique              // ISO 3166-1 alpha-3 for countries (USA, GBR, FRA) ISO 3166-2 for subnational (US-CA, US-NY) WB code for aggregates (EMU, WLD, EAS) internal slug for custom blocs (G7, OECD, BRICS)
+  code string unique              // ISO 3166-1 alpha-3 for countries (USA, GBR, FRA) ISO 3166-2 for subnational (US-CA, US-NY) WB code for cross-country aggregates (EMU, WLD, EAS) internal slug for subnational regions and custom blocs (JP-KANTO, US-MIDWEST, G7, OECD, BRICS)
   name string
   alt_name text[]                 // nullable
-  type string                     // ENUM: country | subnational | region | bloc | world
+  type string                     // ENUM: country | subnational | subnational_region | region | bloc | world
   code_standard string            // ENUM: ISO 3166-1 | ISO 3166-2 | WB | internal
-  parent_geography_id uuid                  // nullable; FK -> geographies.id Used ONLY for strict administrative containment: subnational rows point to their country (US-CA > USA). Countries, blocs, regions, and world have parent = NULL; type='subnational' → parent_geography_id IS NOT NULL
+  parent_geography_id uuid                  // nullable; FK -> geographies.id Country anchor for subnational and subnational_region rows. Subnational rows point to their country as an administrative parent (US-CA > USA). Subnational-region rows point to their country as a scope anchor (JP-KANTO > JPN). Membership of subnationals into subnational regions lives in geography_memberships. Countries, cross-country regions, blocs, and world have parent = NULL; type IN ('subnational', 'subnational_region') → parent_geography_id IS NOT NULL
   notes string                    // nullable
   created_at timestamp
   updated_at timestamp

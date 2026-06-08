@@ -17,6 +17,7 @@ references and supersedes the old one — don't edit the old one.
 | [0004](0004-psycopg3-async-not-asyncpg.md) | psycopg3 async over asyncpg | Accepted |
 | [0005](0005-no-native-pg-enums.md) | No native Postgres ENUM types | Accepted |
 | [0006](0006-two-role-architecture.md) | Two-role database architecture | Accepted |
+| [0007](0007-subnational-regions-as-country-scoped-groupings.md) | Subnational regions as country-scoped grouping geographies | Accepted |
 
 ## Format
 
@@ -47,4 +48,3 @@ Each viable alternative with a short rejection rationale.
 ```
 
 Keep ADRs short. Aim for 1-2 pages. They are reference material, not essays.
-

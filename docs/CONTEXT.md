@@ -25,18 +25,28 @@ A country, subnational region, region, bloc, or "world." Identified by an ISO
 code where possible:
 
 - **Country** — ISO 3166-1 alpha-3 (`USA`, `GBR`, `JPN`).
-- **Subnational** — ISO 3166-2 (`US-CA`, `US-NY`). Has a `parent_geography_id`
-  pointing to the country.
-- **Region** — World Bank or internal designation (`EAS` for East Asia, `MEA` for
-  Middle East and North Africa).
+- **Subnational** — administrative subdivision within a country, typically ISO
+  3166-2 (`US-CA`, `US-NY`). Has a `parent_geography_id` pointing to the
+  country.
+- **Subnational region** — a country-scoped grouping geography such as Japan's
+  `chiho` (`Kanto`, `Tohoku`) or US groupings like `Midwest`. Usually uses an
+  internal code. Has a `parent_geography_id` pointing to the country. Its
+  member prefectures, states, or provinces are linked through
+  `geography_memberships`, not through a forced child tree.
+- **Region** — World Bank or internal cross-country designation (`EAS` for East
+  Asia, `MEA` for Middle East and North Africa).
 - **Bloc** — internal slug (`G7`, `OECD`, `BRICS`, `EMU`). Bloc membership is
   tracked separately in `geography_memberships`, with optional `start_date` /
   `end_date` for membership changes over time.
 - **World** — `WLD`.
 
-`parent_geography_id` is **only** for strict administrative containment
-(subnational → country). It is **never** used for bloc membership — that's what
-`geography_memberships` is for.
+`parent_geography_id` is the **country anchor** for `subnational` and
+`subnational_region`. For `subnational`, that anchor is also the strict
+administrative parent. For `subnational_region`, it means "belongs to this
+country" rather than "is the only grouping tree for this country."
+`parent_geography_id` is **never** used for bloc membership, and it is not used
+to force one subnational-region hierarchy; those memberships live in
+`geography_memberships`.
 
 ### Series family
 

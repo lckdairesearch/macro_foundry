@@ -284,7 +284,8 @@ Runners use `INSERT ... ON CONFLICT DO UPDATE` for idempotency. Re-running
 `uv run macrodb seed` on an existing DB is safe and updates any fields whose
 values have changed in the data files.
 
-In-scope for this phase: geographies (ISO countries + major blocs + key subnationals)
+In-scope for this phase: geographies (ISO countries + major blocs + key
+subnationals + selected subnational regions where curated)
 and tags (the 7 fixed categories). Concepts, providers, series, families all come
 later via the API/admin.
 

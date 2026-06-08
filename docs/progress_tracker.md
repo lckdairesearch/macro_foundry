@@ -38,6 +38,20 @@ domain and re-exported from `macro_foundry.enums`.
 
 ## Log
 
+### [2026-06-08] Geography taxonomy — Added `subnational_region`
+
+Recorded a new ADR and updated the domain language for country-scoped grouping
+geographies:
+
+- added ADR 0007 defining `subnational_region` as a first-class geography type
+  for country-scoped groupings such as Japan `chiho` and US `Midwest`
+- clarified that `parent_geography_id` is the country anchor for both
+  `subnational` and `subnational_region`
+- clarified that subnational membership into subnational regions is modeled via
+  `geography_memberships`, not a forced single tree
+- updated the schema/build-plan references that previously treated
+  `parent_geography_id` as subnational-only
+
 ### [2026-06-08] Phase 4 — Complete
 
 Enum scaffolding landed for the full V3 schema surface:

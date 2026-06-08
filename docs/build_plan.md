@@ -154,7 +154,8 @@ print(Frequency.MONTHLY.value)"` prints `"M"`.
 - `series`: `measure='growth'` → `measure_horizon IS NOT NULL`
 - `series`: `unit_kind='currency'` → `currency_code IS NOT NULL`
 - `observations`: `period_end >= period_start`
-- `geographies`: `type='subnational'` → `parent_geography_id IS NOT NULL`
+- `geographies`: `type IN ('subnational', 'subnational_region')` →
+  `parent_geography_id IS NOT NULL`
 
 **Intentionally NOT implemented (per V3 final draft):**
 
@@ -229,10 +230,12 @@ need care.
 **Deliverables:**
 
 - `src/macro_foundry/seed/data/geographies.py` with COUNTRIES (all ISO 3166-1),
-  SUBNATIONALS (US states at minimum), BLOCS (G7, G20, OECD, EMU, EU, EFTA,
-  BRICS, ASEAN, MERCOSUR, World)
+  SUBNATIONALS (US states at minimum), curated SUBNATIONAL_REGIONS where the
+  project chooses to support them, BLOCS (G7, G20, OECD, EMU, EU, EFTA, BRICS,
+  ASEAN, MERCOSUR, World)
 - `src/macro_foundry/seed/data/tags.py` with the 7 fixed categories
-- `src/macro_foundry/seed/data/memberships.py` with bloc → member mappings
+- `src/macro_foundry/seed/data/memberships.py` with curated geography-group
+  mappings (bloc → member, plus subnational_region → subnational where modeled)
 - `src/macro_foundry/seed/runners/` with idempotent `ON CONFLICT DO UPDATE` logic
 - `src/macro_foundry/seed/run.py` orchestrator (dependency-ordered)
 - `src/macro_foundry/cli.py` with `macrodb seed [--only X] [--dry-run] [--reset]`
