@@ -1,0 +1,2 @@
+"""Enum definitions live here."""
+

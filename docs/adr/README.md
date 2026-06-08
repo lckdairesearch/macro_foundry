@@ -1,0 +1,50 @@
+# Architecture Decision Records
+
+This directory holds the decisions that shape `macro_foundry`. Each ADR is a
+short, self-contained record of a decision made: the context, what was decided,
+the consequences, and the alternatives that were considered.
+
+ADRs are immutable once accepted. If a decision changes, write a new ADR that
+references and supersedes the old one — don't edit the old one.
+
+## Index
+
+| ADR | Title | Status |
+|---|---|---|
+| [0001](0001-uuidv7-server-side-defaults.md) | uuidv7 server-side defaults | Accepted |
+| [0002](0002-enum-check-constraint-pattern.md) | Enum / CHECK constraint pattern | Accepted |
+| [0003](0003-thin-crud-generator-over-postgrest.md) | Thin in-repo CRUD generator over PostgREST / Supabase / Django / SQLModel | Accepted |
+| [0004](0004-psycopg3-async-not-asyncpg.md) | psycopg3 async over asyncpg | Accepted |
+| [0005](0005-no-native-pg-enums.md) | No native Postgres ENUM types | Accepted |
+| [0006](0006-two-role-architecture.md) | Two-role database architecture | Accepted |
+
+## Format
+
+When you write a new ADR, follow this skeleton:
+
+```markdown
+# ADR NNNN — Short title
+
+**Status:** Proposed | Accepted | Superseded by [NNNN]
+
+**Date:** YYYY-MM-DD
+
+## Context
+
+What problem is this decision addressing? What forces are in play?
+
+## Decision
+
+What we decided to do. Specific. Cite code patterns if useful.
+
+## Consequences
+
+What this enables. What it costs. What follow-on work it implies.
+
+## Alternatives considered
+
+Each viable alternative with a short rejection rationale.
+```
+
+Keep ADRs short. Aim for 1-2 pages. They are reference material, not essays.
+

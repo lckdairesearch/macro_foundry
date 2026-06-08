@@ -1,0 +1,352 @@
+// =============================================================
+// macrodb — Schema V3 (FINAL)
+// Layout: tables ordered root → leaf, all FKs written child > parent
+// This gives eraser.io a consistent signal for top-down auto-layout
+//
+// Dependency levels:
+//   L0 (roots):   geographies, concepts, tags, providers
+//   L1:           series, series_families, provider_catalogs
+//   L2:           series_tags, series_family_members, series_sources, derived_series
+//   L3:           observations, ingestion_feeds, derivation_inputs
+//   L4:           ingestion_run_logs, computation_run_logs
+//   Governance:   change_proposals, change_proposal_items
+//
+// Note: this is the canonical source of truth for the schema.
+// SQLAlchemy models, Alembic migrations, Pydantic schemas, and tests must
+// agree with this file. If a discrepancy is found, this is authoritative.
+//
+// Intentionally NOT enforced (decisions to keep, not gaps):
+//   - No `reference_kind IS NOT NULL → reference_year IS NOT NULL` CHECK
+//   - No partial unique on series_family_members(family_id) WHERE is_primary=true
+// =============================================================
+
+// =======================
+// L0 — Root / Reference Tables
+// =======================
+
+geographies [icon: globe, color: orange] {
+  id uuid pk
+  code string unique              // ISO 3166-1 alpha-3 for countries (USA, GBR, FRA) ISO 3166-2 for subnational (US-CA, US-NY) WB code for aggregates (EMU, WLD, EAS) internal slug for custom blocs (G7, OECD, BRICS)
+  name string
+  alt_name text[]                 // nullable
+  type string                     // ENUM: country | subnational | region | bloc | world
+  code_standard string            // ENUM: ISO 3166-1 | ISO 3166-2 | WB | internal
+  parent_geography_id uuid                  // nullable; FK -> geographies.id Used ONLY for strict administrative containment: subnational rows point to their country (US-CA > USA). Countries, blocs, regions, and world have parent = NULL; type='subnational' → parent_geography_id IS NOT NULL
+  notes string                    // nullable
+  created_at timestamp
+  updated_at timestamp
+}
+
+geography_memberships [icon: user-round, color: orange] {
+  id uuid pk
+  member_geography_id uuid fk   // > geographies.id  (e.g. JPN)
+  group_geography_id  uuid fk   // > geographies.id  (e.g. G7)
+  start_date date               // nullable
+  end_date date                 // nullable
+  created_at timestamp
+  updated_at timestamp
+}
+
+concepts [icon: brain, color: purple] {
+  id uuid pk
+  code string unique              // e.g. CPI, GDP, UNEMPLOYMENT_RATE, CURRENT_ACCOUNT_BALANCE
+  name string                   // curated taxonomy; initial values in seed data
+  description string              // nullable
+  created_at timestamp
+  updated_at timestamp
+}
+
+tags [icon: tag, color: orange] {
+  id uuid pk
+  name string unique
+  created_at timestamp
+  updated_at timestamp
+}
+
+providers [icon: building, color: blue] {
+  id uuid pk
+  name string unique             // e.g. World Bank, International Monetary Fund
+  alt_name text[]                 // nullable
+  type string                     // ENUM: official | international_organization | vendor | internal | other
+  homepage_url string             // nullable
+  doc_url string                  // nullable; technical documentation page
+  base_url string                 // nullable; API root domain e.g. https://api.worldbank.org/v2/
+  credentials_ref string           // nullable
+  notes string                    // nullable
+  is_active boolean
+  created_at timestamp
+  updated_at timestamp
+}
+
+// =======================
+// L1 — First-level Dependents
+// =======================
+
+series [icon: activity, color: green] {
+  id uuid pk
+  code string unique
+  name string
+  description string              // nullable but strongly encouraged
+  origin_type string              // ENUM: ingested | derived | both
+  geography_id uuid fk            // FK -> geographies.id
+  frequency string                // ENUM: D | W | M | Q | S | A; S for semi-annual
+  temporal_stock_flow string      // ENUM: stock | flow | rate | index | unknown
+  unit_kind string                // ENUM: index | percent | bps | currency | count | quantity | ratio | none
+  unit_scale string               // ENUM: one | thousand | million | billion | trillion
+  unit_label string               // nullable; e.g. persons, jobs, barrels; mainly count | quantity
+  price_basis string              // nullable; ENUM: nominal | real | ppp | other; mainly currency
+  currency_code string            // nullable; ISO 4217; mainly currency; unit_kind='currency' → currency_code IS NOT NULL
+  measure string                  // ENUM: level | growth | change
+  measure_horizon string          // nullable; ENUM: ytd | wow | mom | qoq | yoy | custom; measure='growth' → measure_horizon IS NOT NULL
+  annualized boolean              // whether the value is expressed as an annualized rate
+  seasonal_adjustment string      // ENUM: SA | SAAR | NSA | unknown
+  reference_kind string           // nullable; ENUM: index_base | constant_prices | ppp_base | other
+  reference_year int              // nullable; e.g. 2019
+  reference_label string          // nullable; e.g. "2019=100", "1982-1984=100", "2015 constant prices"
+  replaced_by_series_id uuid      // nullable; FK -> series.id; set when this series is superseded
+  start_date date                 // nullable
+  end_date date                   // nullable; null = ongoing
+  is_active boolean
+  created_at timestamp
+  updated_at timestamp
+}
+
+series_families [icon: layers, color: purple] {
+  id uuid pk
+  code string unique              // e.g. JP_CPI, US_CPI, JP_HOUSEHOLD_CONSUMPTION
+  name string
+  description string              // nullable
+  concept_id uuid fk              // FK -> concepts.id
+  geography_id uuid fk            // FK -> geographies.id
+  created_at timestamp
+  updated_at timestamp
+}
+
+provider_catalogs [icon: list, color: blue] {
+  id uuid pk
+  provider_id uuid fk             // FK -> providers.id
+  name string                     // e.g. World Development Indicators | FRED default catalog
+  catalog_url string              // nullable
+  doc_url string                  // nullable
+  notes string                    // nullable
+  is_placeholder boolean              // true when provider has no meaningful sub-catalogue e.g. FRED
+  created_at timestamp
+  updated_at timestamp
+}
+
+// =======================
+// L2 — Junction and Second-level Dependents
+// =======================
+
+series_tags [icon: tag, color: orange] {
+  series_id uuid pk fk            // FK -> series.id
+  tag_id uuid pk fk               // FK -> tags.id
+}
+
+series_family_members [icon: list, color: purple] {
+  family_id uuid pk fk            // FK -> series_families.id
+  series_id uuid pk fk           // FK -> series.id
+  variant string                  // nullable; human-readable variant e.g. "Core ex fresh food", "Two-or-more-person households"
+  is_primary boolean
+  created_at timestamp
+  updated_at timestamp
+}
+
+series_sources [icon: link, color: blue] {
+  id uuid pk
+  series_id uuid fk               // FK -> series.id
+  provider_catalog_id uuid fk     // FK -> provider_catalogs.id
+  external_code string            // e.g. NY.GDP.MKTP.CD | CPIAUCSL; unique on provider_catalog_id &  external_code
+  external_name string            // nullable; for audit and reconciliation
+  priority int                    // lower = higher priority; ordinal only; default to 1 if no other sources, if multiple sources, confirm with human
+  provider_role string            // ENUM: primary_source | redistributor | harmonized | vendor_estimate | internal | other
+  value_transform jsonb           // nullable; e.g. {"op": "divide", "by": 100}
+  start_date date                 // nullable
+  end_date date                   // nullable; null = still active
+  created_at timestamp
+  updated_at timestamp
+}
+
+derived_series [icon: cpu, color: yellow] {
+  id uuid pk
+  series_id uuid fk               // FK -> series.id; the output series this computation produces
+  formula_config jsonb            // nullable
+  description string              // e.g. "10Y minus 2Y Treasury yield"
+  execution_policy string         // ENUM: scheduled | upstream_update | manual
+  is_deterministic boolean
+  requires_vintage_awareness boolean
+  code_ref string                 // nullable; e.g. transformations.growth.yoy
+  created_at timestamp
+  updated_at timestamp
+}
+
+// =======================
+// L3 — Third-level Dependents
+// =======================
+
+observations [icon: database, color: red] {
+  id uuid pk
+  series_id uuid fk               // FK -> series.id; Unique on series_id, period_start, vintage_date
+  period_start date               // first day of the period
+  period_end date                 // last day of the period; period_end >= period_start
+  value numeric                   // nullable; null = known gap, not missing
+  vintage_date date               // date this vintage/release became publicly available
+  ingestion_run_log_id uuid       // nullable; FK -> ingestion_run_logs.id
+  computation_run_log_id uuid     // nullable; FK -> computation_run_logs.id
+  created_at timestamp
+}
+
+// Note: latest_observations is a VIEW, not a table:
+// CREATE VIEW latest_observations AS
+// SELECT DISTINCT ON (series_id, period_start) *
+// FROM observations
+// ORDER BY series_id, period_start, vintage_date DESC;
+
+ingestion_feeds [icon: rss, color: blue] {
+  id uuid pk
+  series_source_id uuid fk      // FK -> series_sources.id
+  feed_method string              // ENUM: api | file_upload
+  endpoint_url string             // nullable
+  request_params jsonb            // nullable; omit end_date for ongoing series — script uses today at runtime
+  file_path_pattern string        // nullable; e.g. /data/uploads/wb_wdi_*.csv
+  response_mapping jsonb          // nullable; e.g. {"date_field": "date", "value_field": "value", "data_path": "observations"}
+  cron_schedule string            // nullable; e.g. 0 6 * * 1
+  is_active boolean
+  created_at timestamp
+  updated_at timestamp
+}
+
+derivation_inputs [icon: git-merge, color: yellow] {
+  id uuid pk
+  derived_series_id uuid fk       // FK -> derived_series.id; unique on derived_series_id, input_series_id)
+  input_series_id uuid fk         // FK -> series.id
+  notes string                    // nullable; human-readable role e.g. "minuend", "numerator", "weight=0.3"
+  created_at timestamp
+  updated_at timestamp
+}
+
+// =======================
+// L4 — Run Logs
+// =======================
+
+ingestion_run_logs [icon: clock, color: blue] {
+  id uuid pk
+  ingestion_feed_id uuid fk       // FK -> ingestion_feeds.id
+  started_at timestamp
+  finished_at timestamp           // nullable; null if still running
+  status string                   // ENUM: success | failed | partial
+  rows_fetched int                // nullable
+  rows_inserted int               // nullable
+  rows_skipped int                // nullable
+  error_message string            // nullable
+  triggered_by string             // ENUM: scheduler | manual | backfill
+  code_version string             // nullable; git SHA or package version at time of run e.g. "a3f9b21" or "v0.4.2"
+  parameters jsonb                // nullable; actual runtime parameters used e.g. {"date_from": "2020-01-01", "force_refresh": true}
+  notes string                    // nullable
+  created_at timestamp
+}
+
+computation_run_logs [icon: clock, color: yellow] {
+  id uuid pk
+  derived_series_id uuid fk       // FK -> derived_series.id
+  started_at timestamp
+  finished_at timestamp           // nullable; null if still running
+  status string                   // ENUM: success | failed | partial | pending
+  rows_computed int               // nullable
+  rows_inserted int               // nullable
+  rows_updated int                // nullable
+  rows_skipped int                // nullable
+  error_message string            // nullable
+  triggered_by string             // ENUM: scheduler | manual | backfill | upstream_update
+  code_version string             // nullable; git SHA or package version at time of run
+  input_vintage_policy string     // nullable; ENUM: latest_available | vintage_as_of | fixed_vintage | window_relative
+  input_vintage_date date         // nullable; only when input_vintage_policy is vintage_as_of
+  parameters jsonb                // nullable; actual runtime parameters used
+  output_mode string              // nullable; ENUM: write_observations | dry_run | validation_only
+  notes string                    // nullable
+  created_at timestamp
+}
+
+// =======================
+// Governance Layer
+// =======================
+
+change_proposals [icon: clipboard, color: purple] {
+  id uuid pk
+  title string
+  proposal_type string            // ENUM: add_provider_series | add_derived_series | add_family | add_concept | code_and_db_change | schema_change | mixed
+  status string                   // ENUM: proposed | approved | applied | rejected | failed | superseded
+  requested_by string             // ENUM: user | agent | system
+  created_by_agent string         // nullable; specific agent identifier when requested_by = agent e.g. "claude-opus-4-7", "gpt-4o"
+  user_prompt string              // nullable; original request that triggered this proposal
+  rationale string                // nullable
+  risk_level string               // ENUM: low | medium | high
+  review_notes string             // nullable
+  approved_by string              // nullable
+  approved_at timestamp           // nullable
+  applied_at timestamp            // nullable
+  superseded_by_proposal_id uuid  // nullable; FK -> change_proposals.id; set when status = superseded
+  created_at timestamp
+  updated_at timestamp
+}
+
+change_proposal_items [icon: list-checks, color: purple] {
+  id uuid pk
+  proposal_id uuid fk             // FK -> change_proposals.id
+  item_type string                // ENUM: db_row | code_change | migration | test | validation | documentation
+  target_type string              // ENUM: concepts | series | series_families | series_sources | ingestion_feeds | file | function | test | providers | provider_catalogs | derived_series | derivation_inputs | geographies | tags | series_family_members | geography_memberships
+  action string                   // ENUM: insert | update | deactivate | create_file | modify_file | run_test | validate
+  target_id uuid                  // nullable; existing DB row if update or deactivate; polymorphic, no FK enforcement
+  target_ref string               // nullable; file path, function path, artifact path
+  proposed_data jsonb             // nullable; proposed DB row or structured change summary
+  diff_summary string             // nullable
+  validation_status string        // ENUM: pending | passed | failed | warning | not_required
+  validation_notes string         // nullable
+  created_at timestamp
+  updated_at timestamp
+}
+
+// =============================================================
+// Relationships
+// All written as child.fk > parent.id (arrow points child → parent)
+// Gives eraser.io a consistent signal: parents render above children
+// =============================================================
+
+// ---- Geography hierarchy ----
+geographies.parent_geography_id > geographies.id
+geographies.id < geography_memberships.member_geography_id
+geographies.id < geography_memberships.group_geography_id 
+
+// ---- Series core (anchor table + direct attributes) ----
+series.geography_id > geographies.id
+series.replaced_by_series_id - series.id
+series_tags.series_id > series.id
+series_tags.tag_id > tags.id
+
+// ---- Concept / family cluster ----
+series_families.concept_id > concepts.id
+series_families.geography_id > geographies.id
+series_family_members.family_id > series_families.id
+series_family_members.series_id - series.id
+
+// ---- Provider / ingestion chain ----
+provider_catalogs.provider_id > providers.id
+series_sources.provider_catalog_id > provider_catalogs.id
+series_sources.series_id > series.id
+ingestion_feeds.series_source_id > series_sources.id
+ingestion_run_logs.ingestion_feed_id > ingestion_feeds.id
+
+// ---- Derivation chain ----
+derived_series.series_id - series.id
+derivation_inputs.derived_series_id > derived_series.id
+derivation_inputs.input_series_id > series.id
+computation_run_logs.derived_series_id > derived_series.id
+
+// ---- Observations (joins ingestion + derivation back to series) ----
+observations.series_id > series.id
+observations.ingestion_run_log_id > ingestion_run_logs.id
+observations.computation_run_log_id > computation_run_logs.id
+
+// ---- Governance (intentionally isolated) ----
+change_proposals.superseded_by_proposal_id > change_proposals.id
+change_proposal_items.proposal_id > change_proposals.id

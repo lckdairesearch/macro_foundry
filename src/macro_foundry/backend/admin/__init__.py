@@ -1,0 +1,2 @@
+"""SQLAdmin scaffolding."""
+
