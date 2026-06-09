@@ -22,6 +22,7 @@ EXPECTED_TABLES = {
     "geography_memberships",
     "ingestion_feed_members",
     "ingestion_feeds",
+    "ingestion_run_log_members",
     "ingestion_run_logs",
     "observations",
     "provider_catalogs",

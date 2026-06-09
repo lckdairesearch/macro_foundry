@@ -1,7 +1,7 @@
 """SQLAdmin views for ingestion/computation run logs."""
 
 from macro_foundry.backend.admin._base import BaseModelView, date_widget_args, datetime_widget_args, json_widget_args, relation_formatter
-from macro_foundry.models import ComputationRunLog, IngestionRunLog
+from macro_foundry.models import ComputationRunLog, IngestionRunLog, IngestionRunLogMember
 
 
 class IngestionRunLogAdmin(BaseModelView, model=IngestionRunLog):
@@ -109,4 +109,46 @@ class ComputationRunLogAdmin(BaseModelView, model=ComputationRunLog):
     }
 
 
-__all__ = ["ComputationRunLogAdmin", "IngestionRunLogAdmin"]
+class IngestionRunLogMemberAdmin(BaseModelView, model=IngestionRunLogMember):
+    name = "Ingestion run log member"
+    name_plural = "Ingestion run log members"
+    category = "Observation Layer"
+    category_icon = "ti ti-database"
+    can_create = False
+    can_edit = False
+    can_delete = False
+    column_list = [
+        IngestionRunLogMember.ingestion_run_log,
+        IngestionRunLogMember.ingestion_feed_member,
+        IngestionRunLogMember.status,
+        IngestionRunLogMember.rows_fetched,
+        IngestionRunLogMember.rows_inserted,
+        IngestionRunLogMember.rows_skipped,
+        IngestionRunLogMember.created_at,
+    ]
+    column_searchable_list = [
+        IngestionRunLogMember.error_message,
+        "ingestion_feed_member.selector_type",
+    ]
+    column_filters = [IngestionRunLogMember.status]
+    column_sortable_list = [IngestionRunLogMember.created_at]
+    column_default_sort = [(IngestionRunLogMember.created_at, True)]
+    column_formatters = {
+        IngestionRunLogMember.ingestion_run_log: relation_formatter("ingestion_run_log"),
+        IngestionRunLogMember.ingestion_feed_member: relation_formatter("ingestion_feed_member"),
+    }
+    form_columns = [
+        IngestionRunLogMember.ingestion_run_log,
+        IngestionRunLogMember.ingestion_feed_member,
+        IngestionRunLogMember.status,
+        IngestionRunLogMember.rows_fetched,
+        IngestionRunLogMember.rows_inserted,
+        IngestionRunLogMember.rows_skipped,
+        IngestionRunLogMember.error_message,
+        IngestionRunLogMember.diagnostics,
+        IngestionRunLogMember.notes,
+    ]
+    form_widget_args = json_widget_args("diagnostics")
+
+
+__all__ = ["ComputationRunLogAdmin", "IngestionRunLogAdmin", "IngestionRunLogMemberAdmin"]

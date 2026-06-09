@@ -7,7 +7,11 @@ from macro_foundry.backend.admin.views.governance import ChangeProposalAdmin, Ch
 from macro_foundry.backend.admin.views.ingestion import IngestionFeedAdmin, IngestionFeedMemberAdmin
 from macro_foundry.backend.admin.views.observation import ObservationAdmin
 from macro_foundry.backend.admin.views.provider import ProviderAdmin, ProviderCatalogAdmin, SeriesSourceAdmin
-from macro_foundry.backend.admin.views.run_log import ComputationRunLogAdmin, IngestionRunLogAdmin
+from macro_foundry.backend.admin.views.run_log import (
+    ComputationRunLogAdmin,
+    IngestionRunLogAdmin,
+    IngestionRunLogMemberAdmin,
+)
 from macro_foundry.backend.admin.views.series import (
     SeriesAdmin,
     SeriesFamilyAdmin,
@@ -35,6 +39,7 @@ ADMIN_VIEWS = (
     DerivationInputAdmin,
     ObservationAdmin,
     IngestionRunLogAdmin,
+    IngestionRunLogMemberAdmin,
     ComputationRunLogAdmin,
     ChangeProposalAdmin,
     ChangeProposalItemAdmin,

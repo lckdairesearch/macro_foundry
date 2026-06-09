@@ -51,6 +51,7 @@ from macro_foundry.models import (
     IngestionFeed,
     IngestionFeedMember,
     IngestionRunLog,
+    IngestionRunLogMember,
     Observation,
     Provider,
     ProviderCatalog,
@@ -422,6 +423,7 @@ async def _run_bootstrap_transaction(
                         frequency=prepared.spec.frequency,
                         external_code=prepared.spec.external_code,
                         ingestion_feed=prepared.feed,
+                        ingestion_feed_member=prepared.feed_member,
                         series_source=prepared.source,
                         run_date=run_date,
                         code_version=code_version,
@@ -506,6 +508,13 @@ async def _reset_bootstrap_transaction(
             )
         ).scalars().all()
     )
+    ingestion_run_log_ids = set(
+        (
+            await session.execute(
+                select(IngestionRunLog.id).where(IngestionRunLog.ingestion_feed_id.in_(feed_ids)),
+            )
+        ).scalars().all()
+    )
     derived_series_ids = set(
         (
             await session.execute(
@@ -521,6 +530,10 @@ async def _reset_bootstrap_transaction(
     computation_run_logs_deleted = await _execute_delete(
         session,
         delete(ComputationRunLog).where(ComputationRunLog.derived_series_id.in_(derived_series_ids)),
+    )
+    await _execute_delete(
+        session,
+        delete(IngestionRunLogMember).where(IngestionRunLogMember.ingestion_run_log_id.in_(ingestion_run_log_ids)),
     )
     ingestion_run_logs_deleted = await _execute_delete(
         session,

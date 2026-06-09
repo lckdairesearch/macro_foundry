@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from macro_foundry.enums import Frequency, IngestionRunStatus, IngestionTriggeredBy
 from macro_foundry.ingestion.providers.fred import FredClientProtocol, FredSeriesMetadata, fred_period_bounds
-from macro_foundry.models import IngestionFeed, IngestionRunLog, Observation, SeriesSource
+from macro_foundry.models import IngestionFeed, IngestionFeedMember, IngestionRunLog, IngestionRunLogMember, Observation, SeriesSource
 
 _DEFAULT_OVERLAPS: dict[Frequency, tuple[str, int]] = {
     Frequency.MONTHLY: ("months", 18),
@@ -47,6 +47,7 @@ async def import_fred_latest_snapshot(
     frequency: Frequency,
     external_code: str,
     ingestion_feed: IngestionFeed,
+    ingestion_feed_member: IngestionFeedMember,
     series_source: SeriesSource,
     run_date: date,
     code_version: str | None,
@@ -130,6 +131,19 @@ async def import_fred_latest_snapshot(
         )
         session.add(run_log)
         await session.flush()
+        session.add(
+            IngestionRunLogMember(
+                ingestion_run_log_id=run_log.id,
+                ingestion_feed_member_id=ingestion_feed_member.id,
+                status=IngestionRunStatus.SUCCESS,
+                rows_fetched=len(fetched_rows),
+                rows_inserted=len(rows_to_write),
+                rows_skipped=rows_skipped,
+                diagnostics={"selector_type": ingestion_feed_member.selector_type},
+                notes=f"latest-snapshot import for {series_source.external_code}",
+            ),
+        )
+        await session.flush()
 
         if rows_to_write:
             for row in rows_to_write:
@@ -178,6 +192,17 @@ async def import_fred_latest_snapshot(
             notes="latest-snapshot import failed",
         )
         session.add(failed_log)
+        await session.flush()
+        session.add(
+            IngestionRunLogMember(
+                ingestion_run_log_id=failed_log.id,
+                ingestion_feed_member_id=ingestion_feed_member.id,
+                status=IngestionRunStatus.FAILED,
+                error_message=str(exc),
+                diagnostics={"selector_type": ingestion_feed_member.selector_type},
+                notes="latest-snapshot import failed",
+            ),
+        )
         await session.flush()
         raise
 

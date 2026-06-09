@@ -59,6 +59,8 @@ Canonical `ON DELETE` map:
 - `derivation_inputs.derived_series_id` → `CASCADE`
 - `derivation_inputs.input_series_id` → `RESTRICT`
 - `ingestion_run_logs.ingestion_feed_id` → `RESTRICT`
+- `ingestion_run_log_members.ingestion_run_log_id` → `RESTRICT`
+- `ingestion_run_log_members.ingestion_feed_member_id` → `RESTRICT`
 - `computation_run_logs.derived_series_id` → `RESTRICT`
 - `observations.series_id` → `RESTRICT`
 - `observations.ingestion_run_log_id` → `RESTRICT`

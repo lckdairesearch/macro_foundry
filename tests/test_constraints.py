@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 from uuid import uuid4
 
 import pytest
@@ -16,6 +16,8 @@ from macro_foundry.enums import (
     ExecutionPolicy,
     Frequency,
     GeographyType,
+    IngestionRunStatus,
+    IngestionTriggeredBy,
     Measure,
     OriginType,
     ProviderRole,
@@ -31,6 +33,8 @@ from macro_foundry.models import (
     Geography,
     IngestionFeed,
     IngestionFeedMember,
+    IngestionRunLog,
+    IngestionRunLogMember,
     Observation,
     Provider,
     ProviderCatalog,
@@ -361,6 +365,66 @@ async def test_ingestion_feed_member_allows_only_one_member_per_series_source(
             selector_type="json_path",
             selector_config={"path": "$.two"},
             is_active=True,
+        ),
+    )
+
+    with pytest.raises(IntegrityError):
+        await session.commit()
+    await session.rollback()
+
+
+@pytest.mark.asyncio
+async def test_ingestion_run_log_member_allows_only_one_outcome_per_member_attempt(
+    session: AsyncSession,
+) -> None:
+    series = await _create_series(session, code="MF_RUN_LOG_MEMBER_UNIQUE")
+    catalog = await _create_provider_catalog(
+        session,
+        provider_name="Macro Foundry Run Member Provider",
+        catalog_name="Macro Foundry Run Member Catalog",
+    )
+    source = SeriesSource(
+        series_id=series.id,
+        provider_catalog_id=catalog.id,
+        priority=1,
+        provider_role=ProviderRole.PRIMARY_SOURCE,
+    )
+    feed = IngestionFeed(feed_method=FeedMethod.API, endpoint_url="/shared", is_active=True)
+    session.add_all([source, feed])
+    await session.commit()
+
+    member = IngestionFeedMember(
+        ingestion_feed_id=feed.id,
+        series_source_id=source.id,
+        selector_type="json_path",
+        selector_config={"path": "$.value"},
+        is_active=True,
+    )
+    run_log = IngestionRunLog(
+        ingestion_feed_id=feed.id,
+        started_at=datetime(2026, 6, 9, tzinfo=timezone.utc),
+        status=IngestionRunStatus.PARTIAL,
+        triggered_by=IngestionTriggeredBy.MANUAL,
+    )
+    session.add_all([member, run_log])
+    await session.commit()
+
+    session.add(
+        IngestionRunLogMember(
+            ingestion_run_log_id=run_log.id,
+            ingestion_feed_member_id=member.id,
+            status=IngestionRunStatus.SUCCESS,
+            rows_inserted=1,
+        ),
+    )
+    await session.commit()
+
+    session.add(
+        IngestionRunLogMember(
+            ingestion_run_log_id=run_log.id,
+            ingestion_feed_member_id=member.id,
+            status=IngestionRunStatus.FAILED,
+            error_message="Duplicate outcome for the same attempt.",
         ),
     )
 

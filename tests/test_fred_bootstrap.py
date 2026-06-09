@@ -24,6 +24,7 @@ from macro_foundry.models import (
     IngestionFeed,
     IngestionFeedMember,
     IngestionRunLog,
+    IngestionRunLogMember,
     Observation,
     Series,
     SeriesFamily,
@@ -181,6 +182,7 @@ async def test_fred_bootstrap_creates_curated_rows_and_run_logs(
         assert await _count_rows(session, IngestionFeedMember) == 4
         assert await _count_rows(session, DerivedSeries) == 4
         assert await _count_rows(session, IngestionRunLog) == 4
+        assert await _count_rows(session, IngestionRunLogMember) == 4
         assert await _count_rows(session, ComputationRunLog) == 4
         assert await _count_rows(session, Observation) == 26
 
@@ -208,6 +210,12 @@ async def test_fred_bootstrap_creates_curated_rows_and_run_logs(
         assert feed.cron_schedule == "TZ=America/New_York 0 8 * * *"
         assert feed.endpoint_url == "/series/observations"
         assert feed.request_params is None
+        member_log = await session.scalar(
+            select(IngestionRunLogMember).where(IngestionRunLogMember.ingestion_feed_member_id == feed_member.id),
+        )
+        assert member_log is not None
+        assert member_log.rows_inserted == 4
+        assert member_log.diagnostics == {"selector_type": "fred_series_id"}
 
     assert client.metadata_endpoints["GDP"] == ["/series"]
     assert client.observation_endpoints["GDP"] == ["/series/observations"]
@@ -241,7 +249,14 @@ async def test_fred_bootstrap_rerun_skips_unchanged_snapshot_rows(
     async with test_session_factory() as session:
         assert await _count_rows(session, Observation) == 26
         assert await _count_rows(session, IngestionRunLog) == 8
+        assert await _count_rows(session, IngestionRunLogMember) == 8
         assert await _count_rows(session, ComputationRunLog) == 8
+        zero_write_member_logs = (
+            await session.execute(
+                select(IngestionRunLogMember).where(IngestionRunLogMember.rows_inserted == 0),
+            )
+        ).scalars().all()
+        assert len(zero_write_member_logs) == 4
 
 
 @pytest.mark.asyncio
@@ -352,6 +367,7 @@ async def test_fred_bootstrap_reset_removes_curated_preset_rows_only(
     async with test_session_factory() as session:
         assert await _count_rows(session, Observation) == 0
         assert await _count_rows(session, IngestionRunLog) == 0
+        assert await _count_rows(session, IngestionRunLogMember) == 0
         assert await _count_rows(session, ComputationRunLog) == 0
         assert await _count_rows(session, IngestionFeed) == 0
         assert await _count_rows(session, SeriesSource) == 0

@@ -10,6 +10,8 @@ from httpx import AsyncClient
 from macro_foundry.enums import (
     FeedMethod,
     Frequency,
+    IngestionRunStatus,
+    IngestionTriggeredBy,
     Measure,
     OriginType,
     ProviderRole,
@@ -244,3 +246,160 @@ async def test_api_catalog_supports_shared_ingestion_feed_members(
     assert member_list_response.status_code == HTTPStatus.OK
     members = member_list_response.json()
     assert [member["series_source_id"] for member in members] == source_ids
+
+
+@pytest.mark.asyncio
+async def test_api_records_shared_feed_execution_with_member_outcomes(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    geography_response = await client.get(
+        "/api/v1/geographies/",
+        headers=auth_headers,
+        params={"code": "USA"},
+    )
+    assert geography_response.status_code == HTTPStatus.OK
+    geography_id = geography_response.json()[0]["id"]
+
+    catalog_response = await client.get(
+        "/api/v1/provider-catalogs/",
+        headers=auth_headers,
+        params={"name": "FRED default catalog"},
+    )
+    assert catalog_response.status_code == HTTPStatus.OK
+    catalog_id = catalog_response.json()[0]["id"]
+
+    feed_response = await client.post(
+        "/api/v1/ingestion-feeds/",
+        headers=auth_headers,
+        json={
+            "feed_method": FeedMethod.API.value,
+            "endpoint_url": "/shared/execution",
+            "request_params": {"table": "member-outcomes"},
+            "response_mapping": {"data_path": "rows"},
+            "is_active": True,
+        },
+    )
+    assert feed_response.status_code == HTTPStatus.CREATED
+    feed_id = feed_response.json()["id"]
+
+    member_ids = []
+    for order, suffix in enumerate(("SUCCESS", "ZERO_WRITE", "FAILED"), start=1):
+        series_response = await client.post(
+            "/api/v1/series/",
+            headers=auth_headers,
+            json={
+                "code": f"MF_SHARED_RUN_{suffix}",
+                "name": f"Macro Foundry shared run {suffix.lower()}",
+                "origin_type": OriginType.INGESTED.value,
+                "geography_id": geography_id,
+                "frequency": Frequency.MONTHLY.value,
+                "temporal_stock_flow": TemporalStockFlow.INDEX.value,
+                "unit_kind": UnitKind.INDEX.value,
+                "unit_scale": UnitScale.ONE.value,
+                "measure": Measure.LEVEL.value,
+                "annualized": False,
+                "seasonal_adjustment": SeasonalAdjustment.NSA.value,
+                "is_active": True,
+            },
+        )
+        assert series_response.status_code == HTTPStatus.CREATED
+
+        source_response = await client.post(
+            "/api/v1/series-sources/",
+            headers=auth_headers,
+            json={
+                "series_id": series_response.json()["id"],
+                "provider_catalog_id": catalog_id,
+                "external_name": f"Shared run source {suffix.lower()}",
+                "priority": 1,
+                "provider_role": ProviderRole.PRIMARY_SOURCE.value,
+            },
+        )
+        assert source_response.status_code == HTTPStatus.CREATED
+
+        member_response = await client.post(
+            "/api/v1/ingestion-feed-members/",
+            headers=auth_headers,
+            json={
+                "ingestion_feed_id": feed_id,
+                "series_source_id": source_response.json()["id"],
+                "selector_type": "json_path",
+                "selector_config": {"path": f"$.rows[{order - 1}]"},
+                "execution_order": order,
+                "is_active": True,
+            },
+        )
+        assert member_response.status_code == HTTPStatus.CREATED
+        member_ids.append(member_response.json()["id"])
+
+    run_response = await client.post(
+        "/api/v1/ingestion-run-logs/",
+        headers=auth_headers,
+        json={
+            "ingestion_feed_id": feed_id,
+            "started_at": "2026-06-09T01:00:00Z",
+            "finished_at": "2026-06-09T01:00:03Z",
+            "status": IngestionRunStatus.PARTIAL.value,
+            "rows_fetched": 12,
+            "rows_inserted": 4,
+            "rows_skipped": 8,
+            "triggered_by": IngestionTriggeredBy.MANUAL.value,
+            "parameters": {"date_from": "2026-01-01"},
+        },
+    )
+    assert run_response.status_code == HTTPStatus.CREATED
+    run_id = run_response.json()["id"]
+
+    outcomes = [
+        {
+            "ingestion_run_log_id": run_id,
+            "ingestion_feed_member_id": member_ids[0],
+            "status": IngestionRunStatus.SUCCESS.value,
+            "rows_fetched": 6,
+            "rows_inserted": 4,
+            "rows_skipped": 2,
+        },
+        {
+            "ingestion_run_log_id": run_id,
+            "ingestion_feed_member_id": member_ids[1],
+            "status": IngestionRunStatus.SUCCESS.value,
+            "rows_fetched": 4,
+            "rows_inserted": 0,
+            "rows_skipped": 4,
+            "notes": "No changed rows.",
+        },
+        {
+            "ingestion_run_log_id": run_id,
+            "ingestion_feed_member_id": member_ids[2],
+            "status": IngestionRunStatus.FAILED.value,
+            "rows_fetched": 2,
+            "rows_inserted": 0,
+            "rows_skipped": 0,
+            "error_message": "Member selector did not match a value.",
+            "diagnostics": {"selector": "$.rows[2]", "reason": "missing"},
+        },
+    ]
+    for outcome in outcomes:
+        outcome_response = await client.post(
+            "/api/v1/ingestion-run-log-members/",
+            headers=auth_headers,
+            json=outcome,
+        )
+        assert outcome_response.status_code == HTTPStatus.CREATED
+
+    member_log_response = await client.get(
+        "/api/v1/ingestion-run-log-members/",
+        headers=auth_headers,
+        params={"ingestion_run_log_id": run_id},
+    )
+    assert member_log_response.status_code == HTTPStatus.OK
+    member_logs = member_log_response.json()
+    assert [member_log["ingestion_feed_member_id"] for member_log in member_logs] == member_ids
+    assert [member_log["status"] for member_log in member_logs] == [
+        IngestionRunStatus.SUCCESS.value,
+        IngestionRunStatus.SUCCESS.value,
+        IngestionRunStatus.FAILED.value,
+    ]
+    assert member_logs[1]["rows_inserted"] == 0
+    assert member_logs[2]["diagnostics"] == {"selector": "$.rows[2]", "reason": "missing"}

@@ -59,6 +59,42 @@ class IngestionRunLogRead(CreatedAtReadSchema, IngestionRunLogBase):
     """API read model for an ingestion run log."""
 
 
+class IngestionRunLogMemberBase(SchemaModel):
+    """Shared member-level ingestion-run outcome fields."""
+
+    ingestion_run_log_id: UUID
+    ingestion_feed_member_id: UUID
+    status: IngestionRunStatus
+    rows_fetched: int | None = None
+    rows_inserted: int | None = None
+    rows_skipped: int | None = None
+    error_message: str | None = None
+    diagnostics: dict[str, Any] | None = None
+    notes: str | None = None
+
+
+class IngestionRunLogMemberCreate(IngestionRunLogMemberBase):
+    """Payload for creating an ingestion run-log member outcome."""
+
+
+class IngestionRunLogMemberUpdate(SchemaModel):
+    """PATCH payload for an ingestion run-log member outcome."""
+
+    ingestion_run_log_id: UUID | None = None
+    ingestion_feed_member_id: UUID | None = None
+    status: IngestionRunStatus | None = None
+    rows_fetched: int | None = None
+    rows_inserted: int | None = None
+    rows_skipped: int | None = None
+    error_message: str | None = None
+    diagnostics: dict[str, Any] | None = None
+    notes: str | None = None
+
+
+class IngestionRunLogMemberRead(CreatedAtReadSchema, IngestionRunLogMemberBase):
+    """API read model for an ingestion run-log member outcome."""
+
+
 class ComputationRunLogBase(SchemaModel):
     """Shared computation-run-log fields."""
 
@@ -116,6 +152,10 @@ __all__ = [
     "ComputationRunLogUpdate",
     "IngestionRunLogBase",
     "IngestionRunLogCreate",
+    "IngestionRunLogMemberBase",
+    "IngestionRunLogMemberCreate",
+    "IngestionRunLogMemberRead",
+    "IngestionRunLogMemberUpdate",
     "IngestionRunLogRead",
     "IngestionRunLogUpdate",
 ]

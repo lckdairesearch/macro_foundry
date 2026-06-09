@@ -406,10 +406,15 @@ Implemented in Issue 17:
   Pydantic schemas, routes/admin, seed/bootstrap code, and integration tests
   together so V3/V4 schema docs and code do not drift
 
-Remaining planned deliverables:
+Implemented in Issue 16:
 
 - add `ingestion_run_log_members` for member-level provenance and per-member
   outcomes inside one feed execution
+- update the FRED latest-snapshot runtime path so each one-member feed execution
+  records the feed-level run and the attempted member outcome together
+
+Remaining planned deliverables:
+
 - move ingested observation provenance to the member-level run row
 
 Verification should use vertical slices against the real Postgres-backed test

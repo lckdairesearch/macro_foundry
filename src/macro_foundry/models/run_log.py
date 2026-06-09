@@ -6,7 +6,7 @@ import uuid
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Date, DateTime, Integer, String
+from sqlalchemy import Date, DateTime, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -23,7 +23,7 @@ from macro_foundry.models._schema_policy import enum_column, fk_uuid
 
 if TYPE_CHECKING:
     from macro_foundry.models.derived import DerivedSeries
-    from macro_foundry.models.ingestion import IngestionFeed
+    from macro_foundry.models.ingestion import IngestionFeed, IngestionFeedMember
     from macro_foundry.models.observation import Observation
 
 
@@ -69,6 +69,59 @@ class IngestionRunLog(CreatedAtBase):
         back_populates="ingestion_run_log",
         lazy="selectin",
         passive_deletes=True,
+    )
+    member_logs: Mapped[list["IngestionRunLogMember"]] = relationship(
+        "IngestionRunLogMember",
+        back_populates="ingestion_run_log",
+        lazy="selectin",
+        passive_deletes=True,
+    )
+
+
+class IngestionRunLogMember(CreatedAtBase):
+    """Append-only outcome for one attempted member inside a feed execution."""
+
+    __tablename__ = "ingestion_run_log_members"
+    __table_args__ = (
+        UniqueConstraint(
+            "ingestion_run_log_id",
+            "ingestion_feed_member_id",
+            name="uq_ingestion_run_log_members_run_member",
+        ),
+    )
+
+    ingestion_run_log_id: Mapped[uuid.UUID] = fk_uuid(
+        "ingestion_run_logs.id",
+        ondelete="RESTRICT",
+        nullable=False,
+    )
+    ingestion_feed_member_id: Mapped[uuid.UUID] = fk_uuid(
+        "ingestion_feed_members.id",
+        ondelete="RESTRICT",
+        nullable=False,
+    )
+    status: Mapped[IngestionRunStatus] = enum_column(
+        "ingestion_run_log_members",
+        "status",
+        IngestionRunStatus,
+        nullable=False,
+    )
+    rows_fetched: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    rows_inserted: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    rows_skipped: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(), nullable=True)
+    diagnostics: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    notes: Mapped[str | None] = mapped_column(String(), nullable=True)
+
+    ingestion_run_log: Mapped["IngestionRunLog"] = relationship(
+        "IngestionRunLog",
+        back_populates="member_logs",
+        lazy="selectin",
+    )
+    ingestion_feed_member: Mapped["IngestionFeedMember"] = relationship(
+        "IngestionFeedMember",
+        back_populates="run_logs",
+        lazy="selectin",
     )
 
 
@@ -131,4 +184,4 @@ class ComputationRunLog(CreatedAtBase):
     )
 
 
-__all__ = ["ComputationRunLog", "IngestionRunLog"]
+__all__ = ["ComputationRunLog", "IngestionRunLog", "IngestionRunLogMember"]

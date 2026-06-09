@@ -268,10 +268,10 @@ structured `selector_config`), active state, and optional execution order. Each
 `series_source` has exactly one feed member.
 
 `ingestion_run_log` remains feed-level and append-only: one row per execution of
-the upstream request. The planned `ingestion_run_log_member` table records
-member-level provenance for each attempted feed member, including per-member
-status, row counts, and selector/parsing diagnostics. Ingested observations
-should point to the member-level run row that produced them.
+the upstream request. `ingestion_run_log_member` records member-level provenance
+for each attempted feed member, including per-member status, row counts, and
+selector/parsing diagnostics. Ingested observations should eventually point to
+the member-level run row that produced them.
 
 The common provider shape remains one request-level feed with one active member.
 Table-style and tree-style providers use one request-level feed with multiple

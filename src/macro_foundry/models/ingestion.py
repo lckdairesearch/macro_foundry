@@ -15,7 +15,7 @@ from macro_foundry.models._schema_policy import enum_column, fk_uuid
 
 if TYPE_CHECKING:
     from macro_foundry.models.provider import SeriesSource
-    from macro_foundry.models.run_log import IngestionRunLog
+    from macro_foundry.models.run_log import IngestionRunLog, IngestionRunLogMember
 
 
 class IngestionFeed(TimestampedBase):
@@ -82,6 +82,12 @@ class IngestionFeedMember(TimestampedBase):
         "SeriesSource",
         back_populates="ingestion_feed_members",
         lazy="selectin",
+    )
+    run_logs: Mapped[list["IngestionRunLogMember"]] = relationship(
+        "IngestionRunLogMember",
+        back_populates="ingestion_feed_member",
+        lazy="selectin",
+        passive_deletes=True,
     )
 
 

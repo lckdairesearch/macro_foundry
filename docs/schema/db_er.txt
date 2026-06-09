@@ -1,5 +1,5 @@
 // =============================================================
-// macrodb — Schema V4 (canonical series hierarchy)
+// macrodb — Schema V5 (member-level ingestion run logs)
 // Layout: tables ordered root → leaf, all FKs written child > parent
 // This gives eraser.io a consistent signal for top-down auto-layout
 //
@@ -8,7 +8,7 @@
 //   L1:           series, series_families, provider_catalogs
 //   L2:           series_tags, series_family_members, series_hierarchy_edges, series_sources, derived_series
 //   L3:           observations, ingestion_feeds, ingestion_feed_members, derivation_inputs
-//   L4:           ingestion_run_logs, computation_run_logs
+//   L4:           ingestion_run_logs, ingestion_run_log_members, computation_run_logs
 //   Governance:   change_proposals, change_proposal_items
 //
 // Note: this is the canonical source of truth for the schema.
@@ -268,6 +268,20 @@ ingestion_run_logs [icon: clock, color: blue] {
   created_at timestamp
 }
 
+ingestion_run_log_members [icon: clock, color: blue] {
+  id uuid pk
+  ingestion_run_log_id uuid fk    // FK -> ingestion_run_logs.id; unique on ingestion_run_log_id, ingestion_feed_member_id
+  ingestion_feed_member_id uuid fk // FK -> ingestion_feed_members.id
+  status string                   // ENUM: success | failed | partial
+  rows_fetched int                // nullable
+  rows_inserted int               // nullable
+  rows_skipped int                // nullable
+  error_message string            // nullable
+  diagnostics jsonb               // nullable; selector/parsing diagnostics for this member attempt
+  notes string                    // nullable
+  created_at timestamp
+}
+
 computation_run_logs [icon: clock, color: yellow] {
   id uuid pk
   derived_series_id uuid fk       // FK -> derived_series.id
@@ -361,6 +375,8 @@ series_sources.series_id > series.id // ON DELETE CASCADE
 ingestion_feed_members.ingestion_feed_id > ingestion_feeds.id // ON DELETE CASCADE
 ingestion_feed_members.series_source_id - series_sources.id // ON DELETE CASCADE
 ingestion_run_logs.ingestion_feed_id > ingestion_feeds.id // ON DELETE RESTRICT
+ingestion_run_log_members.ingestion_run_log_id > ingestion_run_logs.id // ON DELETE RESTRICT
+ingestion_run_log_members.ingestion_feed_member_id > ingestion_feed_members.id // ON DELETE RESTRICT
 
 // ---- Derivation chain ----
 derived_series.series_id - series.id // ON DELETE CASCADE

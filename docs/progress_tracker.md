@@ -22,8 +22,10 @@ Neon parity pass.
 
 Issue 13 has implemented the canonical series hierarchy portion of ADR 0010.
 Issue 15 has documented the onboarding and governance rules that keep hierarchy
-enrichment and weak provider locators under explicit review. Request-level
-ingestion fan-out remains active planned architecture work after Phase 13.
+enrichment and weak provider locators under explicit review. Issues 17 and 16
+have implemented request-level feed metadata and member-level run outcomes.
+Moving ingested observation provenance to member-level run rows remains active
+planned architecture work after Phase 13.
 
 ## Phase status
 
@@ -45,6 +47,32 @@ ingestion fan-out remains active planned architecture work after Phase 13.
 | 13    | Neon parity verification       | ⏳          |
 
 ## Log
+
+### [2026-06-09] Issue 16 — Member-level ingestion run outcomes implemented
+
+Implemented runtime audit support for member-level outcomes inside request-level
+ingestion executions.
+
+Completion notes:
+
+- added `ingestion_run_log_members` as one outcome row per attempted
+  `ingestion_feed_member` inside one feed-level `ingestion_run_log`
+- enforced one member outcome per `(ingestion_run_log_id, ingestion_feed_member_id)`
+  execution attempt
+- exposed member outcomes through SQLAlchemy, Pydantic, FastAPI CRUD routes,
+  SQLAdmin, Alembic, and the canonical ER source
+- updated the FRED latest-snapshot runtime path so one-member feed executions
+  record both the feed-level run and the member-level outcome, including
+  zero-write rerun attempts
+- kept the observation provenance move scoped as remaining planned work
+
+Verification:
+
+- `uv run pytest tests/test_e2e.py::test_api_records_shared_feed_execution_with_member_outcomes -q`
+  exited 0
+- `uv run pytest tests/test_constraints.py::test_ingestion_run_log_member_allows_only_one_outcome_per_member_attempt -q`
+  exited 0
+- `uv run pytest tests/test_fred_bootstrap.py -q` exited 0 with `4 passed`
 
 ### [2026-06-09] Issue 17 — Static request-level ingestion catalog implemented
 
