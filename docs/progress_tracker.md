@@ -20,10 +20,9 @@ migration chain, seed idempotency, CRUD generator, constraint surface,
 hand-written routes, admin auth, and one end-to-end API smoke before the final
 Neon parity pass.
 
-Issue 12 has ratified request-level ingestion and canonical series hierarchy as
-active planned architecture work after Phase 13. This does not implement the new
-schema yet; it records the ADR and updates the docs so the reopened hierarchy
-work and ingestion redesign are no longer treated as deferred.
+Issue 13 has implemented the canonical series hierarchy portion of ADR 0010.
+Request-level ingestion fan-out remains active planned architecture work after
+Phase 13.
 
 ## Phase status
 
@@ -45,6 +44,28 @@ work and ingestion redesign are no longer treated as deferred.
 | 13    | Neon parity verification       | ⏳          |
 
 ## Log
+
+### [2026-06-09] Issue 13 — Canonical series hierarchy edges implemented
+
+Implemented same-concept canonical `series` hierarchy rows as real parent-child
+edges between published `series` records.
+
+Completion notes:
+
+- added `series_hierarchy_edges` with `RESTRICT` FKs to real parent and child
+  `series` rows, a parent-not-child CHECK, and a unique parent/child edge
+- exposed hierarchy edges through SQLAlchemy, Pydantic, FastAPI, and SQLAdmin
+- enforced same-concept hierarchy creation in the API by resolving each series
+  through its `series_family_members` / `series_families` concept
+- preserved parent observations as independent published values; hierarchy
+  edges do not imply replacement by child aggregation
+- updated the canonical ER source to V4 and recorded the new FK policy in ADR
+  0008
+
+Verification:
+
+- `uv run pytest tests/test_series_hierarchy_routes.py -q` exited 0 with
+  `4 passed`
 
 ### [2026-06-09] Issue 12 — Request-level ingestion architecture ratified
 

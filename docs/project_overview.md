@@ -35,7 +35,8 @@ This phase builds the **database layer and backend skeleton**. Specifically:
 - Postgres 18.4 in Docker locally (`macrodb_dev` + `macrodb_test`), deploy-ready
   for Neon production as `macrodb_prod` (PG 18 default).
 - Two roles: `macrodb_owner` for migrations, `macrodb_app` for everything else.
-- All 19 V3 tables as async SQLAlchemy models.
+- All current schema tables as async SQLAlchemy models, including canonical
+  `series_hierarchy_edges`.
 - Alembic migrations including the `latest_observations` view.
 - Pydantic schemas (Base / Create / Update / Read pattern) for every table.
 - FastAPI routes: a thin in-repo CRUD generator for ~80% of tables,
@@ -72,9 +73,9 @@ code changes, no restructuring, no skipped tests.
   that proposes into them is later.
 - **Frontend.** No Next.js, no Tremor, no UI work. SQLAdmin is the only UI surface
   for now.
-- **Request-level ingestion and canonical series hierarchy implementation.**
-  ADR 0010 ratifies this as active planned schema work, but this backend-skeleton
-  phase does not implement the new tables or runtime behavior.
+- **Request-level ingestion fan-out implementation.** ADR 0010 ratifies this as
+  active planned schema work, but this backend-skeleton phase does not implement
+  the feed-member and run-member tables or runtime behavior.
 - **Materialized views, performance tuning, advanced indexing.** Add indexes only
   when a query justifies them, not pre-emptively.
 - **Multi-tenant features, billing, public API gateway.** Not relevant yet.

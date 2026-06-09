@@ -193,6 +193,38 @@ class SeriesFamilyMemberRead(ReadSchema, SeriesFamilyMemberBase):
     updated_at: datetime
 
 
+class SeriesHierarchyEdgeBase(SchemaModel):
+    """Shared fields for canonical series hierarchy edges."""
+
+    parent_series_id: UUID
+    child_series_id: UUID
+    sort_order: int | None = None
+    notes: str | None = None
+
+
+class SeriesHierarchyEdgeCreate(SeriesHierarchyEdgeBase):
+    """Payload for creating a canonical series hierarchy edge."""
+
+    @model_validator(mode="after")
+    def validate_no_self_edge(self) -> Self:
+        if self.parent_series_id == self.child_series_id:
+            raise ValueError("parent_series_id and child_series_id must differ")
+        return self
+
+
+class SeriesHierarchyEdgeUpdate(SchemaModel):
+    """PATCH payload for a canonical series hierarchy edge."""
+
+    parent_series_id: UUID | None = None
+    child_series_id: UUID | None = None
+    sort_order: int | None = None
+    notes: str | None = None
+
+
+class SeriesHierarchyEdgeRead(TimestampedReadSchema, SeriesHierarchyEdgeBase):
+    """API read model for a canonical series hierarchy edge."""
+
+
 class SeriesFamilyReadDetail(SeriesFamilyRead):
     """Read model including same-domain family members."""
 
@@ -211,6 +243,10 @@ __all__ = [
     "SeriesFamilyRead",
     "SeriesFamilyReadDetail",
     "SeriesFamilyUpdate",
+    "SeriesHierarchyEdgeBase",
+    "SeriesHierarchyEdgeCreate",
+    "SeriesHierarchyEdgeRead",
+    "SeriesHierarchyEdgeUpdate",
     "SeriesRead",
     "SeriesReadDetail",
     "SeriesUpdate",

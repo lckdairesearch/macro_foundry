@@ -31,6 +31,7 @@ TRUNCATE TABLE
     ingestion_feeds,
     series_sources,
     series_tags,
+    series_hierarchy_edges,
     series_family_members,
     series_families,
     series,

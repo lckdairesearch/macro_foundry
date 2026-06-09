@@ -192,6 +192,59 @@ class Series(TimestampedBase):
         lazy="selectin",
         passive_deletes=True,
     )
+    child_hierarchy_edges: Mapped[list["SeriesHierarchyEdge"]] = relationship(
+        "SeriesHierarchyEdge",
+        back_populates="parent_series",
+        foreign_keys="SeriesHierarchyEdge.parent_series_id",
+        lazy="selectin",
+        passive_deletes=True,
+    )
+    parent_hierarchy_edges: Mapped[list["SeriesHierarchyEdge"]] = relationship(
+        "SeriesHierarchyEdge",
+        back_populates="child_series",
+        foreign_keys="SeriesHierarchyEdge.child_series_id",
+        lazy="selectin",
+        passive_deletes=True,
+    )
+
+
+class SeriesHierarchyEdge(TimestampedBase):
+    """Canonical parent-child edge between real series rows."""
+
+    __tablename__ = "series_hierarchy_edges"
+    __table_args__ = (
+        UniqueConstraint("parent_series_id", "child_series_id", name="uq_series_hierarchy_edges_parent_child"),
+        CheckConstraint(
+            "parent_series_id != child_series_id",
+            name="ck_series_hierarchy_edges_no_self_edge",
+        ),
+    )
+
+    parent_series_id: Mapped[uuid.UUID] = fk_uuid(
+        "series.id",
+        ondelete="RESTRICT",
+        nullable=False,
+    )
+    child_series_id: Mapped[uuid.UUID] = fk_uuid(
+        "series.id",
+        ondelete="RESTRICT",
+        nullable=False,
+    )
+    sort_order: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    notes: Mapped[str | None] = mapped_column(String(), nullable=True)
+
+    parent_series: Mapped["Series"] = relationship(
+        "Series",
+        back_populates="child_hierarchy_edges",
+        foreign_keys=[parent_series_id],
+        lazy="selectin",
+    )
+    child_series: Mapped["Series"] = relationship(
+        "Series",
+        back_populates="parent_hierarchy_edges",
+        foreign_keys=[child_series_id],
+        lazy="selectin",
+    )
 
 
 class SeriesFamily(TimestampedBase):
@@ -274,4 +327,4 @@ class SeriesFamilyMember(Base):
     )
 
 
-__all__ = ["Series", "SeriesFamily", "SeriesFamilyMember"]
+__all__ = ["Series", "SeriesFamily", "SeriesFamilyMember", "SeriesHierarchyEdge"]

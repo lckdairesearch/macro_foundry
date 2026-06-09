@@ -16,6 +16,7 @@ from macro_foundry.backend.api.providers import router as providers_router
 from macro_foundry.backend.api.series import router as series_router
 from macro_foundry.backend.api.series_families import router as series_families_router
 from macro_foundry.backend.api.series_family_members import router as series_family_members_router
+from macro_foundry.backend.api.series_hierarchy_edges import router as series_hierarchy_edges_router
 from macro_foundry.backend.api.series_sources import router as series_sources_router
 from macro_foundry.backend.api.series_tags import router as series_tags_router
 from macro_foundry.backend.api.tags import router as tags_router
@@ -37,6 +38,7 @@ API_ROUTERS = (
     series_router,
     series_families_router,
     series_family_members_router,
+    series_hierarchy_edges_router,
     series_sources_router,
     series_tags_router,
     tags_router,

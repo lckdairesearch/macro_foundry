@@ -1,7 +1,7 @@
 """SQLAdmin views for series-domain models."""
 
 from macro_foundry.backend.admin._base import BaseModelView, relation_formatter
-from macro_foundry.models import Series, SeriesFamily, SeriesFamilyMember
+from macro_foundry.models import Series, SeriesFamily, SeriesFamilyMember, SeriesHierarchyEdge
 
 
 class SeriesAdmin(BaseModelView, model=Series):
@@ -110,4 +110,30 @@ class SeriesFamilyMemberAdmin(BaseModelView, model=SeriesFamilyMember):
     ]
 
 
-__all__ = ["SeriesAdmin", "SeriesFamilyAdmin", "SeriesFamilyMemberAdmin"]
+class SeriesHierarchyEdgeAdmin(BaseModelView, model=SeriesHierarchyEdge):
+    name = "Series hierarchy edge"
+    name_plural = "Series hierarchy edges"
+    category = "Series Catalog"
+    category_icon = "ti ti-chart-line"
+    column_list = [
+        SeriesHierarchyEdge.parent_series,
+        SeriesHierarchyEdge.child_series,
+        SeriesHierarchyEdge.sort_order,
+        SeriesHierarchyEdge.updated_at,
+    ]
+    column_searchable_list = ["parent_series.code", "parent_series.name", "child_series.code", "child_series.name"]
+    column_sortable_list = [SeriesHierarchyEdge.sort_order, SeriesHierarchyEdge.updated_at]
+    column_default_sort = [(SeriesHierarchyEdge.parent_series_id, False), (SeriesHierarchyEdge.sort_order, False)]
+    column_formatters = {
+        SeriesHierarchyEdge.parent_series: relation_formatter("parent_series"),
+        SeriesHierarchyEdge.child_series: relation_formatter("child_series"),
+    }
+    form_columns = [
+        SeriesHierarchyEdge.parent_series,
+        SeriesHierarchyEdge.child_series,
+        SeriesHierarchyEdge.sort_order,
+        SeriesHierarchyEdge.notes,
+    ]
+
+
+__all__ = ["SeriesAdmin", "SeriesFamilyAdmin", "SeriesFamilyMemberAdmin", "SeriesHierarchyEdgeAdmin"]

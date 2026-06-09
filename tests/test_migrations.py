@@ -28,6 +28,7 @@ EXPECTED_TABLES = {
     "series",
     "series_families",
     "series_family_members",
+    "series_hierarchy_edges",
     "series_sources",
     "series_tags",
     "tags",

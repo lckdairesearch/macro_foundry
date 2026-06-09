@@ -1,12 +1,12 @@
 // =============================================================
-// macrodb — Schema V3 (FINAL)
+// macrodb — Schema V4 (canonical series hierarchy)
 // Layout: tables ordered root → leaf, all FKs written child > parent
 // This gives eraser.io a consistent signal for top-down auto-layout
 //
 // Dependency levels:
 //   L0 (roots):   geographies, concepts, tags, providers
 //   L1:           series, series_families, provider_catalogs
-//   L2:           series_tags, series_family_members, series_sources, derived_series
+//   L2:           series_tags, series_family_members, series_hierarchy_edges, series_sources, derived_series
 //   L3:           observations, ingestion_feeds, derivation_inputs
 //   L4:           ingestion_run_logs, computation_run_logs
 //   Governance:   change_proposals, change_proposal_items
@@ -148,6 +148,16 @@ series_family_members [icon: list, color: purple] {
   series_id uuid pk fk           // FK -> series.id
   variant string                  // nullable; human-readable variant e.g. "Core ex fresh food", "Two-or-more-person households"
   is_primary boolean
+  created_at timestamp
+  updated_at timestamp
+}
+
+series_hierarchy_edges [icon: git-branch, color: purple] {
+  id uuid pk
+  parent_series_id uuid fk        // FK -> series.id; parent_series_id != child_series_id
+  child_series_id uuid fk         // FK -> series.id; unique on parent_series_id, child_series_id
+  sort_order int                  // nullable; stable sibling ordering when curated
+  notes string                    // nullable
   created_at timestamp
   updated_at timestamp
 }
@@ -329,6 +339,8 @@ series_families.concept_id > concepts.id // ON DELETE RESTRICT
 series_families.geography_id > geographies.id // ON DELETE RESTRICT
 series_family_members.family_id > series_families.id // ON DELETE CASCADE
 series_family_members.series_id - series.id // ON DELETE CASCADE
+series_hierarchy_edges.parent_series_id > series.id // ON DELETE RESTRICT
+series_hierarchy_edges.child_series_id > series.id // ON DELETE RESTRICT
 
 // ---- Provider / ingestion chain ----
 provider_catalogs.provider_id > providers.id // ON DELETE RESTRICT

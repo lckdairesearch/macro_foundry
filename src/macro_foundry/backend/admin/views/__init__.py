@@ -8,7 +8,12 @@ from macro_foundry.backend.admin.views.ingestion import IngestionFeedAdmin
 from macro_foundry.backend.admin.views.observation import ObservationAdmin
 from macro_foundry.backend.admin.views.provider import ProviderAdmin, ProviderCatalogAdmin, SeriesSourceAdmin
 from macro_foundry.backend.admin.views.run_log import ComputationRunLogAdmin, IngestionRunLogAdmin
-from macro_foundry.backend.admin.views.series import SeriesAdmin, SeriesFamilyAdmin, SeriesFamilyMemberAdmin
+from macro_foundry.backend.admin.views.series import (
+    SeriesAdmin,
+    SeriesFamilyAdmin,
+    SeriesFamilyMemberAdmin,
+    SeriesHierarchyEdgeAdmin,
+)
 from macro_foundry.backend.admin.views.tag import SeriesTagAdmin, TagAdmin
 
 ADMIN_VIEWS = (
@@ -23,6 +28,7 @@ ADMIN_VIEWS = (
     SeriesAdmin,
     SeriesFamilyAdmin,
     SeriesFamilyMemberAdmin,
+    SeriesHierarchyEdgeAdmin,
     SeriesTagAdmin,
     DerivedSeriesAdmin,
     DerivationInputAdmin,

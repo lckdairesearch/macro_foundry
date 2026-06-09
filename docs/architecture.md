@@ -56,7 +56,7 @@ Each was considered explicitly and rejected. ADRs cover the reasoning.
                             │
 ┌─────────────────────────────────────────────────────────┐
 │  SQLAlchemy async models                (data model)    │
-│  - V3 schema, 19 tables                                  │
+│  - current macrodb schema, 20 tables                     │
 │  - mixin pattern for id/timestamps, with                 │
 │    schema-native composite-PK junction exceptions        │
 │  - CHECK constraints via Enum(native_enum=False)         │
@@ -115,7 +115,7 @@ macro_foundry/
 │   │   ├── run.py
 │   │   ├── governance.py
 │   │
-│   ├── models/                     # SQLAlchemy ORM — V3 tables
+│   ├── models/                     # SQLAlchemy ORM — macrodb tables
 │   │   ├── __init__.py             # exports all models so Alembic sees metadata
 │   │   ├── geography.py
 │   │   ├── concept.py
@@ -194,7 +194,7 @@ macro_foundry/
     ├── adr/
     │   └── 00XX-*.md
     └── schema/
-        ├── db_er.txt               # V3 eraser.io source (canonical)
+        ├── db_er.txt               # eraser.io source (canonical)
         └── db_er_diagram.svg       # rendered diagram
 ```
 
@@ -280,11 +280,11 @@ the data model.
 
 ## Canonical series hierarchy
 
-ADR 0010 also reopens canonical `series` hierarchy work as active planned schema
-work. Hierarchy edges are part of the canonical series layer, not provider-side
-ingestion metadata.
+ADR 0010 also reopened canonical `series` hierarchy work. It is implemented via
+`series_hierarchy_edges`, whose edges are part of the canonical series layer,
+not provider-side ingestion metadata.
 
-The hierarchy must support ragged depth, additive enrichment, and stored parent
+The hierarchy supports ragged depth, additive enrichment, and stored parent
 observations. Macrodb keeps parent observations as published values even when
 children exist and even when an aggregation rule is known.
 

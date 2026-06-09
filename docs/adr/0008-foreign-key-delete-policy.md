@@ -49,6 +49,8 @@ Canonical `ON DELETE` map:
 - `series_tags.tag_id` → `CASCADE`
 - `series_family_members.family_id` → `CASCADE`
 - `series_family_members.series_id` → `CASCADE`
+- `series_hierarchy_edges.parent_series_id` → `RESTRICT`
+- `series_hierarchy_edges.child_series_id` → `RESTRICT`
 - `series_sources.provider_catalog_id` → `RESTRICT`
 - `series_sources.series_id` → `CASCADE`
 - `ingestion_feeds.series_source_id` → `CASCADE`
