@@ -10,6 +10,7 @@ import uvicorn
 from macro_foundry.bootstrap import (
     DatabaseTarget,
     reset_fred_us_macro_bootstrap,
+    run_debug_smoke_bootstrap,
     run_fred_us_macro_bootstrap,
 )
 from macro_foundry.db import AsyncSessionLocal, database_url_for_target
@@ -48,7 +49,12 @@ async def _bootstrap_database(
     *,
     database: DatabaseTarget,
     reset: bool,
+    preset: str,
 ) -> object:
+    if preset == "debug-smoke":
+        if reset:
+            raise ValueError("debug-smoke does not support --reset")
+        return await run_debug_smoke_bootstrap(database=database)
     if reset:
         return await reset_fred_us_macro_bootstrap(database=database)
     return await run_fred_us_macro_bootstrap(database=database)
@@ -166,6 +172,7 @@ def bootstrap_fred_us_macro(
             _bootstrap_database(
                 database=database,
                 reset=reset,
+                preset="fred-us-macro",
             ),
         )
     except ValueError as exc:
@@ -201,4 +208,34 @@ def bootstrap_fred_us_macro(
         )
 
 
-__all__ = ["app", "bootstrap_fred_us_macro", "seed", "serve"]
+@bootstrap_app.command("debug-smoke")
+def bootstrap_debug_smoke(
+    database: DatabaseTarget = typer.Option(
+        default=DatabaseTarget.APP,
+        case_sensitive=False,
+        help="Target the app or test database.",
+    ),
+) -> None:
+    """Bootstrap a minimal request-centric ingestion and hierarchy debug set."""
+
+    try:
+        summary = asyncio.run(
+            _bootstrap_database(
+                database=database,
+                reset=False,
+                preset="debug-smoke",
+            ),
+        )
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from exc
+
+    typer.echo(f"database={summary.database.value} run_date={summary.run_date.isoformat()} preset=debug-smoke")
+    typer.echo(
+        "request_feed_members="
+        f"{summary.feed_members} member_logs={summary.member_logs} "
+        f"observations={summary.observations} hierarchy_edges={summary.hierarchy_edges}",
+    )
+
+
+__all__ = ["app", "bootstrap_debug_smoke", "bootstrap_fred_us_macro", "seed", "serve"]

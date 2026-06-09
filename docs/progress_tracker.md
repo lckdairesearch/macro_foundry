@@ -24,7 +24,8 @@ Issue 13 has implemented the canonical series hierarchy portion of ADR 0010.
 Issue 15 has documented the onboarding and governance rules that keep hierarchy
 enrichment and weak provider locators under explicit review. Issues 17, 16, and
 18 have implemented request-level feed metadata, member-level run outcomes, and
-member-level observation provenance.
+member-level observation provenance. Issue 14 adds a minimal debug smoke path to
+initialize and inspect that redesigned stack.
 
 ## Phase status
 
@@ -46,6 +47,27 @@ member-level observation provenance.
 | 13    | Neon parity verification       | ⏳          |
 
 ## Log
+
+### [2026-06-09] Issue 14 — Request-centric debug bootstrap smoke implemented
+
+Rebuilt the developer bootstrap smoke around the request-level ingestion model
+and canonical hierarchy model.
+
+Completion notes:
+
+- added `macrodb bootstrap debug-smoke --database {app|test}` as a minimal local
+  initialization path for inspecting the redesigned ingestion stack
+- the debug smoke creates one shared request-level `ingestion_feed`, two active
+  `ingestion_feed_members`, one feed-level run, two member-level run outcomes,
+  and two observations pointing to the exact member outcomes
+- added a simple canonical hierarchy edge from `DEBUG_TOTAL_INDEX` to
+  `DEBUG_COMPONENT_A_INDEX` so hierarchy inspection is part of the smoke path
+- kept the FRED preset available as a curated import path, but no longer relies
+  on it as the minimal request-centric developer smoke
+
+Verification:
+
+- `uv run pytest tests/test_debug_bootstrap.py -q` exited 0 with `2 passed`
 
 ### [2026-06-09] Issue 18 — Observation provenance moved to member-level outcomes
 
