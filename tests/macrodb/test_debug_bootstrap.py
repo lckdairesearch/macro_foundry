@@ -128,7 +128,10 @@ def test_debug_bootstrap_cli_reports_request_centric_smoke_summary(
             hierarchy_edges=1,
         )
 
-    monkeypatch.setattr("macro_foundry.cli._bootstrap_database", fake_bootstrap_database)
+    monkeypatch.setattr(
+        "macro_foundry.cli._helpers._bootstrap_database",
+        fake_bootstrap_database,
+    )
 
     result = runner.invoke(app, ["bootstrap", "debug-smoke", "--database", "test"])
 
