@@ -86,6 +86,20 @@ A series has `origin_type` of `ingested`, `derived`, or `both`:
 - **Both** — rare; covers cases where ingestion is the primary source but
   derivations fill backfill periods or vice versa.
 
+### Published series / publication boundary
+
+A canonical series crosses the publication boundary once it is no longer just a
+draft catalog idea and has become part of the operational database surface.
+
+In practice, a series should be treated as published once it has meaningful
+downstream linkage such as a provider/source mapping, ingestion configuration,
+stored observations, or derived-series lineage.
+
+Before the publication boundary, identity corrections are relatively cheap.
+After the publication boundary, changes to canonical identity are dangerous
+because other database records and future reasoning may already depend on that
+series as defined.
+
 ### Variant
 
 A field on `series_family_members.variant`. Human-readable description of how
@@ -95,6 +109,12 @@ food", "Two-or-more-person households", "Headline NSA".
 This is intentionally free text. The structural distinctions (measure, unit,
 seasonal_adjustment, etc.) are encoded on the series itself; `variant` is the
 human label for the combination.
+
+`variant` is robust enough for human-facing cataloging and rare methodological
+edge cases inside a family. It is not a normalized taxonomy column. If a
+distinction becomes common enough that the system needs consistent cross-series
+machine filtering on it, that should become a separate structured field or
+model rather than more convention piled into free text.
 
 ## Vintage and observation layer
 
@@ -122,6 +142,20 @@ may be revised when published again in March 2024. Both versions are stored as
 separate observation rows with different `vintage_date` values. The
 `latest_observations` view returns the most-recent vintage per
 `(series_id, period_start)`.
+
+### Snapshot vintage
+
+A `vintage_date` assigned by macrodb on the day a latest-snapshot import was
+observed, rather than a true provider-supplied release vintage.
+
+This is the fallback model for providers or first-pass importers that do not
+expose a usable historical vintage surface. In that mode, macrodb records
+"what we observed on this run date" and accumulates a new observation row only
+when a period is new or its value changed versus the latest stored snapshot.
+
+A snapshot vintage is not the same thing as an archival provider vintage such
+as an ALFRED real-time release date. When a provider exposes true vintage
+history, that provider-native vintage should be preferred.
 
 ### Latest observations
 

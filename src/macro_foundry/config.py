@@ -69,6 +69,10 @@ class Settings(BaseSettings):
         default=SecretStr("change_me"),
         validation_alias="MACRODB_API_BEARER_TOKEN",
     )
+    fred_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias="FRED_API_KEY",
+    )
     log_level: LogLevel = Field(
         default="INFO",
         validation_alias="MACRODB_LOG_LEVEL",

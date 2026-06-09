@@ -41,6 +41,82 @@ Neon parity pass.
 
 ## Log
 
+### [2026-06-09] Series-code governance clarified for compound variants
+
+Refined the catalog-governance guidance so edge-case sibling variants can be
+distinguished without inventing new concepts or new families.
+
+Completion notes:
+
+- updated `docs/series_catalog_governance.md` to explicitly allow compound
+  variant tokens inside the canonical code, using separated tokens such as
+  `CORE_1P_HH` rather than compressed blobs
+- documented the machine-parsing rule: parse the fixed suffix from the right,
+  parse geography from the left, and resolve the longest known `concept.code`
+  before treating the remainder as the variant slot
+- clarified in `CONTEXT.md` that `series_family_members.variant` is intended as
+  a human-readable family label and is sufficient for rare edge cases, but is
+  not a normalized taxonomy surface for broad cross-series querying
+
+### [2026-06-09] FRED bootstrap implementation — Complete
+
+Implemented the first-pass curated FRED U.S. macro bootstrap as a separate
+CLI flow targeting either the app or test database.
+
+Completion notes:
+
+- added `macrodb bootstrap fred-us-macro --database {app|test}` through a new
+  bootstrap package and Typer subcommand rather than folding the work into
+  `macrodb seed`
+- added a committed FRED adapter and latest-snapshot import runner under
+  `src/macro_foundry/ingestion/` that fetch FRED metadata + observations,
+  derives provider-specific period bounds, applies overlap-window incremental
+  reads, and writes ingestion run logs plus snapshot-vintage observations
+- added curated preset orchestration that upserts the agreed concepts,
+  families, raw series, derived YoY series, provider mappings, ingestion feeds,
+  derivation inputs, and computation run logs
+- added focused integration coverage in `tests/test_fred_bootstrap.py` for the
+  first run, unchanged reruns, and reruns with changed/new data against the
+  real `macrodb_test` harness using a fake FRED client
+- updated runtime config/dependencies so the bootstrap can read `FRED_API_KEY`
+  through `macro_foundry.config.settings` and use `httpx` as a declared runtime
+  dependency
+
+Verification:
+
+- `uv run ruff check src/macro_foundry/bootstrap src/macro_foundry/ingestion tests/test_fred_bootstrap.py src/macro_foundry/cli.py src/macro_foundry/config.py`
+  exited 0
+- `uv run pytest tests/test_fred_bootstrap.py -q` exited 0 with `3 passed`
+- `uv run python -c "from macro_foundry.cli import app; print(sorted({group.name for group in app.registered_groups}))"`
+  printed `['bootstrap']`
+
+### [2026-06-09] FRED bootstrap design documented
+
+Documented the agreed first-pass stress-test design for a curated FRED preset
+that will populate catalog rows, latest-snapshot observations, and derived YoY
+series before any broader ingestion framework work begins.
+
+Completion notes:
+
+- added `docs/series_catalog_governance.md` to govern canonical `series.code`
+  construction, concept-vs-family-vs-variant boundaries, and provider-code
+  separation for future workers and agents
+- added `docs/fred_bootstrap_plan.md` to capture the exact first-pass preset
+  scope, runtime behavior, schedule metadata convention, latest-snapshot
+  vintage policy, and implementation seams for the next agent session
+- added a `snapshot vintage` glossary term to `CONTEXT.md` so latest-snapshot
+  imports are distinguished from provider-native archival vintages
+
+Deviation note:
+
+- this is design and documentation work only; no ingestion or bootstrap code
+  has been implemented yet
+
+Verification:
+
+- documentation now exists in committed repo files and is ready to be used as
+  the handoff basis for the next implementation session
+
 ### [2026-06-08] Phase 12 — Complete
 
 Phase 12 is now closed. The test harness and suite were expanded to match the

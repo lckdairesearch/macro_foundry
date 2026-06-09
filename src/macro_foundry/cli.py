@@ -7,11 +7,14 @@ import asyncio
 import typer
 import uvicorn
 
+from macro_foundry.bootstrap import BootstrapDatabaseTarget, run_fred_us_macro_bootstrap
 from macro_foundry.db import AsyncSessionLocal
 from macro_foundry.seed import parse_seed_targets, reset_seed_tables, run_seed
 
 
 app = typer.Typer(help="macrodb command-line interface.")
+bootstrap_app = typer.Typer(help="Curated bootstrap/import commands.")
+app.add_typer(bootstrap_app, name="bootstrap")
 
 
 async def _seed_database(
@@ -107,4 +110,31 @@ def serve(
     )
 
 
-__all__ = ["app", "seed", "serve"]
+@bootstrap_app.command("fred-us-macro")
+def bootstrap_fred_us_macro(
+    database: BootstrapDatabaseTarget = typer.Option(
+        default=BootstrapDatabaseTarget.APP,
+        case_sensitive=False,
+        help="Target the app or test database.",
+    ),
+) -> None:
+    """Bootstrap the curated first-pass FRED U.S. macro preset."""
+
+    try:
+        summary = asyncio.run(run_fred_us_macro_bootstrap(database=database))
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from exc
+
+    typer.echo(f"database={summary.database.value} run_date={summary.run_date.isoformat()}")
+    for result in summary.raw_imports:
+        typer.echo(
+            f"raw {result.series_code}: fetched={result.rows_fetched} written={result.rows_written} skipped={result.rows_skipped}",
+        )
+    for result in summary.derived_imports:
+        typer.echo(
+            f"derived {result.series_code}: computed={result.rows_computed} written={result.rows_written} skipped={result.rows_skipped}",
+        )
+
+
+__all__ = ["app", "bootstrap_fred_us_macro", "seed", "serve"]
