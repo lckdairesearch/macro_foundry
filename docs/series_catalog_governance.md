@@ -183,6 +183,35 @@ This means:
 - the FRED ticker never becomes the canonical code just because it is the first
   provider wired up
 
+## Hierarchy governance
+
+Canonical hierarchy edges live in `series_hierarchy_edges` and connect real
+`series` rows. They represent additive hierarchy enrichment: a published parent
+series can later gain child series without implying the parent identity was
+wrong or that parent observations should be recomputed from children.
+
+Default rule: same-concept edges. Parent and child should belong to families
+under the same concept unless human review explicitly approves a cross-concept
+hierarchy proposal.
+
+Do not create hidden placeholder canonical series solely to mirror provider
+indentation. If a provider exposes a useful grouping that is not itself a real
+published macro series, keep that structure in research notes or a later
+provider-facing metadata surface; do not mint a canonical `series` row for it.
+
+## Weak provider locator governance
+
+Provider locators are reviewable source metadata, not canonical identity. The
+schema may allow nullable locator fields for incomplete historical or manual
+catalog work, but missing or weak locators should still be surfaced before
+onboarding is approved.
+
+Flag weak provider locator metadata when `series_sources.external_code` is
+missing, reused across multiple leaf series, only identifies a broad dataset or
+table, or depends on an ambiguous provider label. Also flag missing `ref_url` or
+a `ref_url` that points only to a broad portal rather than the inspectable
+source page used to verify the mapping.
+
 ## Naming examples for the first FRED preset
 
 The first curated FRED bootstrap preset uses:

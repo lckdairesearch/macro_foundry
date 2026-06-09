@@ -157,6 +157,12 @@ Incremental scheduled runs after bootstrap:
 - if the period exists and the value is identical, write nothing
 - do not delete prior observations on incremental runs
 
+Routine FRED refreshes must not mutate hierarchy structure. They may read
+existing `series_hierarchy_edges` for reporting in later work, but they must not
+create, delete, or rewrite hierarchy edges. If FRED research reveals a likely
+new child relationship, structural changes belong in onboarding or approved
+repair workflows.
+
 This yields macrodb-observed snapshot vintages from the day tracking started.
 It is explicitly different from true ALFRED release-vintage history.
 

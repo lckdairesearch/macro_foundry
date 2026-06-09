@@ -21,8 +21,9 @@ hand-written routes, admin auth, and one end-to-end API smoke before the final
 Neon parity pass.
 
 Issue 13 has implemented the canonical series hierarchy portion of ADR 0010.
-Request-level ingestion fan-out remains active planned architecture work after
-Phase 13.
+Issue 15 has documented the onboarding and governance rules that keep hierarchy
+enrichment and weak provider locators under explicit review. Request-level
+ingestion fan-out remains active planned architecture work after Phase 13.
 
 ## Phase status
 
@@ -44,6 +45,28 @@ Phase 13.
 | 13    | Neon parity verification       | ⏳          |
 
 ## Log
+
+### [2026-06-09] Issue 15 — Hierarchy enrichment governance documented
+
+Updated onboarding and catalog governance so likely child-series additions,
+weak provider locators, and routine refresh boundaries are handled deliberately.
+
+Completion notes:
+
+- documented additive hierarchy enrichment review in onboarding, including the
+  same-concept default and the approval path for cross-concept proposals
+- clarified that hierarchy edges connect real canonical series, do not create
+  hidden placeholders, and require human review when they change structure
+- flagged weak provider locators as review concerns even when nullable schema
+  fields allow incomplete `series_sources` metadata
+- clarified that routine FRED and post-bootstrap refreshes must not mutate
+  `series_hierarchy_edges`; structural changes go through explicit onboarding
+  or approved repair flows
+
+Verification:
+
+- docs-level regression coverage added for the Issue 15 governance acceptance
+  criteria
 
 ### [2026-06-09] Issue 13 — Canonical series hierarchy edges implemented
 

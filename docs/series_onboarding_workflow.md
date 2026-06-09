@@ -115,6 +115,36 @@ Typical triggers:
 - the wrong canonical variant was created
 - source/feed mappings need reassignment because canonical identity was wrong
 
+## Hierarchy enrichment review
+
+Onboarding should surface likely child-series additions as additive hierarchy
+enrichment. If source research finds a provider table, tree node, or release
+detail that appears to sit below an existing canonical parent series, the
+researcher should include the proposed hierarchy edge in the onboarding package
+instead of letting ingestion create structure as a side effect.
+
+The same-concept default is that proposed `series_hierarchy_edges` stay within
+one concept unless the reviewer and human gate explicitly approve a
+cross-concept hierarchy proposal. A cross-concept hierarchy proposal is a
+governance flag, not routine ingestion work.
+
+Human review expectations:
+
+- confirm the parent and child are real canonical `series` rows
+- confirm no hidden placeholder canonical series is being created only to mimic
+  provider indentation
+- confirm the parent observations remain independent published values
+- approve any new hierarchy edge through onboarding or repair before it is
+  written
+
+Weak provider locator review:
+
+Missing or weak provider-facing locators are review concerns even when the
+schema allows nulls. Flag a weak provider locator when a source has missing
+`external_code`, a reused dataset or table code instead of a leaf identifier, an
+ambiguous provider label, missing `ref_url`, or a URL that points only to a
+broad portal instead of an inspectable source page.
+
 ## Ambiguity rule
 
 If ambiguity affects canonical identity, the workflow stays in proposal space.
@@ -188,6 +218,10 @@ bootstrap plan:
 - subsequent runs fetch an overlap window plus newer periods
 - unchanged periods do not create new observation rows
 - changed periods create new snapshot-vintage observations
+
+Routine refreshes must not create, delete, or rewrite `series_hierarchy_edges`.
+Structural hierarchy changes belong in an explicit onboarding or approved
+repair flow, not in scheduled or manual refresh execution.
 
 ## Deferred deployment workflow
 
