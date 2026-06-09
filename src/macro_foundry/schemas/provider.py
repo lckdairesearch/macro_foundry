@@ -83,8 +83,9 @@ class SeriesSourceBase(SchemaModel):
 
     series_id: UUID
     provider_catalog_id: UUID
-    external_code: str
+    external_code: str | None = None
     external_name: str | None = None
+    ref_url: str | None = None
     priority: int
     provider_role: ProviderRole
     value_transform: dict[str, Any] | None = None
@@ -103,6 +104,7 @@ class SeriesSourceUpdate(SchemaModel):
     provider_catalog_id: UUID | None = None
     external_code: str | None = None
     external_name: str | None = None
+    ref_url: str | None = None
     priority: int | None = None
     provider_role: ProviderRole | None = None
     value_transform: dict[str, Any] | None = None

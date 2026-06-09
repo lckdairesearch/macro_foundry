@@ -53,7 +53,8 @@ Canonical `ON DELETE` map:
 - `series_hierarchy_edges.child_series_id` → `RESTRICT`
 - `series_sources.provider_catalog_id` → `RESTRICT`
 - `series_sources.series_id` → `CASCADE`
-- `ingestion_feeds.series_source_id` → `CASCADE`
+- `ingestion_feed_members.ingestion_feed_id` → `CASCADE`
+- `ingestion_feed_members.series_source_id` → `CASCADE`
 - `derived_series.series_id` → `CASCADE`
 - `derivation_inputs.derived_series_id` → `CASCADE`
 - `derivation_inputs.input_series_id` → `RESTRICT`

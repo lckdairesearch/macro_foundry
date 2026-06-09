@@ -49,6 +49,7 @@ from macro_foundry.models import (
     DerivedSeries,
     Geography,
     IngestionFeed,
+    IngestionFeedMember,
     IngestionRunLog,
     Observation,
     Provider,
@@ -63,6 +64,7 @@ from macro_foundry.schemas import (
     DerivedSeriesCreate,
     DerivationInputCreate,
     IngestionFeedCreate,
+    IngestionFeedMemberCreate,
     ProviderCatalogCreate,
     ProviderCreate,
     SeriesCreate,
@@ -165,6 +167,7 @@ class PreparedRawSeries:
     series: Series
     source: SeriesSource
     feed: IngestionFeed
+    feed_member: IngestionFeedMember
 
 
 @dataclass(slots=True)
@@ -499,7 +502,7 @@ async def _reset_bootstrap_transaction(
     feed_ids = set(
         (
             await session.execute(
-                select(IngestionFeed.id).where(IngestionFeed.series_source_id.in_(source_ids)),
+                select(IngestionFeedMember.ingestion_feed_id).where(IngestionFeedMember.series_source_id.in_(source_ids)),
             )
         ).scalars().all()
     )
@@ -650,11 +653,21 @@ async def _prepare_series_catalog(
     feed = await _upsert_ingestion_feed(
         session,
         payload=IngestionFeedCreate(
-            series_source_id=source.id,
             feed_method=FeedMethod.API,
             endpoint_url=_FRED_ENDPOINT_PATH,
             response_mapping={"date_field": "date", "value_field": "value"},
             cron_schedule=_FRED_SCHEDULE,
+            is_active=True,
+        ).model_dump(),
+        series_source_id=source.id,
+    )
+    feed_member = await _upsert_ingestion_feed_member(
+        session,
+        payload=IngestionFeedMemberCreate(
+            ingestion_feed_id=feed.id,
+            series_source_id=source.id,
+            selector_type="fred_series_id",
+            selector_config={"series_id": spec.external_code},
             is_active=True,
         ).model_dump(),
     )
@@ -697,7 +710,7 @@ async def _prepare_series_catalog(
     )
 
     return (
-        PreparedRawSeries(spec=spec, series=raw_series, source=source, feed=feed),
+        PreparedRawSeries(spec=spec, series=raw_series, source=source, feed=feed, feed_member=feed_member),
         PreparedDerivedSeries(
             spec=spec,
             output_series=derived_output_series,
@@ -1063,6 +1076,7 @@ async def _upsert_series_source(
         (
             "series_id",
             "external_name",
+            "ref_url",
             "priority",
             "provider_role",
             "value_transform",
@@ -1078,14 +1092,17 @@ async def _upsert_ingestion_feed(
     session: AsyncSession,
     *,
     payload: dict[str, Any],
+    series_source_id: object,
 ) -> IngestionFeed:
     rows = (
         await session.execute(
-            select(IngestionFeed).where(IngestionFeed.series_source_id == payload["series_source_id"]),
+            select(IngestionFeed)
+            .join(IngestionFeedMember, IngestionFeedMember.ingestion_feed_id == IngestionFeed.id)
+            .where(IngestionFeedMember.series_source_id == series_source_id),
         )
     ).scalars().all()
     if len(rows) > 1:
-        raise ValueError("Multiple ingestion feeds found for one series source; expected at most one")
+        raise ValueError("Multiple ingestion feed members found for one series source; expected at most one")
     if not rows:
         feed = IngestionFeed(**payload)
         session.add(feed)
@@ -1108,6 +1125,34 @@ async def _upsert_ingestion_feed(
     )
     await session.flush()
     return feed
+
+
+async def _upsert_ingestion_feed_member(
+    session: AsyncSession,
+    *,
+    payload: dict[str, Any],
+) -> IngestionFeedMember:
+    member = await session.scalar(
+        select(IngestionFeedMember).where(IngestionFeedMember.series_source_id == payload["series_source_id"]),
+    )
+    if member is None:
+        member = IngestionFeedMember(**payload)
+        session.add(member)
+        await session.flush()
+        return member
+    assign_if_changed(
+        member,
+        payload,
+        (
+            "ingestion_feed_id",
+            "selector_type",
+            "selector_config",
+            "execution_order",
+            "is_active",
+        ),
+    )
+    await session.flush()
+    return member
 
 
 async def _upsert_derived_series(

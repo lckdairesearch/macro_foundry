@@ -63,6 +63,7 @@ class SeriesSourceAdmin(BaseModelView, model=SeriesSource):
         SeriesSource.series,
         SeriesSource.provider_catalog,
         SeriesSource.external_code,
+        SeriesSource.ref_url,
         SeriesSource.provider_role,
         SeriesSource.priority,
         SeriesSource.updated_at,
@@ -70,6 +71,7 @@ class SeriesSourceAdmin(BaseModelView, model=SeriesSource):
     column_searchable_list = [
         SeriesSource.external_code,
         SeriesSource.external_name,
+        SeriesSource.ref_url,
         "series.code",
         "series.name",
         "provider_catalog.name",
@@ -86,6 +88,7 @@ class SeriesSourceAdmin(BaseModelView, model=SeriesSource):
         SeriesSource.provider_catalog,
         SeriesSource.external_code,
         SeriesSource.external_name,
+        SeriesSource.ref_url,
         SeriesSource.priority,
         SeriesSource.provider_role,
         SeriesSource.value_transform,

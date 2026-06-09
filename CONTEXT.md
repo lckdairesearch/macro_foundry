@@ -111,11 +111,52 @@ This is intentionally free text. The structural distinctions (measure, unit,
 seasonal_adjustment, etc.) are encoded on the series itself; `variant` is the
 human label for the combination.
 
+### Default variant
+
+A family's default variant is the methodological scope that macrodb treats as
+the baseline reading for that family when no extra qualifier is included in the
+canonical `series.code`.
+
+Not every provider-exposed distinction needs to become part of canonical
+identity. A default variant exists only when the omission is an intentional
+curation choice, not when the scope is still ambiguous.
+
 `variant` is robust enough for human-facing cataloging and rare methodological
 edge cases inside a family. It is not a normalized taxonomy column. If a
 distinction becomes common enough that the system needs consistent cross-series
 machine filtering on it, that should become a separate structured field or
 model rather than more convention piled into free text.
+
+### Series hierarchy
+
+A canonical parent-child structure between `series` rows used when macrodb
+needs to represent a decomposition tree rather than only flat sibling variants.
+
+This hierarchy is part of the canonical series layer, not just a provider-side
+ingestion aid. It may therefore outlive any one provider payload shape and may
+be shared across providers that publish the same underlying decomposition.
+
+Series hierarchies may be ragged. A branch does not need every intermediate
+depth to be populated just because another branch has it.
+
+When a decomposition needs an intermediate grouping node, that grouping should
+exist as an explicit canonical `series` row only when it is analytically
+meaningful or directly published by a source. Macrodb should not create hidden
+canonical placeholder nodes solely to satisfy a provider's visual indentation or
+missing intermediate display levels.
+
+Series hierarchy enrichment may be additive over time. A published parent series
+may later gain newly curated child series without that parent's canonical
+identity being treated as wrong.
+
+If a parent series has its own published observations, macrodb should continue
+to store the parent's observed values even when child series exist and even when
+an aggregation rule is known. The hierarchy does not imply that the parent is
+merely a derived container.
+
+Canonical series hierarchies should stay within one concept by default. If a
+proposed hierarchy edge appears to cross concepts, that should trigger explicit
+review rather than being added automatically.
 
 ## Vintage and observation layer
 
@@ -206,22 +247,33 @@ which is its full database — when a provider has no meaningful sub-catalogs,
 the catalog has `is_placeholder=true`.
 
 Provider catalogs are how we organize the "what data is available from this
-provider" namespace. External codes are uniquely scoped within a catalog.
+provider" namespace. Provider-facing external codes often live in this catalog
+namespace, but macrodb treats `series_sources.external_code` as nullable,
+non-unique, best-effort metadata rather than as the extraction identity.
 
 ### Series source
 
 The mapping from one of our `series` to one provider catalog's representation
 of it. Contains the optional `external_code` (provider identifier, e.g.
 `NY.GDP.MKTP.CD` in WDI or `CPIAUCSL` in FRED), an optional `external_name`,
-an optional human-facing `ref_url`, a `priority` (lower = preferred when
-multiple providers offer the same series), and an optional `value_transform`
-(a JSONB recipe like `{"op": "divide", "by": 100}` for converting the
-provider's native scale to ours).
+an optional human-facing `ref_url` that points back to the relevant source page,
+a `priority` (lower = preferred when multiple providers offer the same series),
+and an optional `value_transform` (a JSONB recipe like `{"op": "divide", "by":
+100}` for converting the provider's native scale to ours).
 
-`external_code` is a best-effort provider-facing locator, not the request
-execution contract. Clean providers should populate it. Messier providers may
-need structured extraction selectors on `ingestion_feed_member`, not fake
-external codes.
+`external_code` is nullable but strongly encouraged as a best-effort
+provider-facing locator for the logical series. For some providers it is a true
+unique series code. For others, especially table-style or tree-style
+statistical sources, it may be absent or may be a reused dataset code, table
+code, or leaf label that is helpful for humans but not sufficient to
+disambiguate extraction on its own.
+
+The true extraction selector for shared multi-series payloads belongs on the
+`ingestion_feed_member`, not on `series_source`.
+
+`ref_url` is nullable but strongly encouraged. Multiple `series_sources` may
+legitimately point to the same source page when one provider page or table
+contains several logical series.
 
 `provider_role` describes the relationship: `primary_source` (the canonical
 publisher), `redistributor` (e.g. FRED carrying a BLS series), `harmonized`
@@ -234,6 +286,10 @@ An ingestion feed is the runtime configuration for one upstream request shape or
 execution unit. It may populate one or more `series_sources` through
 `ingestion_feed_members`.
 
+In the common case, a provider request still maps to a single `series_source`,
+but some providers expose table-style or tree-style payloads where one upstream
+request fans out into multiple logical series.
+
 The feed owns shared request configuration: `feed_method` (`api`, `file`, or
 `scrape`), endpoint URL, request params, response mapping, optional file path
 pattern, and optional `cron_schedule` (metadata for an external scheduler —
@@ -242,23 +298,40 @@ pattern, and optional `cron_schedule` (metadata for an external scheduler —
 ### Ingestion feed member
 
 The attachment between a request-level `ingestion_feed` and one `series_source`.
-This is where the per-series extraction contract lives.
 
-Each member carries a selector shape such as `selector_type` plus structured
-`selector_config`, allowing provider series codes, dimension filters, table
-coordinates, tree paths, and other provider-specific locators without turning
-them into fixed schema columns. A member also carries active/inactive state and
-may carry execution order when deterministic processing matters.
+An ingestion feed member carries the per-series extraction contract for how one
+logical provider series is selected from the shared upstream payload produced by
+the feed.
+
+The extraction contract should be modeled as a small selector type plus
+structured selector config, rather than as one universal fixed column set.
+Different providers may need different selection shapes such as provider series
+codes, dimension filters, table coordinates, tree node selectors, or other
+structured path/filter rules.
+
+One `ingestion_feed` may have many members. Each `series_source` belongs to
+exactly one ingestion feed through exactly one member row.
+
+An ingestion feed member may be active or inactive. A feed execution attempts
+the active members attached to that feed at execution time.
+
+An ingestion feed member may also carry an optional execution order so runtimes
+that need deterministic processing can process members in a stable sequence.
 
 The common provider case is still simple: one feed with one active member.
 Shared table or tree requests use one feed with multiple active members.
 
 ### Ingestion run log
 
-Append-only record of every attempt to run an ingestion feed. Captures
-started/finished timestamps, status, row counts, error message, triggered_by,
-code version, runtime parameters, and feed-level notes. It is feed-level: one
-row per execution of a request-level feed.
+Append-only record of every attempt to run an ingestion feed.
+
+Because an ingestion feed is the execution unit, the ingestion run log is also
+feed-level rather than series-level. It captures started/finished timestamps,
+status, row counts, error message, triggered_by, code version, runtime
+parameters, and the overall outcome of one upstream request execution.
+
+When one feed populates multiple `series_sources`, per-member success, failure,
+and warnings belong in child records beneath the feed-level run log.
 
 ### Ingestion run log member
 

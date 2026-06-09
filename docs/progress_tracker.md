@@ -46,6 +46,32 @@ ingestion fan-out remains active planned architecture work after Phase 13.
 
 ## Log
 
+### [2026-06-09] Issue 17 — Static request-level ingestion catalog implemented
+
+Implemented the static catalog reshape for request-level ingestion feeds.
+
+Completion notes:
+
+- changed `ingestion_feeds` into request-level configuration rows, no longer
+  owned by a single `series_source`
+- added `ingestion_feed_members` as the attachment from feeds to
+  `series_sources`, with selector metadata, active state, optional execution
+  order, and a uniqueness rule allowing exactly one member per `series_source`
+- relaxed `series_sources.external_code` to nullable, non-unique, best-effort
+  metadata and added nullable `ref_url`
+- updated ORM models, Alembic migration chain, Pydantic schemas, API CRUD
+  routes, SQLAdmin views, FRED bootstrap scaffolding, canonical schema docs, and
+  constraint/e2e tests together
+
+Verification:
+
+- `uv run pytest tests/test_e2e.py::test_api_catalog_supports_shared_ingestion_feed_members -q`
+  exited 0
+- `uv run pytest tests/test_constraints.py::test_series_source_external_code_is_not_unique_within_catalog tests/test_constraints.py::test_series_source_allows_nullable_external_code_and_ref_url tests/test_constraints.py::test_ingestion_feed_member_allows_only_one_member_per_series_source -q`
+  exited 0
+- `uv run pytest tests/test_fred_bootstrap.py -q` exited 0 with `4 passed`
+- `uv run pytest -q` with `FRED_API_KEY` unset exited 0 with `80 passed`
+
 ### [2026-06-09] Issue 15 — Hierarchy enrichment governance documented
 
 Updated onboarding and catalog governance so likely child-series additions,

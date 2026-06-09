@@ -15,7 +15,7 @@ from macro_foundry.enums import ProviderRole, ProviderType
 from macro_foundry.models._schema_policy import enum_column, fk_uuid
 
 if TYPE_CHECKING:
-    from macro_foundry.models.ingestion import IngestionFeed
+    from macro_foundry.models.ingestion import IngestionFeedMember
     from macro_foundry.models.series import Series
 
 
@@ -81,9 +81,6 @@ class SeriesSource(TimestampedBase):
     """Mapping from a canonical series to one provider representation."""
 
     __tablename__ = "series_sources"
-    __table_args__ = (
-        UniqueConstraint("provider_catalog_id", "external_code", name="uq_series_sources_catalog_external_code"),
-    )
 
     series_id: Mapped[uuid.UUID] = fk_uuid(
         "series.id",
@@ -95,8 +92,9 @@ class SeriesSource(TimestampedBase):
         ondelete="RESTRICT",
         nullable=False,
     )
-    external_code: Mapped[str] = mapped_column(String(), nullable=False)
+    external_code: Mapped[str | None] = mapped_column(String(), nullable=True)
     external_name: Mapped[str | None] = mapped_column(String(), nullable=True)
+    ref_url: Mapped[str | None] = mapped_column(String(), nullable=True)
     priority: Mapped[int] = mapped_column(Integer, nullable=False)
     provider_role: Mapped[ProviderRole] = enum_column(
         "series_sources",
@@ -118,8 +116,8 @@ class SeriesSource(TimestampedBase):
         back_populates="series_sources",
         lazy="selectin",
     )
-    ingestion_feeds: Mapped[list["IngestionFeed"]] = relationship(
-        "IngestionFeed",
+    ingestion_feed_members: Mapped[list["IngestionFeedMember"]] = relationship(
+        "IngestionFeedMember",
         back_populates="series_source",
         lazy="selectin",
         passive_deletes=True,

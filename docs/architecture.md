@@ -257,15 +257,15 @@ simple to extend.
 
 ## Ingestion model direction
 
-ADR 0010 supersedes the source-centric ingestion assumption for the next schema
-implementation slice. `ingestion_feed` is a request-level execution unit: the
-runtime configuration for one upstream request shape, not a child of one
-`series_source`.
+ADR 0010 supersedes the source-centric ingestion assumption. `ingestion_feed` is
+a request-level execution unit: the runtime configuration for one upstream
+request shape, not a child of one `series_source`.
 
-The planned schema adds `ingestion_feed_member` as the member table between a
+The schema includes `ingestion_feed_member` as the member table between a
 request-level feed and each logical `series_source` populated by that request.
 The member carries the per-series extraction selector (`selector_type` plus
-structured `selector_config`), active state, and optional execution order.
+structured `selector_config`), active state, and optional execution order. Each
+`series_source` has exactly one feed member.
 
 `ingestion_run_log` remains feed-level and append-only: one row per execution of
 the upstream request. The planned `ingestion_run_log_member` table records

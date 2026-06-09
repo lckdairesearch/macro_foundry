@@ -37,6 +37,10 @@ from macro_foundry.schemas.governance import (
 from macro_foundry.schemas.ingestion import (
     IngestionFeedBase,
     IngestionFeedCreate,
+    IngestionFeedMemberBase,
+    IngestionFeedMemberCreate,
+    IngestionFeedMemberRead,
+    IngestionFeedMemberUpdate,
     IngestionFeedRead,
     IngestionFeedUpdate,
 )
@@ -144,6 +148,10 @@ __all__ = [
     "GeographyUpdate",
     "IngestionFeedBase",
     "IngestionFeedCreate",
+    "IngestionFeedMemberBase",
+    "IngestionFeedMemberCreate",
+    "IngestionFeedMemberRead",
+    "IngestionFeedMemberUpdate",
     "IngestionFeedRead",
     "IngestionFeedUpdate",
     "IngestionRunLogBase",

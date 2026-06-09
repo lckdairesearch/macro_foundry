@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Boolean, String
+from sqlalchemy import Boolean, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -19,15 +19,10 @@ if TYPE_CHECKING:
 
 
 class IngestionFeed(TimestampedBase):
-    """Runtime ingestion configuration for a series source."""
+    """Runtime ingestion configuration for one upstream request shape."""
 
     __tablename__ = "ingestion_feeds"
 
-    series_source_id: Mapped[uuid.UUID] = fk_uuid(
-        "series_sources.id",
-        ondelete="CASCADE",
-        nullable=False,
-    )
     feed_method: Mapped[FeedMethod] = enum_column(
         "ingestion_feeds",
         "feed_method",
@@ -41,10 +36,11 @@ class IngestionFeed(TimestampedBase):
     cron_schedule: Mapped[str | None] = mapped_column(String(), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False)
 
-    series_source: Mapped["SeriesSource"] = relationship(
-        "SeriesSource",
-        back_populates="ingestion_feeds",
+    members: Mapped[list["IngestionFeedMember"]] = relationship(
+        "IngestionFeedMember",
+        back_populates="ingestion_feed",
         lazy="selectin",
+        passive_deletes=True,
     )
     ingestion_run_logs: Mapped[list["IngestionRunLog"]] = relationship(
         "IngestionRunLog",
@@ -54,4 +50,39 @@ class IngestionFeed(TimestampedBase):
     )
 
 
-__all__ = ["IngestionFeed"]
+class IngestionFeedMember(TimestampedBase):
+    """Per-series attachment and extraction selector for an ingestion feed."""
+
+    __tablename__ = "ingestion_feed_members"
+    __table_args__ = (
+        UniqueConstraint("series_source_id", name="uq_ingestion_feed_members_series_source_id"),
+    )
+
+    ingestion_feed_id: Mapped[uuid.UUID] = fk_uuid(
+        "ingestion_feeds.id",
+        ondelete="CASCADE",
+        nullable=False,
+    )
+    series_source_id: Mapped[uuid.UUID] = fk_uuid(
+        "series_sources.id",
+        ondelete="CASCADE",
+        nullable=False,
+    )
+    selector_type: Mapped[str] = mapped_column(String(), nullable=False)
+    selector_config: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    execution_order: Mapped[int | None] = mapped_column(nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False)
+
+    ingestion_feed: Mapped["IngestionFeed"] = relationship(
+        "IngestionFeed",
+        back_populates="members",
+        lazy="selectin",
+    )
+    series_source: Mapped["SeriesSource"] = relationship(
+        "SeriesSource",
+        back_populates="ingestion_feed_members",
+        lazy="selectin",
+    )
+
+
+__all__ = ["IngestionFeed", "IngestionFeedMember"]

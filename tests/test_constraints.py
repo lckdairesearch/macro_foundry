@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from macro_foundry.enums import (
     CodeStandard,
+    FeedMethod,
     ExecutionPolicy,
     Frequency,
     GeographyType,
@@ -24,7 +25,18 @@ from macro_foundry.enums import (
     UnitKind,
     UnitScale,
 )
-from macro_foundry.models import Concept, DerivedSeries, Geography, Observation, Provider, ProviderCatalog, Series, SeriesSource
+from macro_foundry.models import (
+    Concept,
+    DerivedSeries,
+    Geography,
+    IngestionFeed,
+    IngestionFeedMember,
+    Observation,
+    Provider,
+    ProviderCatalog,
+    Series,
+    SeriesSource,
+)
 
 
 async def _seeded_country(session: AsyncSession, *, code: str = "USA") -> Geography:
@@ -242,15 +254,16 @@ async def test_provider_catalog_requires_existing_provider(
 
 
 @pytest.mark.asyncio
-async def test_series_source_external_code_is_unique_within_catalog(
+async def test_series_source_external_code_is_not_unique_within_catalog(
     session: AsyncSession,
 ) -> None:
-    series = await _create_series(session, code="MF_SOURCE_SERIES")
+    series_one = await _create_series(session, code="MF_SOURCE_SERIES_ONE")
+    series_two = await _create_series(session, code="MF_SOURCE_SERIES_TWO")
     catalog = await _create_provider_catalog(session)
 
     session.add(
         SeriesSource(
-            series_id=series.id,
+            series_id=series_one.id,
             provider_catalog_id=catalog.id,
             external_code="MF-EXT",
             priority=1,
@@ -261,11 +274,93 @@ async def test_series_source_external_code_is_unique_within_catalog(
 
     session.add(
         SeriesSource(
-            series_id=series.id,
+            series_id=series_two.id,
             provider_catalog_id=catalog.id,
             external_code="MF-EXT",
             priority=2,
             provider_role=ProviderRole.REDISTRIBUTOR,
+        ),
+    )
+    await session.commit()
+
+    rows = (
+        await session.execute(
+            select(SeriesSource).where(
+                SeriesSource.provider_catalog_id == catalog.id,
+                SeriesSource.external_code == "MF-EXT",
+            ),
+        )
+    ).scalars().all()
+    assert len(rows) == 2
+
+
+@pytest.mark.asyncio
+async def test_series_source_allows_nullable_external_code_and_ref_url(
+    session: AsyncSession,
+) -> None:
+    series = await _create_series(session, code="MF_SOURCE_NO_CODE")
+    catalog = await _create_provider_catalog(
+        session,
+        provider_name="Macro Foundry Nullable Source Provider",
+        catalog_name="Macro Foundry Nullable Source Catalog",
+    )
+
+    source = SeriesSource(
+        series_id=series.id,
+        provider_catalog_id=catalog.id,
+        external_name="Source without a clean provider code",
+        ref_url="https://example.test/source",
+        priority=1,
+        provider_role=ProviderRole.PRIMARY_SOURCE,
+    )
+    session.add(source)
+    await session.commit()
+    await session.refresh(source)
+
+    assert source.external_code is None
+    assert source.ref_url == "https://example.test/source"
+
+
+@pytest.mark.asyncio
+async def test_ingestion_feed_member_allows_only_one_member_per_series_source(
+    session: AsyncSession,
+) -> None:
+    series = await _create_series(session, code="MF_FEED_MEMBER_UNIQUE")
+    catalog = await _create_provider_catalog(
+        session,
+        provider_name="Macro Foundry Feed Member Provider",
+        catalog_name="Macro Foundry Feed Member Catalog",
+    )
+    source = SeriesSource(
+        series_id=series.id,
+        provider_catalog_id=catalog.id,
+        priority=1,
+        provider_role=ProviderRole.PRIMARY_SOURCE,
+    )
+    session.add(source)
+    feed_one = IngestionFeed(feed_method=FeedMethod.API, endpoint_url="/one", is_active=True)
+    feed_two = IngestionFeed(feed_method=FeedMethod.API, endpoint_url="/two", is_active=True)
+    session.add_all([feed_one, feed_two])
+    await session.commit()
+
+    session.add(
+        IngestionFeedMember(
+            ingestion_feed_id=feed_one.id,
+            series_source_id=source.id,
+            selector_type="json_path",
+            selector_config={"path": "$.one"},
+            is_active=True,
+        ),
+    )
+    await session.commit()
+
+    session.add(
+        IngestionFeedMember(
+            ingestion_feed_id=feed_two.id,
+            series_source_id=source.id,
+            selector_type="json_path",
+            selector_config={"path": "$.two"},
+            is_active=True,
         ),
     )
 

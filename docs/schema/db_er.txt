@@ -7,7 +7,7 @@
 //   L0 (roots):   geographies, concepts, tags, providers
 //   L1:           series, series_families, provider_catalogs
 //   L2:           series_tags, series_family_members, series_hierarchy_edges, series_sources, derived_series
-//   L3:           observations, ingestion_feeds, derivation_inputs
+//   L3:           observations, ingestion_feeds, ingestion_feed_members, derivation_inputs
 //   L4:           ingestion_run_logs, computation_run_logs
 //   Governance:   change_proposals, change_proposal_items
 //
@@ -166,8 +166,9 @@ series_sources [icon: link, color: blue] {
   id uuid pk
   series_id uuid fk               // FK -> series.id
   provider_catalog_id uuid fk     // FK -> provider_catalogs.id
-  external_code string            // e.g. NY.GDP.MKTP.CD | CPIAUCSL; unique on provider_catalog_id &  external_code
+  external_code string            // nullable; non-unique best-effort provider locator e.g. NY.GDP.MKTP.CD | CPIAUCSL
   external_name string            // nullable; for audit and reconciliation
+  ref_url string                  // nullable; human-facing source or documentation URL
   priority int                    // lower = higher priority; ordinal only; default to 1 if no other sources, if multiple sources, confirm with human
   provider_role string            // ENUM: primary_source | redistributor | harmonized | vendor_estimate | internal | other
   value_transform jsonb           // nullable; e.g. {"op": "divide", "by": 100}
@@ -214,13 +215,24 @@ observations [icon: database, color: red] {
 
 ingestion_feeds [icon: rss, color: blue] {
   id uuid pk
-  series_source_id uuid fk      // FK -> series_sources.id
   feed_method string              // ENUM: api | file | scrape
   endpoint_url string             // nullable
   request_params jsonb            // nullable; omit end_date for ongoing series — script uses today at runtime
   file_path_pattern string        // nullable; e.g. /data/uploads/wb_wdi_*.csv
   response_mapping jsonb          // nullable; e.g. {"date_field": "date", "value_field": "value", "data_path": "observations"}
   cron_schedule string            // nullable; e.g. 0 6 * * 1
+  is_active boolean
+  created_at timestamp
+  updated_at timestamp
+}
+
+ingestion_feed_members [icon: list, color: blue] {
+  id uuid pk
+  ingestion_feed_id uuid fk       // FK -> ingestion_feeds.id
+  series_source_id uuid fk        // FK -> series_sources.id; unique, exactly one member per series_source
+  selector_type string            // per-series extraction selector family e.g. provider_code | json_path | dimension_filter | table_cell | tree_path
+  selector_config jsonb           // nullable; structured provider-specific selector data
+  execution_order int             // nullable; deterministic member processing order when needed
   is_active boolean
   created_at timestamp
   updated_at timestamp
@@ -346,7 +358,8 @@ series_hierarchy_edges.child_series_id > series.id // ON DELETE RESTRICT
 provider_catalogs.provider_id > providers.id // ON DELETE RESTRICT
 series_sources.provider_catalog_id > provider_catalogs.id // ON DELETE RESTRICT
 series_sources.series_id > series.id // ON DELETE CASCADE
-ingestion_feeds.series_source_id > series_sources.id // ON DELETE CASCADE
+ingestion_feed_members.ingestion_feed_id > ingestion_feeds.id // ON DELETE CASCADE
+ingestion_feed_members.series_source_id - series_sources.id // ON DELETE CASCADE
 ingestion_run_logs.ingestion_feed_id > ingestion_feeds.id // ON DELETE RESTRICT
 
 // ---- Derivation chain ----

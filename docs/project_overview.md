@@ -36,7 +36,7 @@ This phase builds the **database layer and backend skeleton**. Specifically:
   for Neon production as `macrodb_prod` (PG 18 default).
 - Two roles: `macrodb_owner` for migrations, `macrodb_app` for everything else.
 - All current schema tables as async SQLAlchemy models, including canonical
-  `series_hierarchy_edges`.
+  `series_hierarchy_edges` and `ingestion_feed_members`.
 - Alembic migrations including the `latest_observations` view.
 - Pydantic schemas (Base / Create / Update / Read pattern) for every table.
 - FastAPI routes: a thin in-repo CRUD generator for ~80% of tables,
@@ -73,9 +73,11 @@ code changes, no restructuring, no skipped tests.
   that proposes into them is later.
 - **Frontend.** No Next.js, no Tremor, no UI work. SQLAdmin is the only UI surface
   for now.
-- **Request-level ingestion fan-out implementation.** ADR 0010 ratifies this as
-  active planned schema work, but this backend-skeleton phase does not implement
-  the feed-member and run-member tables or runtime behavior.
+- **Member-level ingestion provenance implementation.** ADR 0010 ratifies this
+  as active planned schema work. Issue 17 implements the static request-level
+  `ingestion_feeds` / `ingestion_feed_members` catalog metadata; member-level
+  run logs, observation provenance moves, and runtime fan-out behavior remain
+  outside this backend-skeleton phase.
 - **Materialized views, performance tuning, advanced indexing.** Add indexes only
   when a query justifies them, not pre-emptively.
 - **Multi-tenant features, billing, public API gateway.** Not relevant yet.
