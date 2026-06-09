@@ -73,12 +73,10 @@ code changes, no restructuring, no skipped tests.
   that proposes into them is later.
 - **Frontend.** No Next.js, no Tremor, no UI work. SQLAdmin is the only UI surface
   for now.
-- **Observation provenance move to member-level run logs.** ADR 0010 ratifies
-  member-level ingestion provenance. Issue 17 implements the static request-level
-  `ingestion_feeds` / `ingestion_feed_members` catalog metadata, and Issue 16
-  implements member-level run outcomes. Moving ingested observations from
-  feed-level to member-level run references remains outside this backend-skeleton
-  phase.
+- **External ingestion fetchers beyond the FRED bootstrap path.** ADR 0010's
+  request-level feed catalog, member-level run outcomes, and member-level
+  observation provenance are implemented, but general provider HTTP clients for
+  World Bank, IMF, OECD, and others remain next-phase work.
 - **Materialized views, performance tuning, advanced indexing.** Add indexes only
   when a query justifies them, not pre-emptively.
 - **Multi-tenant features, billing, public API gateway.** Not relevant yet.

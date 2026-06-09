@@ -63,7 +63,7 @@ Canonical `ON DELETE` map:
 - `ingestion_run_log_members.ingestion_feed_member_id` → `RESTRICT`
 - `computation_run_logs.derived_series_id` → `RESTRICT`
 - `observations.series_id` → `RESTRICT`
-- `observations.ingestion_run_log_id` → `RESTRICT`
+- `observations.ingestion_run_log_member_id` → `RESTRICT`
 - `observations.computation_run_log_id` → `RESTRICT`
 - `change_proposals.superseded_by_proposal_id` → `RESTRICT`
 - `change_proposal_items.proposal_id` → `CASCADE`

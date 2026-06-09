@@ -22,10 +22,9 @@ Neon parity pass.
 
 Issue 13 has implemented the canonical series hierarchy portion of ADR 0010.
 Issue 15 has documented the onboarding and governance rules that keep hierarchy
-enrichment and weak provider locators under explicit review. Issues 17 and 16
-have implemented request-level feed metadata and member-level run outcomes.
-Moving ingested observation provenance to member-level run rows remains active
-planned architecture work after Phase 13.
+enrichment and weak provider locators under explicit review. Issues 17, 16, and
+18 have implemented request-level feed metadata, member-level run outcomes, and
+member-level observation provenance.
 
 ## Phase status
 
@@ -47,6 +46,31 @@ planned architecture work after Phase 13.
 | 13    | Neon parity verification       | ⏳          |
 
 ## Log
+
+### [2026-06-09] Issue 18 — Observation provenance moved to member-level outcomes
+
+Moved ingested observation lineage from feed-level `ingestion_run_logs` to exact
+member-level `ingestion_run_log_members`.
+
+Completion notes:
+
+- replaced `observations.ingestion_run_log_id` with nullable
+  `observations.ingestion_run_log_member_id`
+- added an Alembic migration that backfills existing one-member run provenance
+  before dropping the old feed-level observation FK
+- updated SQLAlchemy, Pydantic, FastAPI bulk observation writes, SQLAdmin, FRED
+  latest-snapshot writes, and derived-observation conflict handling
+- updated canonical schema docs, FK policy docs, architecture notes, and tests
+  to keep ADR 0010's lineage model consistent
+
+Verification:
+
+- `uv run pytest tests/test_observations_routes.py::test_bulk_observations_records_member_level_ingestion_provenance -q`
+  exited 0
+- `uv run pytest tests/test_fred_bootstrap.py::test_fred_bootstrap_creates_curated_rows_and_run_logs -q`
+  exited 0
+- `uv run pytest tests/test_e2e.py::test_api_records_shared_feed_execution_with_member_outcomes -q`
+  exited 0
 
 ### [2026-06-09] Issue 16 — Member-level ingestion run outcomes implemented
 

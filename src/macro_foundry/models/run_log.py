@@ -64,12 +64,6 @@ class IngestionRunLog(CreatedAtBase):
         back_populates="ingestion_run_logs",
         lazy="selectin",
     )
-    observations: Mapped[list["Observation"]] = relationship(
-        "Observation",
-        back_populates="ingestion_run_log",
-        lazy="selectin",
-        passive_deletes=True,
-    )
     member_logs: Mapped[list["IngestionRunLogMember"]] = relationship(
         "IngestionRunLogMember",
         back_populates="ingestion_run_log",
@@ -122,6 +116,12 @@ class IngestionRunLogMember(CreatedAtBase):
         "IngestionFeedMember",
         back_populates="run_logs",
         lazy="selectin",
+    )
+    observations: Mapped[list["Observation"]] = relationship(
+        "Observation",
+        back_populates="ingestion_run_log_member",
+        lazy="selectin",
+        passive_deletes=True,
     )
 
 

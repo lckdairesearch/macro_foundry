@@ -15,7 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from macro_foundry.backend.deps import get_session, verify_token
-from macro_foundry.models import ComputationRunLog, IngestionRunLog, Observation, Series
+from macro_foundry.models import ComputationRunLog, IngestionRunLogMember, Observation, Series
 from macro_foundry.schemas import ObservationBulkError, ObservationBulkResult, ObservationCreate, ObservationRead
 
 router = APIRouter(prefix="/observations", tags=["observations"])
@@ -117,13 +117,13 @@ async def bulk_upsert_observations(
         Series,
         {row.series_id for _, row in validated_rows},
     )
-    existing_ingestion_run_log_ids = await _existing_ids(
+    existing_ingestion_run_log_member_ids = await _existing_ids(
         session,
-        IngestionRunLog,
+        IngestionRunLogMember,
         {
-            row.ingestion_run_log_id
+            row.ingestion_run_log_member_id
             for _, row in validated_rows
-            if row.ingestion_run_log_id is not None
+            if row.ingestion_run_log_member_id is not None
         },
     )
     existing_computation_run_log_ids = await _existing_ids(
@@ -141,11 +141,14 @@ async def bulk_upsert_observations(
         if row.series_id not in existing_series_ids:
             errors.append(ObservationBulkError(index=index, detail="series_id does not reference an existing series"))
             continue
-        if row.ingestion_run_log_id is not None and row.ingestion_run_log_id not in existing_ingestion_run_log_ids:
+        if (
+            row.ingestion_run_log_member_id is not None
+            and row.ingestion_run_log_member_id not in existing_ingestion_run_log_member_ids
+        ):
             errors.append(
                 ObservationBulkError(
                     index=index,
-                    detail="ingestion_run_log_id does not reference an existing ingestion run log",
+                    detail="ingestion_run_log_member_id does not reference an existing ingestion run log member",
                 ),
             )
             continue
@@ -200,7 +203,7 @@ async def bulk_upsert_observations(
             set_={
                 "period_end": excluded.period_end,
                 "value": excluded.value,
-                "ingestion_run_log_id": excluded.ingestion_run_log_id,
+                "ingestion_run_log_member_id": excluded.ingestion_run_log_member_id,
                 "computation_run_log_id": excluded.computation_run_log_id,
             },
         )

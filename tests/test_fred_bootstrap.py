@@ -216,6 +216,15 @@ async def test_fred_bootstrap_creates_curated_rows_and_run_logs(
         assert member_log is not None
         assert member_log.rows_inserted == 4
         assert member_log.diagnostics == {"selector_type": "fred_series_id"}
+        gdp_observations = (
+            await session.execute(
+                select(Observation)
+                .where(Observation.series_id == source.series_id)
+                .order_by(Observation.period_start),
+            )
+        ).scalars().all()
+        assert len(gdp_observations) == 4
+        assert {row.ingestion_run_log_member_id for row in gdp_observations} == {member_log.id}
 
     assert client.metadata_endpoints["GDP"] == ["/series"]
     assert client.observation_endpoints["GDP"] == ["/series/observations"]

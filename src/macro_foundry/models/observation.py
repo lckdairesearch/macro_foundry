@@ -14,7 +14,7 @@ from macro_foundry.db.base import CreatedAtBase
 from macro_foundry.models._schema_policy import fk_uuid
 
 if TYPE_CHECKING:
-    from macro_foundry.models.run_log import ComputationRunLog, IngestionRunLog
+    from macro_foundry.models.run_log import ComputationRunLog, IngestionRunLogMember
     from macro_foundry.models.series import Series
 
 
@@ -36,8 +36,8 @@ class Observation(CreatedAtBase):
     period_end: Mapped[date] = mapped_column(Date, nullable=False)
     value: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
     vintage_date: Mapped[date] = mapped_column(Date, nullable=False)
-    ingestion_run_log_id: Mapped[uuid.UUID | None] = fk_uuid(
-        "ingestion_run_logs.id",
+    ingestion_run_log_member_id: Mapped[uuid.UUID | None] = fk_uuid(
+        "ingestion_run_log_members.id",
         ondelete="RESTRICT",
         nullable=True,
     )
@@ -52,8 +52,8 @@ class Observation(CreatedAtBase):
         back_populates="observations",
         lazy="selectin",
     )
-    ingestion_run_log: Mapped["IngestionRunLog | None"] = relationship(
-        "IngestionRunLog",
+    ingestion_run_log_member: Mapped["IngestionRunLogMember | None"] = relationship(
+        "IngestionRunLogMember",
         back_populates="observations",
         lazy="selectin",
     )

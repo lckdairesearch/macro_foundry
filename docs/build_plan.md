@@ -413,9 +413,12 @@ Implemented in Issue 16:
 - update the FRED latest-snapshot runtime path so each one-member feed execution
   records the feed-level run and the attempted member outcome together
 
-Remaining planned deliverables:
+Implemented in Issue 18:
 
 - move ingested observation provenance to the member-level run row
+- update the observation schema, API, admin, migrations, FRED runtime write path,
+  canonical ER source, and tests together so observation lineage points to exact
+  member outcomes
 
 Verification should use vertical slices against the real Postgres-backed test
 harness: first the fresh migration/schema surface, then one-member feed behavior,

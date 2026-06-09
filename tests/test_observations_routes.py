@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from http import HTTPStatus
 
@@ -13,16 +13,32 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from macro_foundry.enums import (
     CodeStandard,
+    FeedMethod,
     Frequency,
     GeographyType,
+    IngestionRunStatus,
+    IngestionTriggeredBy,
     Measure,
     OriginType,
+    ProviderRole,
+    ProviderType,
     SeasonalAdjustment,
     TemporalStockFlow,
     UnitKind,
     UnitScale,
 )
-from macro_foundry.models import Geography, Observation, Series
+from macro_foundry.models import (
+    Geography,
+    IngestionFeed,
+    IngestionFeedMember,
+    IngestionRunLog,
+    IngestionRunLogMember,
+    Observation,
+    Provider,
+    ProviderCatalog,
+    Series,
+    SeriesSource,
+)
 
 
 async def _create_country(session: AsyncSession, *, code: str = "USA") -> Geography:
@@ -161,6 +177,87 @@ async def test_bulk_observations_accepts_valid_rows_and_reports_invalid_rows(
     stored_rows = (await session.execute(select(Observation))).scalars().all()
     assert len(stored_rows) == 1
     assert stored_rows[0].value == Decimal("100.0")
+
+
+@pytest.mark.asyncio
+async def test_bulk_observations_records_member_level_ingestion_provenance(
+    client: AsyncClient,
+    session: AsyncSession,
+    auth_headers: dict[str, str],
+) -> None:
+    geography = await _create_country(session)
+    series = await _create_series(session, geography)
+    provider = Provider(
+        name="Macro Foundry Observation Provenance Provider",
+        type=ProviderType.OTHER,
+        is_active=True,
+    )
+    session.add(provider)
+    await session.commit()
+    await session.refresh(provider)
+
+    catalog = ProviderCatalog(provider_id=provider.id, name="Observation Provenance Catalog", is_placeholder=False)
+    session.add(catalog)
+    await session.commit()
+    await session.refresh(catalog)
+
+    source = SeriesSource(
+        series_id=series.id,
+        provider_catalog_id=catalog.id,
+        priority=1,
+        provider_role=ProviderRole.PRIMARY_SOURCE,
+    )
+    feed = IngestionFeed(feed_method=FeedMethod.API, endpoint_url="/shared", is_active=True)
+    session.add_all([source, feed])
+    await session.commit()
+
+    member = IngestionFeedMember(
+        ingestion_feed_id=feed.id,
+        series_source_id=source.id,
+        selector_type="provider_code",
+        selector_config={"series_id": "MF_CPI"},
+        is_active=True,
+    )
+    run_log = IngestionRunLog(
+        ingestion_feed_id=feed.id,
+        started_at=datetime(2026, 6, 9, 1, 0, tzinfo=timezone.utc),
+        status=IngestionRunStatus.SUCCESS,
+        triggered_by=IngestionTriggeredBy.MANUAL,
+    )
+    session.add_all([member, run_log])
+    await session.commit()
+
+    member_log = IngestionRunLogMember(
+        ingestion_run_log_id=run_log.id,
+        ingestion_feed_member_id=member.id,
+        status=IngestionRunStatus.SUCCESS,
+        rows_inserted=1,
+    )
+    session.add(member_log)
+    await session.commit()
+    await session.refresh(member_log)
+
+    response = await client.post(
+        "/api/v1/observations/bulk",
+        headers=auth_headers,
+        json=[
+            {
+                "series_id": str(series.id),
+                "period_start": "2026-01-01",
+                "period_end": "2026-01-31",
+                "value": "100.0",
+                "vintage_date": "2026-02-15",
+                "ingestion_run_log_member_id": str(member_log.id),
+            },
+        ],
+    )
+
+    assert response.status_code == HTTPStatus.OK
+    assert response.json()["inserted"] == 1
+
+    stored_row = await session.scalar(select(Observation).where(Observation.series_id == series.id))
+    assert stored_row is not None
+    assert stored_row.ingestion_run_log_member_id == member_log.id
 
 
 @pytest.mark.asyncio

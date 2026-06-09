@@ -270,8 +270,9 @@ structured `selector_config`), active state, and optional execution order. Each
 `ingestion_run_log` remains feed-level and append-only: one row per execution of
 the upstream request. `ingestion_run_log_member` records member-level provenance
 for each attempted feed member, including per-member status, row counts, and
-selector/parsing diagnostics. Ingested observations should eventually point to
-the member-level run row that produced them.
+selector/parsing diagnostics. Ingested observations point to the member-level
+run row that produced them, keeping the feed-level run reachable through the
+member row.
 
 The common provider shape remains one request-level feed with one active member.
 Table-style and tree-style providers use one request-level feed with multiple
@@ -321,7 +322,7 @@ tag taxonomy.
 
 ## Foreign-key deletion policy
 
-Every V3 foreign key declares an explicit `ON DELETE` rule. The default is
+Every current foreign key declares an explicit `ON DELETE` rule. The default is
 `RESTRICT` for canonical entities, hierarchy links, lineage-bearing rows, and
 audit/history rows. `CASCADE` is reserved for pure membership rows and owned
 extensions that have no standalone meaning. The canonical per-edge policy lives

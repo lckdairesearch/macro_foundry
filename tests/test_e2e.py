@@ -283,6 +283,7 @@ async def test_api_records_shared_feed_execution_with_member_outcomes(
     assert feed_response.status_code == HTTPStatus.CREATED
     feed_id = feed_response.json()["id"]
 
+    series_ids = []
     member_ids = []
     for order, suffix in enumerate(("SUCCESS", "ZERO_WRITE", "FAILED"), start=1):
         series_response = await client.post(
@@ -304,6 +305,7 @@ async def test_api_records_shared_feed_execution_with_member_outcomes(
             },
         )
         assert series_response.status_code == HTTPStatus.CREATED
+        series_ids.append(series_response.json()["id"])
 
         source_response = await client.post(
             "/api/v1/series-sources/",
@@ -380,6 +382,7 @@ async def test_api_records_shared_feed_execution_with_member_outcomes(
             "diagnostics": {"selector": "$.rows[2]", "reason": "missing"},
         },
     ]
+    member_log_ids = []
     for outcome in outcomes:
         outcome_response = await client.post(
             "/api/v1/ingestion-run-log-members/",
@@ -387,6 +390,7 @@ async def test_api_records_shared_feed_execution_with_member_outcomes(
             json=outcome,
         )
         assert outcome_response.status_code == HTTPStatus.CREATED
+        member_log_ids.append(outcome_response.json()["id"])
 
     member_log_response = await client.get(
         "/api/v1/ingestion-run-log-members/",
@@ -403,3 +407,29 @@ async def test_api_records_shared_feed_execution_with_member_outcomes(
     ]
     assert member_logs[1]["rows_inserted"] == 0
     assert member_logs[2]["diagnostics"] == {"selector": "$.rows[2]", "reason": "missing"}
+
+    observation_response = await client.post(
+        "/api/v1/observations/bulk",
+        headers=auth_headers,
+        json=[
+            {
+                "series_id": series_ids[0],
+                "period_start": "2026-01-01",
+                "period_end": "2026-01-31",
+                "value": "100.0",
+                "vintage_date": "2026-02-15",
+                "ingestion_run_log_member_id": member_log_ids[0],
+            },
+        ],
+    )
+    assert observation_response.status_code == HTTPStatus.OK
+    assert observation_response.json()["inserted"] == 1
+
+    stored_observations_response = await client.get(
+        "/api/v1/observations/",
+        headers=auth_headers,
+        params={"series_id": series_ids[0]},
+    )
+    assert stored_observations_response.status_code == HTTPStatus.OK
+    stored_observations = stored_observations_response.json()
+    assert stored_observations[0]["ingestion_run_log_member_id"] == member_log_ids[0]

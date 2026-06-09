@@ -825,7 +825,7 @@ async def _compute_and_write_yoy_series(
             set_={
                 "period_end": excluded.period_end,
                 "value": excluded.value,
-                "ingestion_run_log_id": None,
+                "ingestion_run_log_member_id": None,
                 "computation_run_log_id": excluded.computation_run_log_id,
             },
         )

@@ -25,7 +25,7 @@ class ObservationBase(SchemaModel):
     period_end: date
     value: Decimal | None = None
     vintage_date: date
-    ingestion_run_log_id: UUID | None = None
+    ingestion_run_log_member_id: UUID | None = None
     computation_run_log_id: UUID | None = None
 
 
@@ -46,7 +46,7 @@ class ObservationUpdate(SchemaModel):
     period_end: date | None = None
     value: Decimal | None = None
     vintage_date: date | None = None
-    ingestion_run_log_id: UUID | None = None
+    ingestion_run_log_member_id: UUID | None = None
     computation_run_log_id: UUID | None = None
 
     @model_validator(mode="after")

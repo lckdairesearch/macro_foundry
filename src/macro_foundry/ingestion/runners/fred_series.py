@@ -131,23 +131,22 @@ async def import_fred_latest_snapshot(
         )
         session.add(run_log)
         await session.flush()
-        session.add(
-            IngestionRunLogMember(
-                ingestion_run_log_id=run_log.id,
-                ingestion_feed_member_id=ingestion_feed_member.id,
-                status=IngestionRunStatus.SUCCESS,
-                rows_fetched=len(fetched_rows),
-                rows_inserted=len(rows_to_write),
-                rows_skipped=rows_skipped,
-                diagnostics={"selector_type": ingestion_feed_member.selector_type},
-                notes=f"latest-snapshot import for {series_source.external_code}",
-            ),
+        member_log = IngestionRunLogMember(
+            ingestion_run_log_id=run_log.id,
+            ingestion_feed_member_id=ingestion_feed_member.id,
+            status=IngestionRunStatus.SUCCESS,
+            rows_fetched=len(fetched_rows),
+            rows_inserted=len(rows_to_write),
+            rows_skipped=rows_skipped,
+            diagnostics={"selector_type": ingestion_feed_member.selector_type},
+            notes=f"latest-snapshot import for {series_source.external_code}",
         )
+        session.add(member_log)
         await session.flush()
 
         if rows_to_write:
             for row in rows_to_write:
-                row["ingestion_run_log_id"] = run_log.id
+                row["ingestion_run_log_member_id"] = member_log.id
 
             statement = insert(Observation).values(rows_to_write)
             excluded = statement.excluded
@@ -160,7 +159,7 @@ async def import_fred_latest_snapshot(
                 set_={
                     "period_end": excluded.period_end,
                     "value": excluded.value,
-                    "ingestion_run_log_id": excluded.ingestion_run_log_id,
+                    "ingestion_run_log_member_id": excluded.ingestion_run_log_member_id,
                     "computation_run_log_id": None,
                 },
             )

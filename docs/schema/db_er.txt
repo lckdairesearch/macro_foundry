@@ -1,5 +1,5 @@
 // =============================================================
-// macrodb — Schema V5 (member-level ingestion run logs)
+// macrodb — Schema V6 (member-level observation provenance)
 // Layout: tables ordered root → leaf, all FKs written child > parent
 // This gives eraser.io a consistent signal for top-down auto-layout
 //
@@ -202,7 +202,7 @@ observations [icon: database, color: red] {
   period_end date                 // last day of the period; period_end >= period_start
   value numeric                   // nullable; null = known gap, not missing
   vintage_date date               // date this vintage/release became publicly available
-  ingestion_run_log_id uuid       // nullable; FK -> ingestion_run_logs.id
+  ingestion_run_log_member_id uuid // nullable; FK -> ingestion_run_log_members.id
   computation_run_log_id uuid     // nullable; FK -> computation_run_logs.id
   created_at timestamp
 }
@@ -386,7 +386,7 @@ computation_run_logs.derived_series_id > derived_series.id // ON DELETE RESTRICT
 
 // ---- Observations (joins ingestion + derivation back to series) ----
 observations.series_id > series.id // ON DELETE RESTRICT
-observations.ingestion_run_log_id > ingestion_run_logs.id // ON DELETE RESTRICT
+observations.ingestion_run_log_member_id > ingestion_run_log_members.id // ON DELETE RESTRICT
 observations.computation_run_log_id > computation_run_logs.id // ON DELETE RESTRICT
 
 // ---- Governance (intentionally isolated) ----

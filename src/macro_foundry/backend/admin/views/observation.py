@@ -18,7 +18,7 @@ class ObservationAdmin(BaseModelView, model=Observation):
         Observation.period_end,
         Observation.vintage_date,
         Observation.value,
-        Observation.ingestion_run_log,
+        Observation.ingestion_run_log_member,
         Observation.computation_run_log,
         Observation.created_at,
     ]
@@ -28,7 +28,7 @@ class ObservationAdmin(BaseModelView, model=Observation):
     column_default_sort = [(Observation.created_at, True)]
     column_formatters = {
         Observation.series: relation_formatter("series"),
-        Observation.ingestion_run_log: relation_formatter("ingestion_run_log"),
+        Observation.ingestion_run_log_member: relation_formatter("ingestion_run_log_member"),
         Observation.computation_run_log: relation_formatter("computation_run_log"),
     }
 
