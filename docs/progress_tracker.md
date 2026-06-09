@@ -925,4 +925,78 @@ Decisions ratified in this session:
 10. Hand-written Alembic migration for `latest_observations` view
 11. Two-role split: `macrodb_owner` for migrations, `macrodb_app` for everything else
 
+### [2026-06-10] Gated onboarding graph — design consolidation
+
+Outcome of a two-session `/grill-with-docs` design pass for the
+implementation of the gated onboarding workflow on top of the
+request-level ingestion schema.
+
+Updated:
+
+- `docs/series_onboarding_workflow.md` — three reviewer specializations
+  (governance, data correctness, selector code), explicit web-search and
+  weirdness-detection duties on the researcher, script lifecycle section,
+  approval-semantics section (A2 structured picker + free text), small-edit
+  collision handling with Gate 2 escalation, executor split into
+  `apply_catalog` / `trigger_first_run` / `monitor_first_run` for
+  resumability, staging-not-test as the onboarding target, skill-loading
+  trigger pattern, refreshed node inventory, refreshed implementation note
+  covering LangGraph + Postgres checkpointer + `macrodb-mcp`
+- `docs/adr/README.md` — index updated for ADR 0011 and 0012
+
+New:
+
+- `docs/environments.md` — purpose and lifecycle of `macrodb_dev`,
+  `macrodb_test`, `macrodb_staging`, `macrodb_prod`; rationale for staging on
+  Neon; agent process targeting rules
+- `docs/adr/0011-gated-onboarding-graph.md` — chat-session topology,
+  LangGraph + custom `macrodb-mcp`, role separation as code-level guarantee,
+  per-role `RoleConfig`, `change_proposals.source_agent_session_id` link
+- `docs/adr/0012-selector-registry-ingestion-runtime.md` — C4-honest
+  selector library at `src/macro_foundry/ingestion/runtime/`,
+  `selector_type` as unit of Python, sandbox/promote flow, FRED migration
+- `src/macro_foundry/ingestion/runtime/README.md` — selector contract,
+  decision rule for existing vs. new selectors, defensive parsing
+  discipline, sandbox lifecycle
+- `docs/skills/` — README plus eleven stub files for the v1 skill
+  inventory; bodies deferred until the runtime can load them
+
+Locked architectural decisions:
+
+1. Chat-session CLI topology, no daemon, Postgres-checkpointer-backed
+   pause/resume via `--resume <session-id>`.
+2. LangGraph D2: structured graph with LLM-powered nodes and state-dependent
+   conditional edges; not a single ReAct loop.
+3. Checkpointer in a `langgraph` schema in the same Postgres DB as
+   `macrodb`; `change_proposals.source_agent_session_id` links durable
+   governance artifacts to the originating LangGraph thread.
+4. Custom `macrodb-mcp` server (read-only and write-enabled instances) as the
+   catalog seam; generic Postgres MCPs explicitly rejected.
+5. Four logical databases: `dev`, `test` (pytest-only), `staging` (Neon,
+   onboarding target), `prod` (Neon, separate promotion flow).
+6. Skills as lazy-loaded Markdown packs under `docs/skills/`, state-triggered
+   per LLM call; domain knowledge only, not procedural instructions.
+7. C4-honest ingestion model: selector library at
+   `src/macro_foundry/ingestion/runtime/` with `selector_type` extensions for
+   gnarly providers; unit of Python is the selector, not the feed; FRED to be
+   migrated off the current bespoke runner onto a generic `json_path`
+   selector.
+8. Three reviewer specializations replacing the single reviewer role.
+9. A2 approval semantics: Questionary picker + free text; same model for
+   Gate 1 and Gate 2; small textual edits skip full review with uniqueness
+   pre-check and structured collision handling; un-approval allowed before
+   commit.
+10. Per-role LLM config (`RoleConfig`) in `src/macro_foundry/agent/roles.py`,
+    with within-role tiering via `models_by_task` and a `task_hint` at call
+    sites; v1 OpenAI-only.
+
+Planned downstream: `/to-prd` for a PRD covering implementation of the
+gated onboarding agent, then `/to-issues` to slice it into vertical
+implementation tickets.
+
+Deviation note:
+
+- this is design and documentation work; no LangGraph, MCP, runtime, or
+  agent code has been implemented yet
+
 ### [Future entries go above this line]

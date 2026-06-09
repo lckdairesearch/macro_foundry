@@ -14,81 +14,144 @@ The onboarding process should be interactive, not a fire-and-forget agent task.
 The system should favor proposal, review, and controlled test execution over
 silent catalog mutation.
 
-This workflow is designed to support both:
-
-- a human-assisted operating mode today
-- a future LangGraph implementation with explicit state, retries, and approval
-  interrupts
+This workflow is implemented as a LangGraph state machine driven by a chat-style
+CLI session. The CLI is a foreground process: it starts on demand, persists
+graph state to a Postgres checkpointer, and exits cleanly when the operator
+saves or closes the session. There is no daemon and no idle compute between
+sessions.
 
 ## Default shape
 
 Normal path:
 
-1. researcher agent investigates the source and existing macrodb state
-2. reviewer agent checks the proposal for factual, schema, and governance fit
-3. human approves Gate 1
-4. executor agent applies approved catalog/feed changes in the test database
-5. executor agent runs and monitors the first real ingestion in the test database
-6. human reviews the test outcome and either accepts the onboarding package as
-   test-approved or sends it back for refinement
+1. researcher agent investigates the source and existing macrodb state, doing
+   web research and probe fetches as needed
+2. proposal drafter assembles a draft catalog + selector-config proposal
+3. script drafter produces a sandboxed `selector_type` extension when no
+   existing selector covers the provider; skipped otherwise
+4. validator runs the selector against a sample payload and reports parsed
+   observations for review
+5. three reviewers run in parallel: governance, data correctness, selector code
+6. human approves Gate 1
+7. executor applies approved catalog/feed rows to the staging database and
+   promotes any approved selector extension into the runtime registry
+8. executor triggers the first ingestion run
+9. monitor node polls the run to terminal status; resumable across session
+   pauses
+10. human reviews the first-run outcome and either accepts the onboarding
+    package as test-approved or sends it back for refinement
 
 Dangerous correction path:
 
-1. researcher agent detects a published-series identity problem
-2. reviewer agent checks the diagnosis and impact
-3. human reviews the dangerous correction proposal
-4. executor agent applies only the approved repair plan
+1. researcher detects a published-series identity problem, or an onboarding
+   session encounters a uniqueness collision that the operator chooses to
+   challenge rather than rename around
+2. dangerous correction planner drafts an impact analysis and a repair plan
+3. reviewers check the diagnosis, impact, and proposed repair
+4. human reviews and approves Gate 2
+5. executor applies only the approved repair plan
 
 ## Roles
 
-### Researcher agent
+### Researcher
 
-The researcher agent may:
+The researcher may:
 
-- gather source background information
-- inspect existing DB state
-- run probe fetches and normalization samples
-- draft or refine a proposal
+- gather source background information using web search and web fetch
+- inspect existing DB state via the read-only `macrodb-mcp` tool surface
+- run probe fetches and normalization samples against the candidate provider
+- draft or refine an `OnboardingIntent` and seed `source_summary` for
+  downstream nodes
 - suggest likely interpretations when metadata is ambiguous
 
-The researcher agent should not auto-create canonical catalog rows when
-identity-level ambiguity remains unresolved.
+The researcher must explicitly flag provider weirdness during research:
+non-standard request encoding (compressed params, bespoke auth flows), response
+wrappers that differ between data and error states, dimension semantics encoded
+in code padding or magic values, mixed-type fields, multi-language fields, and
+pagination quirks. These are the signals that an existing `selector_type` does
+not fit and that a new selector extension may be required.
 
-### Reviewer agent
+The researcher must not auto-create canonical catalog rows when identity-level
+ambiguity remains unresolved.
 
-The reviewer agent is read-only with respect to catalog and observation data.
+### Proposal drafter
 
-The reviewer agent may:
+The proposal drafter consumes research findings and produces a `DraftProposal`
+covering candidate concept, family, series, source, feed, member, and hierarchy
+edge rows. It is read-only with respect to the database; its output is a
+proposal in graph state, not a write.
 
-- inspect the source, DB state, and proposal
-- fact-check the researcher's claims
-- check schema fit and naming/governance fit
-- update workflow state such as findings, flags, status, and retry count
-- request refinement from the researcher agent
+The drafter populates the `extraction_mode` field: `config_only` when an
+existing `selector_type` covers the provider, or `custom_python` when a new
+selector extension is required.
 
-The reviewer agent must not:
+### Script drafter
+
+The script drafter only runs when `extraction_mode == "custom_python"`. It
+produces a proposed new `selector_type` extension as a Python module in the
+sandbox at `agent_workspace/proposed_selectors/<session_id>/`. It never
+modifies the main codebase. See `Script lifecycle` below.
+
+### Validator
+
+The validator executes the proposed selector (existing or sandboxed) against a
+probe payload from the provider and reports parsed observations. It populates
+`validation_result` for downstream review. Failures here loop back to the
+relevant drafter.
+
+### Reviewers
+
+The reviewer role is split into three specializations, each read-only with
+respect to catalog and observation data. They run in parallel after drafting
+and validation; their findings are merged before Gate 1.
+
+**Governance reviewer.** Checks schema fit, code-grammar conformance, concept
+vs. family vs. variant boundaries, hierarchy edge governance (same-concept
+default, no hidden placeholders), and provider locator quality. Loads
+governance skills.
+
+**Data correctness reviewer.** Inspects the validator's parsed sample
+observations against expected magnitude bands, frequency, period boundaries,
+and unit conventions for the concept. Uses web search and web fetch to
+cross-reference at least one recent observation against the provider's own
+published page or a reputable mirror. Loads `skill-macro-research-discipline`
+and concept-plausibility skills.
+
+**Selector reviewer.** Only runs when a new `selector_type` extension is
+proposed. Reviews the sandboxed Python module against
+`skill-ingestion-selector-conventions`. Skipped entirely for config-only
+changes.
+
+All three reviewers must not:
 
 - create or modify canonical series
 - create or modify sources or feeds
 - write observations
+- commit or push code
 
 Review loop policy:
 
-- reviewer may bounce the proposal back to the researcher
-- maximum: 3 review cycles
-- if the proposal still fails review after 3 cycles, escalate to the human gate
+- a reviewer may bounce the proposal back to the relevant drafter
+- soft cap: 3 review cycles
+- the gate prompt at cycle 3 explicitly offers the human three options:
+  approve as-is, reject, or permit a further refinement cycle
 
-### Executor agent
+### Executor
 
-The executor agent performs approved writes only after the required human gate.
+The executor performs approved writes only after the required human gate. Its
+work is split across three resumable nodes to keep idempotency clear on
+crash-and-resume:
 
-The executor agent may:
+- **`apply_catalog`** — writes approved catalog/feed rows transactionally via
+  the write-enabled `macrodb-mcp` instance; promotes any approved selector
+  extension out of the sandbox into the runtime registry
+- **`trigger_first_run`** — instructs the ingestion runner to execute the new
+  feed and records the resulting `ingestion_run_log` row
+- **`monitor_first_run`** — polls the run log to terminal status; survives
+  session pauses by re-querying status on resume
 
-- create or update approved catalog rows
-- create or update approved source/feed rows
-- run the first real ingestion
-- monitor run progress and outcome
-- report warnings, failures, and test-review readiness
+The executor must report warnings, failures, and test-review readiness, and
+must never commit or push code to the repository.
 
 ## Gate policy
 
@@ -114,6 +177,102 @@ Typical triggers:
 - a published series is later discovered to be underspecified
 - the wrong canonical variant was created
 - source/feed mappings need reassignment because canonical identity was wrong
+- an onboarding session encounters a uniqueness collision on a canonical code
+  and the operator chooses to challenge the existing series identity rather
+  than rename the new proposal
+
+### Approval semantics
+
+Both gates use the same structured approval signal: a Questionary picker with
+`Approve`, `Reject`, and `Request changes` options, rendered beneath the
+proposal summary. The picker is the high-stakes signal; the chat input remains
+available for free-text alongside the picker for context or extracted change
+descriptions.
+
+The structural picker decides routing. An LLM only does extraction inside the
+`Request changes` branch (parsing the free text into concrete edit
+instructions), never classification at the gate itself. This keeps approval
+auditable as a deliberate operator action, not as a chat interpretation.
+
+Un-approval window: between picking `Approve` and the executor actually
+committing rows, the operator may revoke approval. Post-commit, revocation
+becomes a correction proposal, not a revocation.
+
+### Small textual edits
+
+When the operator picks `Request changes` with a small textual edit (e.g.,
+"change the concept code to `EFFECTIVE_YIELD`"), the system applies the edit
+to the in-memory proposal and runs a uniqueness pre-check against the staging
+database for every column the schema marks UNIQUE that was touched. The
+reviewers do not re-run for textual edits.
+
+If no collision is detected, the updated summary is re-rendered and the gate
+picker is re-issued.
+
+If a collision is detected, the operator is offered a structured three-way
+choice:
+
+- pick a different code (returns to the small-edit subflow)
+- treat the existing series as wrong and branch into the Gate 2
+  dangerous-correction flow
+- cancel the change and keep the original proposal
+
+Structural edits (changes to series methodology, hierarchy edges, selector
+configuration, etc.) route back through the full drafter and reviewer cycle,
+not the small-edit subflow.
+
+## Skill loading
+
+Domain knowledge lives in narrow, single-purpose skills under `docs/skills/`.
+Skills are lazy-loaded into LLM context per call, driven by state-side
+triggers, not statically per role.
+
+Each node declares a small `skill_triggers` map of `(state_predicate,
+skill_id)` pairs. Before each LLM call, the node walks its triggers, evaluates
+each predicate against current graph state, and assembles its prompt as the
+role's base system prompt plus the selected skill bodies. A node working on a
+flat single-series onboarding may load zero skills; a node working on a
+candidate hierarchy enrichment loads the hierarchy and concept-boundary
+skills.
+
+This is the operational form of the broader principle in
+`docs/architecture.md`: helpers and skills must stay narrow and
+context-efficient. No node should carry domain context it does not currently
+need.
+
+A skill is domain knowledge, not procedural instructions. A skill explains
+*what makes a hierarchy edge same-concept*; it does not say "first do X, then
+do Y." Procedural orchestration is the graph's job, not the skill's.
+
+## Script lifecycle
+
+Most new feeds need no Python: an existing `selector_type` covers the provider
+and the agent produces only a `selector_config` plus catalog rows. Custom
+Python is required only when the provider's request encoding, response shape,
+or extraction semantics fall outside the existing selector registry.
+
+When custom Python is required:
+
+1. The script drafter writes a proposed selector extension to
+   `agent_workspace/proposed_selectors/<session_id>/` at the repo root. This
+   directory is gitignored. The main codebase is never touched directly by
+   the agent.
+2. The validator runs the sandboxed selector against a probe payload and
+   reports parsed observations.
+3. The selector reviewer reviews the diff against
+   `skill-ingestion-selector-conventions` and surfaces findings.
+4. Gate 1 approves catalog rows and the proposed selector as one bundle.
+5. The executor's `apply_catalog` node promotes the sandboxed selector into
+   `src/macro_foundry/ingestion/runtime/selectors/<name>.py`, registers it,
+   and runs the relevant tests as part of the promotion step.
+
+Hard invariants:
+
+- the agent must never run `git commit` or `git push`
+- the agent must never modify files under `src/` outside the explicit
+  promotion step
+- the operator is the only commit author; promotion of a selector into the
+  runtime is an explicit operator-approved action, not a side effect
 
 ## Hierarchy enrichment review
 
@@ -181,8 +340,10 @@ bootstrap/backfill run, not as an ordinary incremental refresh.
 
 Requirements:
 
-- run first in the test database
-- monitor the run rather than fire-and-forget
+- run first in the staging database (see `docs/environments.md`); never in
+  `macrodb_test`, which is pytest-only
+- the trigger and monitor steps are separate graph nodes so the monitor is
+  resumable across CLI session pauses
 - treat the first run as an initial full-history or broad backfill ingest,
   ideally as far back as the source supports
 - tolerate provider coverage starting later than the requested backfill date
@@ -228,14 +389,14 @@ repair flow, not in scheduled or manual refresh execution.
 Promotion beyond the test-approved onboarding package is intentionally out of
 scope for this document.
 
-`dev -> prod` should be handled later as a separate outer deployment workflow or
-promotion graph.
+`staging -> prod` should be handled later as a separate outer deployment
+workflow or promotion graph.
 
 This document stops at:
 
-- approved catalog/feed setup in `test`
-- a monitored initial test ingestion
-- human review of the test result
+- approved catalog/feed setup in `staging`
+- a monitored initial ingestion run in `staging`
+- human review of the staging-run outcome
 
 ## Output artifact
 
@@ -250,48 +411,75 @@ That package is the handoff boundary between:
 Minimum contents:
 
 - approved proposal summary
-- the canonical rows created or updated in `test`
-- reviewer findings, flags, and final status
+- the canonical rows created or updated in `staging`
+- reviewer findings, flags, and final status (governance, data correctness,
+  selector code)
 - first-run ingestion summary
 - warnings or tolerated issues recorded during the initial backfill
 - explicit status that the package is `test-approved`
+- back-references to the originating LangGraph `thread_id` and the
+  `change_proposals.id` row that records the approved change set
 
 ## LangGraph fit
 
-This workflow is a graph, not a simple linear chain.
+This workflow is a state machine, not a chain of events. Conditional edges
+between nodes are driven by the state dict (proposal confidence, ambiguity
+flags, dangerous-correction flag, review cycle count, gate status, first-run
+outcome), not by fixed arrows.
 
-Why:
+Node inventory (v1):
 
-- reviewer may reject and send back for refinement
-- ambiguity may hold the flow in proposal space
-- the first ingestion run needs monitoring and possible adaptive handling
-- dangerous corrections need a different branch from ordinary onboarding
-- human approval interrupts are part of the design
+- `research` — folds intake; reads provider docs, runs web search and probe
+  fetches, populates `source_summary` and `existing_catalog_hits`
+- `draft_proposal` — produces catalog and feed-member draft
+- `draft_script` — only when `extraction_mode == "custom_python"`, writes to
+  sandbox
+- `validate_script` — executes the selector against a probe payload
+- `governance_review`, `data_correctness_review`, `selector_review` —
+  parallel reviewers
+- `gate_1_wait` — interrupt, awaits structured approval
+- `approval_parse` — classifies user reply via the structured picker; extracts
+  edit instructions inside the `Request changes` branch
+- `apply_small_edit` — runs uniqueness pre-check on touched UNIQUE columns,
+  branches on collision
+- `apply_catalog` — transactional catalog write and selector promotion
+- `trigger_first_run` — fires the new feed
+- `monitor_first_run` — resumable polling to terminal status
+- `test_review` — synthesizes the first-run outcome
+- `emit_package` — writes the durable test-approved onboarding package
+- `dangerous_correction_plan` — impact analysis and repair drafting
+- `abort` — terminal node with reason
 
-Recommended node classes:
-
-- source research
-- DB gap check
-- probe fetch and normalization
-- proposal drafting
-- review
-- human approval wait
-- approved apply
-- first-run monitoring
-- test-result review
-- onboarding-package emit
-- dangerous correction planning
+Refinements to this inventory are expected as the implementation matures and
+should be captured as ADR-level updates when they affect role boundaries or
+gate semantics.
 
 ## Implementation note
 
-The future implementation will likely benefit from MCP access to Postgres so
-the agents can inspect existing catalog state without loading broad application
-context.
+The implementation is a LangGraph state machine driven by a chat-style Typer
+CLI. The CLI runs as a foreground process and persists graph state via
+LangGraph's `PostgresSaver` against a `langgraph` schema in the same Postgres
+database that hosts `macrodb`. There is no daemon; pause/resume is handled by
+the checkpointer and an `--resume <session-id>` flag.
 
-Helpers or skills should stay narrow and context-efficient. Prefer small units
-such as catalog lookup, proposal drafting, review, and correction impact
-analysis over one giant onboarding prompt.
+Agents reach macrodb only through a custom `macrodb-mcp` server with a
+narrow, semantic tool surface (`lookup_concept`, `lookup_family`,
+`find_sibling_series`, `propose_create_series`, `apply_approved_proposal`,
+`list_selector_types`, `get_selector_schema`, `validate_selector_config`,
+`trigger_feed_execution`, etc.). Read-only and write-enabled MCP instances are
+served from the same codebase but bind different tool subsets, so the
+read-only reviewer role cannot reach a write tool by mistake. Generic Postgres
+MCPs that expose raw SQL are explicitly rejected for this purpose.
+
+Skills are Markdown documents under `docs/skills/`, lazy-loaded per LLM call
+based on state-side triggers. They are domain knowledge, not procedural
+instructions.
+
+Per-role LLM configuration lives in `src/macro_foundry/agent/roles.py` as
+typed `RoleConfig` objects. Within-role tiering (e.g., a quick scan call vs. a
+deep reasoning call inside the same role) is expressed via the role's
+`models_by_task` map and a `task_hint` at the call site.
 
 The likely next workflow layer after this document is a separate deployment or
-promotion graph for moving a test-approved onboarding package into later
-environments.
+promotion graph for moving a test-approved onboarding package from `staging`
+into `prod`.
