@@ -118,6 +118,20 @@ Examples:
 - `docs(agents): clarify two-role database rule for migrations`
 - `test(api): cover latest_observations route with vintage revisions`
 
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in this repo's GitHub Issues. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The repo uses the default Pocock triage label vocabulary. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This is a single-context repo with one root `CONTEXT.md` and root `docs/adr/`. See `docs/agents/domain.md`.
+
 ## Skills (Pocock)
 
 Installed via `npx skills@latest add mattpocock/skills`. Use them where they fit:
@@ -140,3 +154,17 @@ need surfaces.
 - When the user is right and you were wrong, concede explicitly and move on.
 - Push back when the user is wrong, with reasoning, but do not litigate to the death.
 - Don't suggest features outside the current phase unless asked.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues for this repo. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the default Pocock label mapping. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context repo with root `CONTEXT.md` and `docs/adr/`. See `docs/agents/domain.md`.
