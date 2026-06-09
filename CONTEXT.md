@@ -80,7 +80,8 @@ code; see `series_sources` for provider mappings). `code` is globally UNIQUE.
 
 A series has `origin_type` of `ingested`, `derived`, or `both`:
 - **Ingested** — observations come from one or more external providers via
-  `series_sources` and `ingestion_feeds`.
+  `series_sources`, request-level `ingestion_feeds`, and
+  `ingestion_feed_members`.
 - **Derived** — observations are computed from other series per `derived_series`
   and `derivation_inputs`.
 - **Both** — rare; covers cases where ingestion is the primary source but
@@ -210,14 +211,17 @@ provider" namespace. External codes are uniquely scoped within a catalog.
 ### Series source
 
 The mapping from one of our `series` to one provider catalog's representation
-of it. Contains the `external_code` (provider's identifier, e.g. `NY.GDP.MKTP.CD`
-in WDI or `CPIAUCSL` in FRED), an optional `external_name`, a `priority`
-(lower = preferred when multiple providers offer the same series), and an
-optional `value_transform` (a JSONB recipe like `{"op": "divide", "by": 100}`
-for converting the provider's native scale to ours).
+of it. Contains the optional `external_code` (provider identifier, e.g.
+`NY.GDP.MKTP.CD` in WDI or `CPIAUCSL` in FRED), an optional `external_name`,
+an optional human-facing `ref_url`, a `priority` (lower = preferred when
+multiple providers offer the same series), and an optional `value_transform`
+(a JSONB recipe like `{"op": "divide", "by": 100}` for converting the
+provider's native scale to ours).
 
-`UNIQUE(provider_catalog_id, external_code)` — a given catalog cannot have two
-rows for the same external code.
+`external_code` is a best-effort provider-facing locator, not the request
+execution contract. Clean providers should populate it. Messier providers may
+need structured extraction selectors on `ingestion_feed_member`, not fake
+external codes.
 
 `provider_role` describes the relationship: `primary_source` (the canonical
 publisher), `redistributor` (e.g. FRED carrying a BLS series), `harmonized`
@@ -226,18 +230,50 @@ publisher), `redistributor` (e.g. FRED carrying a BLS series), `harmonized`
 
 ### Ingestion feed
 
-The runtime configuration for actually pulling data from a `series_source`. One
-feed per source (typically). Specifies `feed_method` (`api`, `file`, or
+An ingestion feed is the runtime configuration for one upstream request shape or
+execution unit. It may populate one or more `series_sources` through
+`ingestion_feed_members`.
+
+The feed owns shared request configuration: `feed_method` (`api`, `file`, or
 `scrape`), endpoint URL, request params, response mapping, optional file path
 pattern, and optional `cron_schedule` (metadata for an external scheduler —
-**not** for `pg_cron`).
+**not** for `pg_cron`). It does not own the per-series extraction selector.
+
+### Ingestion feed member
+
+The attachment between a request-level `ingestion_feed` and one `series_source`.
+This is where the per-series extraction contract lives.
+
+Each member carries a selector shape such as `selector_type` plus structured
+`selector_config`, allowing provider series codes, dimension filters, table
+coordinates, tree paths, and other provider-specific locators without turning
+them into fixed schema columns. A member also carries active/inactive state and
+may carry execution order when deterministic processing matters.
+
+The common provider case is still simple: one feed with one active member.
+Shared table or tree requests use one feed with multiple active members.
 
 ### Ingestion run log
 
 Append-only record of every attempt to run an ingestion feed. Captures
 started/finished timestamps, status, row counts, error message, triggered_by,
-code version, runtime parameters. Linked from every `observation` produced by
-the run.
+code version, runtime parameters, and feed-level notes. It is feed-level: one
+row per execution of a request-level feed.
+
+### Ingestion run log member
+
+The per-execution outcome row for one `ingestion_feed_member` inside one
+`ingestion_run_log`.
+
+Member-level run rows capture success, failure, partial/warning outcomes,
+row counts, and selector/parsing diagnostics for the logical series attempted
+inside a shared feed execution. Active members should receive a member-level run
+row even when they write zero observations, so attempted-no-op and not-attempted
+remain distinguishable.
+
+Observations produced by ingestion should link to the member-level run row that
+created them. This is member-level provenance: a stored value points to the
+exact logical extraction attempt, not merely the shared upstream request.
 
 ## Derivation layer
 

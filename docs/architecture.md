@@ -255,6 +255,45 @@ This is **not a third-party CRUD library**. We don't trust their maintenance sta
 or their fit with SQLAlchemy 2.x async. The generator is our code, simple to read,
 simple to extend.
 
+## Ingestion model direction
+
+ADR 0010 supersedes the source-centric ingestion assumption for the next schema
+implementation slice. `ingestion_feed` is a request-level execution unit: the
+runtime configuration for one upstream request shape, not a child of one
+`series_source`.
+
+The planned schema adds `ingestion_feed_member` as the member table between a
+request-level feed and each logical `series_source` populated by that request.
+The member carries the per-series extraction selector (`selector_type` plus
+structured `selector_config`), active state, and optional execution order.
+
+`ingestion_run_log` remains feed-level and append-only: one row per execution of
+the upstream request. The planned `ingestion_run_log_member` table records
+member-level provenance for each attempted feed member, including per-member
+status, row counts, and selector/parsing diagnostics. Ingested observations
+should point to the member-level run row that produced them.
+
+The common provider shape remains one request-level feed with one active member.
+Table-style and tree-style providers use one request-level feed with multiple
+members. Do not add provider-specific code paths that hide this fan-out outside
+the data model.
+
+## Canonical series hierarchy
+
+ADR 0010 also reopens canonical `series` hierarchy work as active planned schema
+work. Hierarchy edges are part of the canonical series layer, not provider-side
+ingestion metadata.
+
+The hierarchy must support ragged depth, additive enrichment, and stored parent
+observations. Macrodb keeps parent observations as published values even when
+children exist and even when an aggregation rule is known.
+
+Do not create hidden canonical placeholder nodes solely to mirror provider
+indentation or skipped source-tree levels. A grouping node exists as a canonical
+`series` only when it is analytically meaningful or directly published by a
+source. Same-concept hierarchy edges are the default; cross-concept hierarchy
+proposals require explicit human review.
+
 ## Enum enforcement
 
 Single source of truth: Python `str, Enum` classes in `src/macro_foundry/enums/`,
@@ -326,7 +365,6 @@ Per-test transaction rollback for isolation. Seeds run once per session.
 
 These are noted so they aren't accidentally pre-empted by current choices:
 
-- **`series_composition_nodes`** for CPI baskets and budget breakdowns (deferred).
 - **Materialized `latest_observations`** if the view becomes a hot path (current
   view is a regular view; can be swapped without API changes).
 - **Cursor-based pagination on `observations`** (currently limit/offset).

@@ -89,7 +89,12 @@ async def _seed_test_database(url: str) -> None:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def migrated_test_db() -> Iterator[None]:
+def migrated_test_db(request: pytest.FixtureRequest) -> Iterator[None]:
+    selected_items = getattr(request.session, "items", ())
+    if selected_items and all(item.get_closest_marker("no_db") for item in selected_items):
+        yield
+        return
+
     original_owner_url = settings.db_owner_url
     owner_test_url = _owner_test_url()
 

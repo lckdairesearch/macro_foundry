@@ -72,8 +72,9 @@ code changes, no restructuring, no skipped tests.
   that proposes into them is later.
 - **Frontend.** No Next.js, no Tremor, no UI work. SQLAdmin is the only UI surface
   for now.
-- **Hierarchical composition trees** (the `series_composition_nodes` concept for
-  CPI basket breakdowns) — explicitly deferred.
+- **Request-level ingestion and canonical series hierarchy implementation.**
+  ADR 0010 ratifies this as active planned schema work, but this backend-skeleton
+  phase does not implement the new tables or runtime behavior.
 - **Materialized views, performance tuning, advanced indexing.** Add indexes only
   when a query justifies them, not pre-emptively.
 - **Multi-tenant features, billing, public API gateway.** Not relevant yet.

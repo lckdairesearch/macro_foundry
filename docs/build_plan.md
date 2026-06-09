@@ -385,6 +385,37 @@ before declaring the phase complete.
 
 ---
 
+## Active planned architecture work after Phase 13
+
+Issue 12 / ADR 0010 reopens request-level ingestion and canonical series
+hierarchy as active planned work for the next schema implementation slice. This
+is a clean schema redesign, not a compatibility-preserving migration around the
+current FRED bootstrap scaffolding.
+
+Planned deliverables:
+
+- redefine `ingestion_feeds` as request-level execution units instead of rows
+  owned by a single `series_source`
+- add `ingestion_feed_members` to attach feeds to logical `series_sources` and
+  hold per-series extraction selectors
+- add `ingestion_run_log_members` for member-level provenance and per-member
+  outcomes inside one feed execution
+- move ingested observation provenance to the member-level run row
+- relax `series_sources.external_code` into a nullable best-effort locator and
+  add a nullable `ref_url`
+- add canonical series hierarchy edges with ragged depth, additive enrichment,
+  stored parent observations, and no hidden canonical placeholder nodes
+- update `docs/schema/db_er.txt`, SQLAlchemy models, Alembic migrations,
+  Pydantic schemas, routes/admin as needed, seed/bootstrap code, and integration
+  tests together so V3/V4 schema docs and code do not drift
+
+Verification should use vertical slices against the real Postgres-backed test
+harness: first the fresh migration/schema surface, then one-member feed behavior,
+then shared-request partial outcomes, then observation provenance, then canonical
+hierarchy behavior.
+
+---
+
 ## What's not on this plan
 
 These are deliberately not phases, despite being important:
@@ -393,8 +424,6 @@ These are deliberately not phases, despite being important:
   after this one.
 - **The AI agent (LangGraph)** — multi-phase later.
 - **Frontend** — when the data layer is mature enough.
-- **Series composition trees** (`series_composition_nodes`) — design exists,
-  build later.
 - **Materialized views, dbt for derivations, custom auth, multi-tenant features**
   — flagged in `architecture.md` as future directions; not now.
 

@@ -39,3 +39,8 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/macro_foundry"]
+
+[tool.pytest.ini_options]
+markers = [
+    "no_db: marks tests that do not require the migrated macrodb_test harness",
+]

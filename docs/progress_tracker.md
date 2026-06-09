@@ -20,6 +20,11 @@ migration chain, seed idempotency, CRUD generator, constraint surface,
 hand-written routes, admin auth, and one end-to-end API smoke before the final
 Neon parity pass.
 
+Issue 12 has ratified request-level ingestion and canonical series hierarchy as
+active planned architecture work after Phase 13. This does not implement the new
+schema yet; it records the ADR and updates the docs so the reopened hierarchy
+work and ingestion redesign are no longer treated as deferred.
+
 ## Phase status
 
 | Phase | Title                          | Status      |
@@ -40,6 +45,30 @@ Neon parity pass.
 | 13    | Neon parity verification       | ⏳          |
 
 ## Log
+
+### [2026-06-09] Issue 12 — Request-level ingestion architecture ratified
+
+Recorded ADR 0010 for the request-level ingestion model and canonical series
+hierarchy work.
+
+Completion notes:
+
+- defined `ingestion_feed` as a request-level execution unit rather than a row
+  owned by one `series_source`
+- introduced the planned `ingestion_feed_member` and
+  `ingestion_run_log_member` roles for extraction contracts and member-level
+  provenance
+- documented that ingested observations should point to member-level run rows
+  after the schema redesign
+- reopened hierarchy work as canonical `series` hierarchy, with ragged depth,
+  additive enrichment, stored parent observations, same-concept defaults, and no
+  hidden canonical placeholder nodes
+- updated the build plan so this is active planned work after Phase 13, not a
+  deferred composition-tree idea
+
+Verification:
+
+- docs-level regression coverage added for the ADR and architecture-facing docs
 
 ### [2026-06-09] FRED runtime config wired to DB metadata + reset path added
 
