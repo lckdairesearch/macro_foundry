@@ -22,6 +22,7 @@ from macro_foundry.models import (
     Concept,
     DerivedSeries,
     IngestionFeed,
+    IngestionFeedMember,
     IngestionRunLog,
     Observation,
     Series,
@@ -177,6 +178,7 @@ async def test_fred_bootstrap_creates_curated_rows_and_run_logs(
         assert await _count_rows(session, SeriesFamilyMember) == 8
         assert await _count_rows(session, SeriesSource) == 4
         assert await _count_rows(session, IngestionFeed) == 4
+        assert await _count_rows(session, IngestionFeedMember) == 4
         assert await _count_rows(session, DerivedSeries) == 4
         assert await _count_rows(session, IngestionRunLog) == 4
         assert await _count_rows(session, ComputationRunLog) == 4
@@ -195,9 +197,13 @@ async def test_fred_bootstrap_creates_curated_rows_and_run_logs(
         assert source.provider_catalog.provider.credentials_ref == "FRED_API_KEY"
         assert source.provider_catalog.provider.base_url == "https://api.stlouisfed.org/fred"
 
-        feed = await session.scalar(
-            select(IngestionFeed).where(IngestionFeed.series_source_id == source.id),
+        feed_member = await session.scalar(
+            select(IngestionFeedMember).where(IngestionFeedMember.series_source_id == source.id),
         )
+        assert feed_member is not None
+        assert feed_member.selector_type == "fred_series_id"
+        assert feed_member.selector_config == {"series_id": "GDP"}
+        feed = await session.get(IngestionFeed, feed_member.ingestion_feed_id)
         assert feed is not None
         assert feed.cron_schedule == "TZ=America/New_York 0 8 * * *"
         assert feed.endpoint_url == "/series/observations"

@@ -206,7 +206,9 @@ which is its full database — when a provider has no meaningful sub-catalogs,
 the catalog has `is_placeholder=true`.
 
 Provider catalogs are how we organize the "what data is available from this
-provider" namespace. External codes are uniquely scoped within a catalog.
+provider" namespace. Provider-facing external codes often live in this catalog
+namespace, but macrodb treats `series_sources.external_code` as nullable,
+non-unique, best-effort metadata rather than as the extraction identity.
 
 ### Series source
 

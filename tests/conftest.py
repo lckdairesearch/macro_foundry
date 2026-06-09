@@ -28,6 +28,7 @@ TRUNCATE TABLE
     ingestion_run_logs,
     derivation_inputs,
     derived_series,
+    ingestion_feed_members,
     ingestion_feeds,
     series_sources,
     series_tags,
