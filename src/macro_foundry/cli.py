@@ -7,8 +7,12 @@ import asyncio
 import typer
 import uvicorn
 
-from macro_foundry.bootstrap import BootstrapDatabaseTarget, run_fred_us_macro_bootstrap
-from macro_foundry.db import AsyncSessionLocal
+from macro_foundry.bootstrap import (
+    DatabaseTarget,
+    reset_fred_us_macro_bootstrap,
+    run_fred_us_macro_bootstrap,
+)
+from macro_foundry.db import AsyncSessionLocal, database_url_for_target
 from macro_foundry.seed import parse_seed_targets, reset_seed_tables, run_seed
 
 
@@ -38,6 +42,16 @@ async def _seed_database(
         except Exception:
             await session.rollback()
             raise
+
+
+async def _bootstrap_database(
+    *,
+    database: DatabaseTarget,
+    reset: bool,
+) -> object:
+    if reset:
+        return await reset_fred_us_macro_bootstrap(database=database)
+    return await run_fred_us_macro_bootstrap(database=database)
 
 
 @app.command("seed")
@@ -95,6 +109,11 @@ def serve(
         max=65535,
         help="Port to bind the API server to.",
     ),
+    database: DatabaseTarget = typer.Option(
+        default=DatabaseTarget.APP,
+        case_sensitive=False,
+        help="Target the app or test database.",
+    ),
     reload: bool = typer.Option(
         default=True,
         help="Enable auto-reload for local development.",
@@ -102,29 +121,74 @@ def serve(
 ) -> None:
     """Start the FastAPI application with development defaults."""
 
+    if database is DatabaseTarget.APP:
+        uvicorn.run(
+            "macro_foundry.backend.main:app",
+            host=host,
+            port=port,
+            reload=reload,
+        )
+        return
+
+    from macro_foundry.backend.main import create_app
+
     uvicorn.run(
-        "macro_foundry.backend.main:app",
+        create_app(database_url=database_url_for_target(database)),
         host=host,
         port=port,
-        reload=reload,
+        reload=False,
     )
 
 
 @bootstrap_app.command("fred-us-macro")
 def bootstrap_fred_us_macro(
-    database: BootstrapDatabaseTarget = typer.Option(
-        default=BootstrapDatabaseTarget.APP,
+    database: DatabaseTarget = typer.Option(
+        default=DatabaseTarget.APP,
         case_sensitive=False,
         help="Target the app or test database.",
+    ),
+    reset: bool = typer.Option(
+        default=False,
+        help="Delete the curated FRED preset rows instead of bootstrapping them.",
+    ),
+    confirm: bool = typer.Option(
+        default=False,
+        help="Required with --reset because the reset path is destructive.",
     ),
 ) -> None:
     """Bootstrap the curated first-pass FRED U.S. macro preset."""
 
+    if reset and not confirm:
+        raise typer.BadParameter("--reset requires --confirm")
+
     try:
-        summary = asyncio.run(run_fred_us_macro_bootstrap(database=database))
+        summary = asyncio.run(
+            _bootstrap_database(
+                database=database,
+                reset=reset,
+            ),
+        )
     except ValueError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=2) from exc
+
+    if reset:
+        typer.echo(f"database={summary.database.value} reset=fred-us-macro")
+        typer.echo(
+            "deleted "
+            f"observations={summary.observations_deleted} "
+            f"ingestion_run_logs={summary.ingestion_run_logs_deleted} "
+            f"computation_run_logs={summary.computation_run_logs_deleted} "
+            f"derivation_inputs={summary.derivation_inputs_deleted} "
+            f"derived_series={summary.derived_series_deleted} "
+            f"ingestion_feeds={summary.ingestion_feeds_deleted} "
+            f"series_sources={summary.series_sources_deleted} "
+            f"family_members={summary.family_members_deleted} "
+            f"series={summary.series_deleted} "
+            f"families={summary.families_deleted} "
+            f"concepts={summary.concepts_deleted}",
+        )
+        return
 
     typer.echo(f"database={summary.database.value} run_date={summary.run_date.isoformat()}")
     for result in summary.raw_imports:

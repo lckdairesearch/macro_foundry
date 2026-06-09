@@ -41,6 +41,95 @@ Neon parity pass.
 
 ## Log
 
+### [2026-06-09] FRED runtime config wired to DB metadata + reset path added
+
+Refined the FRED bootstrap so runtime endpoint and credential resolution now
+align with the catalog metadata instead of being duplicated in Python defaults.
+
+Completion notes:
+
+- wired the FRED runtime to resolve `providers.credentials_ref` through
+  settings as an env-secret handle, keeping secrets out of the database while
+  letting the provider row declare which credential key to use
+- normalized the seeded FRED provider metadata so `providers.base_url` is the
+  provider root (`https://api.stlouisfed.org/fred`) and the feed stores the
+  relative observations path (`/series/observations`)
+- updated the FRED runner so observation requests are built from the feed row,
+  and metadata requests are derived from that feed path instead of being
+  hard-coded separately in the runner
+- removed the duplicated `series_id` storage from feed `request_params`; the
+  runtime now continues to use `series_sources.external_code` as the canonical
+  provider-side series identifier
+- added `macrodb bootstrap fred-us-macro --reset --confirm` so curated FRED
+  bootstrap rows can be removed from either `app` or `test` after inspection,
+  while intentionally preserving the shared seeded provider/provider-catalog
+  baseline
+- extended integration coverage to assert the DB-driven runtime config and the
+  reset behavior end-to-end against the `macrodb_test` harness
+
+Verification:
+
+- `uv run ruff check src/macro_foundry/config.py src/macro_foundry/seed/data/providers.py src/macro_foundry/ingestion/providers/fred.py src/macro_foundry/ingestion/runners/fred_series.py src/macro_foundry/bootstrap/fred_us_macro.py src/macro_foundry/bootstrap/__init__.py src/macro_foundry/cli.py tests/test_fred_bootstrap.py`
+  exited 0
+- `uv run pytest tests/test_fred_bootstrap.py tests/test_seed.py tests/test_app_factory.py -q`
+  exited 0 with `8 passed`
+
+### [2026-06-09] Interactive series onboarding workflow documented
+
+Documented the new gated workflow for onboarding sources and canonical series as
+an interactive multi-agent process instead of a single autonomous import step.
+
+Completion notes:
+
+- added `docs/series_onboarding_workflow.md` to separate onboarding workflow
+  design from `series.code` naming governance
+- added `docs/series_onboarding_workflow_visualization.html` as a standalone
+  visual map of the graph, gates, retries, and output artifact
+- kept `docs/series_catalog_governance.md` focused on canonical identity,
+  default variants, ambiguity handling for code creation, and correction
+  discipline for published series
+- added glossary support in `CONTEXT.md` for `publication boundary` and
+  `default variant`
+- recorded the normal path as researcher -> reviewer -> human gate -> executor,
+  with reviewer-controlled retry loops capped at 3
+- scoped the onboarding workflow to stop at a monitored initial test-database
+  backfill plus human review of the test outcome
+- noted `dev -> prod` promotion as a separate outer workflow to design later
+
+Deviation note:
+
+- this is workflow/governance design only; no LangGraph or MCP implementation
+  has been added yet
+
+Verification:
+
+- documentation now exists in committed repo files and is ready to guide a
+  later orchestration implementation
+
+### [2026-06-09] Test-targeted app serving for SQLAdmin inspection
+
+Added a runtime app-factory path so the FastAPI app and SQLAdmin can be pointed
+at `macrodb_test` directly for inspection after running the FRED bootstrap.
+
+Completion notes:
+
+- added shared runtime database-target resolution in `src/macro_foundry/db/`
+  so CLI workflows can target `app` or `test` consistently
+- updated the app construction path so `create_app(database_url=...)` can mount
+  the API and SQLAdmin against a non-default engine while overriding the shared
+  `get_session` dependency to match
+- extended `macrodb serve` with `--database {app|test}` so `macrodb_test` can
+  be viewed in SQLAdmin without manually rewriting `MACRODB_APP_URL`
+- added focused app-factory coverage to confirm the test-targeted app binds the
+  overridden session dependency and SQLAdmin engine to `macrodb_test`
+
+Verification:
+
+- `uv run ruff check src/macro_foundry/backend/main.py src/macro_foundry/db/session.py src/macro_foundry/cli.py tests/test_app_factory.py tests/test_fred_bootstrap.py`
+  exited 0
+- `uv run pytest tests/test_fred_bootstrap.py tests/test_app_factory.py tests/test_seed.py -q`
+  exited 0 with `7 passed`
+
 ### [2026-06-09] Series-code governance clarified for compound variants
 
 Refined the catalog-governance guidance so edge-case sibling variants can be

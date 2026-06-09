@@ -10,7 +10,11 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from macro_foundry.bootstrap import BootstrapDatabaseTarget, run_fred_us_macro_bootstrap
+from macro_foundry.bootstrap import (
+    DatabaseTarget,
+    reset_fred_us_macro_bootstrap,
+    run_fred_us_macro_bootstrap,
+)
 from macro_foundry.enums import Frequency
 from macro_foundry.ingestion.providers import FredObservation, FredSeriesMetadata
 from macro_foundry.models import (
@@ -39,8 +43,16 @@ class FakeFredClient:
         self.metadata_by_series_id = metadata_by_series_id
         self.observations_by_series_id = observations_by_series_id
         self.observation_starts: dict[str, list[date | None]] = defaultdict(list)
+        self.metadata_endpoints: dict[str, list[str]] = defaultdict(list)
+        self.observation_endpoints: dict[str, list[str]] = defaultdict(list)
 
-    async def fetch_series_metadata(self, series_id: str) -> FredSeriesMetadata:
+    async def fetch_series_metadata(
+        self,
+        series_id: str,
+        *,
+        endpoint_path: str = "/series",
+    ) -> FredSeriesMetadata:
+        self.metadata_endpoints[series_id].append(endpoint_path)
         return self.metadata_by_series_id[series_id]
 
     async def fetch_series_observations(
@@ -48,8 +60,10 @@ class FakeFredClient:
         series_id: str,
         *,
         observation_start: date | None = None,
+        endpoint_path: str = "/series/observations",
     ) -> list[FredObservation]:
         self.observation_starts[series_id].append(observation_start)
+        self.observation_endpoints[series_id].append(endpoint_path)
         rows = self.observations_by_series_id[series_id]
         if observation_start is None:
             return list(rows)
@@ -144,13 +158,13 @@ async def test_fred_bootstrap_creates_curated_rows_and_run_logs(
     client = _build_fake_client()
 
     summary = await run_fred_us_macro_bootstrap(
-        database=BootstrapDatabaseTarget.TEST,
+        database=DatabaseTarget.TEST,
         session_factory=test_session_factory,
         client=client,
         run_date=date(2026, 6, 9),
     )
 
-    assert summary.database is BootstrapDatabaseTarget.TEST
+    assert summary.database is DatabaseTarget.TEST
     assert len(summary.raw_imports) == 4
     assert len(summary.derived_imports) == 4
     assert sum(result.rows_written for result in summary.raw_imports) == 18
@@ -178,13 +192,19 @@ async def test_fred_bootstrap_creates_curated_rows_and_run_logs(
         )
         assert source is not None
         assert source.external_name == "Gross Domestic Product"
+        assert source.provider_catalog.provider.credentials_ref == "FRED_API_KEY"
+        assert source.provider_catalog.provider.base_url == "https://api.stlouisfed.org/fred"
 
         feed = await session.scalar(
             select(IngestionFeed).where(IngestionFeed.series_source_id == source.id),
         )
         assert feed is not None
         assert feed.cron_schedule == "TZ=America/New_York 0 8 * * *"
-        assert feed.request_params == {"series_id": "GDP"}
+        assert feed.endpoint_url == "/series/observations"
+        assert feed.request_params is None
+
+    assert client.metadata_endpoints["GDP"] == ["/series"]
+    assert client.observation_endpoints["GDP"] == ["/series/observations"]
 
 
 @pytest.mark.asyncio
@@ -194,13 +214,13 @@ async def test_fred_bootstrap_rerun_skips_unchanged_snapshot_rows(
     client = _build_fake_client()
 
     await run_fred_us_macro_bootstrap(
-        database=BootstrapDatabaseTarget.TEST,
+        database=DatabaseTarget.TEST,
         session_factory=test_session_factory,
         client=client,
         run_date=date(2026, 6, 9),
     )
     second_summary = await run_fred_us_macro_bootstrap(
-        database=BootstrapDatabaseTarget.TEST,
+        database=DatabaseTarget.TEST,
         session_factory=test_session_factory,
         client=client,
         run_date=date(2026, 6, 10),
@@ -225,7 +245,7 @@ async def test_fred_bootstrap_rerun_inserts_only_changed_and_new_rows(
     client = _build_fake_client()
 
     await run_fred_us_macro_bootstrap(
-        database=BootstrapDatabaseTarget.TEST,
+        database=DatabaseTarget.TEST,
         session_factory=test_session_factory,
         client=client,
         run_date=date(2026, 6, 9),
@@ -248,7 +268,7 @@ async def test_fred_bootstrap_rerun_inserts_only_changed_and_new_rows(
     ]
 
     summary = await run_fred_us_macro_bootstrap(
-        database=BootstrapDatabaseTarget.TEST,
+        database=DatabaseTarget.TEST,
         session_factory=test_session_factory,
         client=client,
         run_date=date(2026, 6, 10),
@@ -300,3 +320,35 @@ async def test_fred_bootstrap_rerun_inserts_only_changed_and_new_rows(
             date(2026, 2, 1),
             date(2026, 3, 1),
         ]
+
+
+@pytest.mark.asyncio
+async def test_fred_bootstrap_reset_removes_curated_preset_rows_only(
+    test_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    client = _build_fake_client()
+
+    await run_fred_us_macro_bootstrap(
+        database=DatabaseTarget.TEST,
+        session_factory=test_session_factory,
+        client=client,
+        run_date=date(2026, 6, 9),
+    )
+
+    reset_summary = await reset_fred_us_macro_bootstrap(
+        database=DatabaseTarget.TEST,
+        session_factory=test_session_factory,
+    )
+
+    assert reset_summary.observations_deleted == 26
+    assert reset_summary.series_deleted == 8
+
+    async with test_session_factory() as session:
+        assert await _count_rows(session, Observation) == 0
+        assert await _count_rows(session, IngestionRunLog) == 0
+        assert await _count_rows(session, ComputationRunLog) == 0
+        assert await _count_rows(session, IngestionFeed) == 0
+        assert await _count_rows(session, SeriesSource) == 0
+        assert await _count_rows(session, Series) == 0
+        assert await _count_rows(session, SeriesFamily) == 0
+        assert await _count_rows(session, Concept) == 0

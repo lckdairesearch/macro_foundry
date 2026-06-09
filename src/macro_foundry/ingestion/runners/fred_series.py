@@ -22,6 +22,7 @@ _DEFAULT_OVERLAPS: dict[Frequency, tuple[str, int]] = {
     Frequency.WEEKLY: ("weeks", 12),
     Frequency.DAILY: ("days", 35),
 }
+_DEFAULT_FRED_OBSERVATIONS_ENDPOINT = "/series/observations"
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +56,8 @@ async def import_fred_latest_snapshot(
 
     started_at = datetime.now(timezone.utc)
     params = ingestion_feed.request_params or {}
+    observations_endpoint = _resolve_observations_endpoint(ingestion_feed)
+    metadata_endpoint = _resolve_metadata_endpoint(observations_endpoint)
     observation_start = await _resolve_observation_start(
         session,
         series_id=series_id,
@@ -63,7 +66,10 @@ async def import_fred_latest_snapshot(
     )
 
     try:
-        metadata = await client.fetch_series_metadata(external_code)
+        metadata = await client.fetch_series_metadata(
+            external_code,
+            endpoint_path=metadata_endpoint,
+        )
         if metadata.frequency is not frequency:
             raise ValueError(
                 f"FRED frequency {metadata.frequency.value!r} for {external_code!r} does not match "
@@ -73,6 +79,7 @@ async def import_fred_latest_snapshot(
         fetched_rows = await client.fetch_series_observations(
             external_code,
             observation_start=observation_start,
+            endpoint_path=observations_endpoint,
         )
         latest_by_period = await _load_latest_observations_by_period(
             session,
@@ -264,6 +271,18 @@ def _build_parameters(
     if observation_start is not None:
         payload["observation_start"] = observation_start.isoformat()
     return payload
+
+
+def _resolve_observations_endpoint(ingestion_feed: IngestionFeed) -> str:
+    if ingestion_feed.endpoint_url:
+        return ingestion_feed.endpoint_url
+    return _DEFAULT_FRED_OBSERVATIONS_ENDPOINT
+
+
+def _resolve_metadata_endpoint(observations_endpoint: str) -> str:
+    if observations_endpoint.endswith("/observations"):
+        return observations_endpoint[: -len("/observations")]
+    return "/series"
 
 
 __all__ = ["FredImportOutcome", "import_fred_latest_snapshot"]

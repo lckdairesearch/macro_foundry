@@ -35,7 +35,12 @@ class FredObservation:
 class FredClientProtocol(Protocol):
     """Protocol for the FRED client used in orchestration and tests."""
 
-    async def fetch_series_metadata(self, series_id: str) -> FredSeriesMetadata:
+    async def fetch_series_metadata(
+        self,
+        series_id: str,
+        *,
+        endpoint_path: str = "/series",
+    ) -> FredSeriesMetadata:
         """Fetch normalized metadata for one FRED series."""
 
     async def fetch_series_observations(
@@ -43,6 +48,7 @@ class FredClientProtocol(Protocol):
         series_id: str,
         *,
         observation_start: date | None = None,
+        endpoint_path: str = "/series/observations",
     ) -> list[FredObservation]:
         """Fetch latest-snapshot observations for one FRED series."""
 
@@ -74,10 +80,15 @@ class FredClient:
         if self._owns_client:
             await self._client.aclose()
 
-    async def fetch_series_metadata(self, series_id: str) -> FredSeriesMetadata:
+    async def fetch_series_metadata(
+        self,
+        series_id: str,
+        *,
+        endpoint_path: str = "/series",
+    ) -> FredSeriesMetadata:
         """Fetch normalized metadata from ``/series``."""
 
-        payload = await self._get_json("/series", {"series_id": series_id})
+        payload = await self._get_json(endpoint_path, {"series_id": series_id})
         series_rows = payload.get("seriess", [])
         if len(series_rows) != 1:
             raise ValueError(f"FRED returned {len(series_rows)} metadata rows for {series_id!r}")
@@ -96,6 +107,7 @@ class FredClient:
         series_id: str,
         *,
         observation_start: date | None = None,
+        endpoint_path: str = "/series/observations",
     ) -> list[FredObservation]:
         """Fetch latest-snapshot observations from ``/series/observations``."""
 
@@ -103,7 +115,7 @@ class FredClient:
         if observation_start is not None:
             params["observation_start"] = observation_start.isoformat()
 
-        payload = await self._get_json("/series/observations", params)
+        payload = await self._get_json(endpoint_path, params)
         return [
             FredObservation(
                 period_anchor=date.fromisoformat(str(row["date"])),

@@ -2,38 +2,82 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
+from enum import Enum
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from macro_foundry.config import settings
 
 
-async_engine = create_async_engine(
-    settings.db.app_url,
-    pool_pre_ping=True,
-    pool_recycle=300,
-    pool_size=5,
-    max_overflow=10,
-)
+class DatabaseTarget(str, Enum):
+    """Named runtime database targets supported by CLI workflows."""
 
-AsyncSessionLocal = async_sessionmaker(
-    bind=async_engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-    autoflush=False,
-)
+    APP = "app"
+    TEST = "test"
 
 
-async def get_session() -> AsyncIterator[AsyncSession]:
-    """Yield one async session per request and clean it up safely."""
+def database_url_for_target(target: DatabaseTarget) -> str:
+    """Resolve one of the supported runtime database targets."""
 
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        except Exception:
-            await session.rollback()
-            raise
+    if target is DatabaseTarget.TEST:
+        return settings.db.test_url
+    return settings.db.app_url
 
 
-__all__ = ["AsyncSessionLocal", "async_engine", "get_session"]
+def create_async_engine_for_url(url: str) -> AsyncEngine:
+    """Create an async engine with the project's standard settings."""
+
+    return create_async_engine(
+        url,
+        pool_pre_ping=True,
+        pool_recycle=300,
+        pool_size=5,
+        max_overflow=10,
+    )
+
+
+def create_session_factory(
+    engine: AsyncEngine,
+) -> async_sessionmaker[AsyncSession]:
+    """Create an async sessionmaker with the project's standard settings."""
+
+    return async_sessionmaker(
+        bind=engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autoflush=False,
+    )
+
+
+def build_session_dependency(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> Callable[[], AsyncIterator[AsyncSession]]:
+    """Build a FastAPI dependency that yields sessions from one factory."""
+
+    async def _get_session() -> AsyncIterator[AsyncSession]:
+        async with session_factory() as session:
+            try:
+                yield session
+            except Exception:
+                await session.rollback()
+                raise
+
+    return _get_session
+
+
+async_engine = create_async_engine_for_url(settings.db.app_url)
+AsyncSessionLocal = create_session_factory(async_engine)
+get_session = build_session_dependency(AsyncSessionLocal)
+
+
+__all__ = [
+    "AsyncSessionLocal",
+    "DatabaseTarget",
+    "async_engine",
+    "build_session_dependency",
+    "create_async_engine_for_url",
+    "create_session_factory",
+    "database_url_for_target",
+    "get_session",
+]

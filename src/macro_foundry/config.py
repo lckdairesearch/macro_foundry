@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from functools import cached_property
 from typing import Literal, cast
 
@@ -110,6 +111,27 @@ class Settings(BaseSettings):
     @cached_property
     def api(self) -> ApiSettings:
         return ApiSettings(bearer_token=self.api_bearer_token)
+
+    def resolve_credential_ref(self, credentials_ref: str | None) -> str | None:
+        """Resolve an indirect secret handle stored in the database."""
+
+        if credentials_ref is None:
+            return None
+        resolved = os.getenv(credentials_ref)
+        if resolved:
+            return resolved
+        for field_name, field_info in self.__class__.model_fields.items():
+            if field_info.validation_alias != credentials_ref:
+                continue
+            value = getattr(self, field_name)
+            if value is None:
+                return None
+            if isinstance(value, SecretStr):
+                return value.get_secret_value()
+            if isinstance(value, str) and value:
+                return value
+            return None
+        return None
 
 
 def _configure_logging(level: LogLevel) -> logging.Logger:

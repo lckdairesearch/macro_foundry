@@ -5,15 +5,20 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal
-from enum import Enum
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from macro_foundry.config import settings
+from macro_foundry.db import (
+    DatabaseTarget,
+    create_async_engine_for_url,
+    create_session_factory,
+    database_url_for_target,
+)
 from macro_foundry.enums import (
     ComputationRunStatus,
     ComputationTriggeredBy,
@@ -44,6 +49,7 @@ from macro_foundry.models import (
     DerivedSeries,
     Geography,
     IngestionFeed,
+    IngestionRunLog,
     Observation,
     Provider,
     ProviderCatalog,
@@ -68,19 +74,13 @@ from macro_foundry.seed._shared import assign_if_changed
 
 _FRED_PROVIDER_NAME = "USA FRED"
 _FRED_CATALOG_NAME = "FRED default catalog"
-_FRED_ENDPOINT_URL = "https://api.stlouisfed.org/fred/series/observations"
+_FRED_CREDENTIALS_REF = "FRED_API_KEY"
+_FRED_ENDPOINT_PATH = "/series/observations"
 _FRED_DOC_URL = "https://fred.stlouisfed.org/docs/api/fred/"
 _FRED_HOMEPAGE_URL = "https://fred.stlouisfed.org/"
-_FRED_BASE_URL = "https://api.stlouisfed.org/"
+_FRED_BASE_URL = "https://api.stlouisfed.org/fred"
 _FRED_SCHEDULE = "TZ=America/New_York 0 8 * * *"
 _YOY_CODE_REF = "macro_foundry.bootstrap.fred_us_macro.compute_yoy_growth"
-
-
-class BootstrapDatabaseTarget(str, Enum):
-    """Supported bootstrap database targets."""
-
-    APP = "app"
-    TEST = "test"
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,10 +133,28 @@ class DerivedComputationOutcome:
 class FredUsMacroBootstrapResult:
     """End-to-end bootstrap summary returned to the CLI and tests."""
 
-    database: BootstrapDatabaseTarget
+    database: DatabaseTarget
     run_date: date
     raw_imports: tuple[FredImportOutcome, ...]
     derived_imports: tuple[DerivedComputationOutcome, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class FredUsMacroResetResult:
+    """Summary of removing the curated first-pass FRED preset."""
+
+    database: DatabaseTarget
+    observations_deleted: int
+    ingestion_run_logs_deleted: int
+    computation_run_logs_deleted: int
+    derivation_inputs_deleted: int
+    derived_series_deleted: int
+    ingestion_feeds_deleted: int
+    series_sources_deleted: int
+    family_members_deleted: int
+    series_deleted: int
+    families_deleted: int
+    concepts_deleted: int
 
 
 @dataclass(slots=True)
@@ -157,6 +175,14 @@ class PreparedDerivedSeries:
     output_series: Series
     derived_series: DerivedSeries
     input_series: Series
+
+
+@dataclass(slots=True)
+class FredRuntimeConfig:
+    """Resolved runtime config for the provider-backed FRED client."""
+
+    api_key: str
+    base_url: str
 
 
 RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
@@ -293,7 +319,7 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
 
 async def run_fred_us_macro_bootstrap(
     *,
-    database: BootstrapDatabaseTarget = BootstrapDatabaseTarget.APP,
+    database: DatabaseTarget = DatabaseTarget.APP,
     session_factory: async_sessionmaker[AsyncSession] | None = None,
     client: FredClientProtocol | None = None,
     run_date: date | None = None,
@@ -302,37 +328,13 @@ async def run_fred_us_macro_bootstrap(
 
     resolved_run_date = run_date or date.today()
     code_version = _current_code_version()
-    managed_engine: AsyncEngine | None = None
+    managed_engine = None
 
     if session_factory is None:
-        managed_engine = create_async_engine(
-            _database_url(database),
-            pool_pre_ping=True,
-            pool_recycle=300,
-            pool_size=5,
-            max_overflow=10,
-        )
-        session_factory = async_sessionmaker(
-            bind=managed_engine,
-            class_=AsyncSession,
-            expire_on_commit=False,
-            autoflush=False,
-        )
+        managed_engine = create_async_engine_for_url(database_url_for_target(database))
+        session_factory = create_session_factory(managed_engine)
 
     try:
-        if client is None:
-            fred_api_key = settings.fred_api_key
-            if fred_api_key is None or not fred_api_key.get_secret_value():
-                raise ValueError("FRED_API_KEY is required for macrodb bootstrap fred-us-macro")
-            async with FredClient(api_key=fred_api_key.get_secret_value()) as fred_client:
-                return await _run_bootstrap_transaction(
-                    session_factory=session_factory,
-                    client=fred_client,
-                    database=database,
-                    run_date=resolved_run_date,
-                    code_version=code_version,
-                )
-
         return await _run_bootstrap_transaction(
             session_factory=session_factory,
             client=client,
@@ -345,11 +347,37 @@ async def run_fred_us_macro_bootstrap(
             await managed_engine.dispose()
 
 
+async def reset_fred_us_macro_bootstrap(
+    *,
+    database: DatabaseTarget = DatabaseTarget.APP,
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+) -> FredUsMacroResetResult:
+    """Delete the curated first-pass FRED preset rows while preserving provider seeds."""
+
+    managed_engine = None
+    if session_factory is None:
+        managed_engine = create_async_engine_for_url(database_url_for_target(database))
+        session_factory = create_session_factory(managed_engine)
+
+    try:
+        async with session_factory() as session:
+            try:
+                result = await _reset_bootstrap_transaction(session, database=database)
+                await session.commit()
+                return result
+            except Exception:
+                await session.rollback()
+                raise
+    finally:
+        if managed_engine is not None:
+            await managed_engine.dispose()
+
+
 async def _run_bootstrap_transaction(
     *,
     session_factory: async_sessionmaker[AsyncSession],
-    client: FredClientProtocol,
-    database: BootstrapDatabaseTarget,
+    client: FredClientProtocol | None,
+    database: DatabaseTarget,
     run_date: date,
     code_version: str | None,
 ) -> FredUsMacroBootstrapResult:
@@ -358,51 +386,64 @@ async def _run_bootstrap_transaction(
             usa = await _require_usa_geography(session)
             provider = await _upsert_fred_provider(session)
             catalog = await _upsert_fred_catalog(session, provider=provider)
-
-            prepared_raw_series: list[PreparedRawSeries] = []
-            prepared_derived_series: list[PreparedDerivedSeries] = []
-            for spec in RAW_SERIES_SPECS:
-                prepared = await _prepare_series_catalog(
-                    session,
-                    spec=spec,
-                    geography=usa,
-                    provider_catalog=catalog,
+            runtime_client = client
+            owned_client: FredClient | None = None
+            if runtime_client is None:
+                runtime_config = _resolve_fred_runtime_config(provider)
+                owned_client = FredClient(
+                    api_key=runtime_config.api_key,
+                    base_url=runtime_config.base_url,
                 )
-                prepared_raw_series.append(prepared[0])
-                prepared_derived_series.append(prepared[1])
+                runtime_client = owned_client
 
-            raw_results: list[FredImportOutcome] = []
-            for prepared in prepared_raw_series:
-                outcome = await import_fred_latest_snapshot(
-                    session,
-                    client=client,
-                    series_id=prepared.series.id,
-                    series_code=prepared.series.code,
-                    frequency=prepared.spec.frequency,
-                    external_code=prepared.spec.external_code,
-                    ingestion_feed=prepared.feed,
-                    series_source=prepared.source,
-                    run_date=run_date,
-                    code_version=code_version,
-                    triggered_by=IngestionTriggeredBy.MANUAL,
-                )
-                _sync_raw_metadata_from_fred(
-                    prepared.series,
-                    prepared.source,
-                    metadata=outcome.metadata,
-                )
-                raw_results.append(outcome)
-
-            derived_results: list[DerivedComputationOutcome] = []
-            for prepared in prepared_derived_series:
-                derived_results.append(
-                    await _compute_and_write_yoy_series(
+            try:
+                prepared_raw_series: list[PreparedRawSeries] = []
+                prepared_derived_series: list[PreparedDerivedSeries] = []
+                for spec in RAW_SERIES_SPECS:
+                    prepared = await _prepare_series_catalog(
                         session,
-                        prepared=prepared,
+                        spec=spec,
+                        geography=usa,
+                        provider_catalog=catalog,
+                    )
+                    prepared_raw_series.append(prepared[0])
+                    prepared_derived_series.append(prepared[1])
+
+                raw_results: list[FredImportOutcome] = []
+                for prepared in prepared_raw_series:
+                    outcome = await import_fred_latest_snapshot(
+                        session,
+                        client=runtime_client,
+                        series_id=prepared.series.id,
+                        series_code=prepared.series.code,
+                        frequency=prepared.spec.frequency,
+                        external_code=prepared.spec.external_code,
+                        ingestion_feed=prepared.feed,
+                        series_source=prepared.source,
                         run_date=run_date,
                         code_version=code_version,
-                    ),
-                )
+                        triggered_by=IngestionTriggeredBy.MANUAL,
+                    )
+                    _sync_raw_metadata_from_fred(
+                        prepared.series,
+                        prepared.source,
+                        metadata=outcome.metadata,
+                    )
+                    raw_results.append(outcome)
+
+                derived_results: list[DerivedComputationOutcome] = []
+                for prepared in prepared_derived_series:
+                    derived_results.append(
+                        await _compute_and_write_yoy_series(
+                            session,
+                            prepared=prepared,
+                            run_date=run_date,
+                            code_version=code_version,
+                        ),
+                    )
+            finally:
+                if owned_client is not None:
+                    await owned_client.aclose()
 
             await session.commit()
             return FredUsMacroBootstrapResult(
@@ -414,6 +455,141 @@ async def _run_bootstrap_transaction(
         except Exception:
             await session.rollback()
             raise
+
+
+async def _reset_bootstrap_transaction(
+    session: AsyncSession,
+    *,
+    database: DatabaseTarget,
+) -> FredUsMacroResetResult:
+    series_codes = _all_bootstrap_series_codes()
+    series_rows = (
+        await session.execute(
+            select(Series.id, Series.code).where(Series.code.in_(series_codes)),
+        )
+    ).all()
+    if not series_rows:
+        return FredUsMacroResetResult(
+            database=database,
+            observations_deleted=0,
+            ingestion_run_logs_deleted=0,
+            computation_run_logs_deleted=0,
+            derivation_inputs_deleted=0,
+            derived_series_deleted=0,
+            ingestion_feeds_deleted=0,
+            series_sources_deleted=0,
+            family_members_deleted=0,
+            series_deleted=0,
+            families_deleted=0,
+            concepts_deleted=0,
+        )
+
+    series_ids = {series_id for series_id, _ in series_rows}
+    raw_codes = {spec.series_code for spec in RAW_SERIES_SPECS}
+    raw_series_ids = {series_id for series_id, code in series_rows if code in raw_codes}
+    derived_output_ids = series_ids - raw_series_ids
+
+    source_ids = set(
+        (
+            await session.execute(
+                select(SeriesSource.id).where(SeriesSource.series_id.in_(raw_series_ids)),
+            )
+        ).scalars().all()
+    )
+    feed_ids = set(
+        (
+            await session.execute(
+                select(IngestionFeed.id).where(IngestionFeed.series_source_id.in_(source_ids)),
+            )
+        ).scalars().all()
+    )
+    derived_series_ids = set(
+        (
+            await session.execute(
+                select(DerivedSeries.id).where(DerivedSeries.series_id.in_(derived_output_ids)),
+            )
+        ).scalars().all()
+    )
+
+    observations_deleted = await _execute_delete(
+        session,
+        delete(Observation).where(Observation.series_id.in_(series_ids)),
+    )
+    computation_run_logs_deleted = await _execute_delete(
+        session,
+        delete(ComputationRunLog).where(ComputationRunLog.derived_series_id.in_(derived_series_ids)),
+    )
+    ingestion_run_logs_deleted = await _execute_delete(
+        session,
+        delete(IngestionRunLog).where(IngestionRunLog.ingestion_feed_id.in_(feed_ids)),
+    )
+    derivation_inputs_deleted = await _execute_delete(
+        session,
+        delete(DerivationInput).where(DerivationInput.derived_series_id.in_(derived_series_ids)),
+    )
+    derived_series_deleted = await _execute_delete(
+        session,
+        delete(DerivedSeries).where(DerivedSeries.id.in_(derived_series_ids)),
+    )
+    ingestion_feeds_deleted = await _execute_delete(
+        session,
+        delete(IngestionFeed).where(IngestionFeed.id.in_(feed_ids)),
+    )
+    series_sources_deleted = await _execute_delete(
+        session,
+        delete(SeriesSource).where(SeriesSource.id.in_(source_ids)),
+    )
+    family_members_deleted = await _execute_delete(
+        session,
+        delete(SeriesFamilyMember).where(SeriesFamilyMember.series_id.in_(series_ids)),
+    )
+    series_deleted = await _execute_delete(
+        session,
+        delete(Series).where(Series.id.in_(series_ids)),
+    )
+
+    families_deleted = 0
+    for family_code in _bootstrap_family_codes():
+        family = await session.scalar(select(SeriesFamily).where(SeriesFamily.code == family_code))
+        if family is None:
+            continue
+        has_members = await session.scalar(
+            select(SeriesFamilyMember.series_id).where(SeriesFamilyMember.family_id == family.id).limit(1),
+        )
+        if has_members is None:
+            families_deleted += await _execute_delete(
+                session,
+                delete(SeriesFamily).where(SeriesFamily.id == family.id),
+            )
+
+    concepts_deleted = 0
+    for concept_code in _bootstrap_concept_codes():
+        concept = await session.scalar(select(Concept).where(Concept.code == concept_code))
+        if concept is None:
+            continue
+        has_families = await session.scalar(
+            select(SeriesFamily.id).where(SeriesFamily.concept_id == concept.id).limit(1),
+        )
+        if has_families is None:
+            concepts_deleted += await _execute_delete(
+                session,
+                delete(Concept).where(Concept.id == concept.id),
+            )
+
+    return FredUsMacroResetResult(
+        database=database,
+        observations_deleted=observations_deleted,
+        ingestion_run_logs_deleted=ingestion_run_logs_deleted,
+        computation_run_logs_deleted=computation_run_logs_deleted,
+        derivation_inputs_deleted=derivation_inputs_deleted,
+        derived_series_deleted=derived_series_deleted,
+        ingestion_feeds_deleted=ingestion_feeds_deleted,
+        series_sources_deleted=series_sources_deleted,
+        family_members_deleted=family_members_deleted,
+        series_deleted=series_deleted,
+        families_deleted=families_deleted,
+        concepts_deleted=concepts_deleted,
+    )
 
 
 def compute_yoy_growth(*, current: Decimal, prior: Decimal) -> Decimal:
@@ -476,8 +652,7 @@ async def _prepare_series_catalog(
         payload=IngestionFeedCreate(
             series_source_id=source.id,
             feed_method=FeedMethod.API,
-            endpoint_url=_FRED_ENDPOINT_URL,
-            request_params={"series_id": spec.external_code},
+            endpoint_url=_FRED_ENDPOINT_PATH,
             response_mapping={"date_field": "date", "value_field": "value"},
             cron_schedule=_FRED_SCHEDULE,
             is_active=True,
@@ -718,6 +893,7 @@ async def _upsert_fred_provider(session: AsyncSession) -> Provider:
         homepage_url=_FRED_HOMEPAGE_URL,
         doc_url=_FRED_DOC_URL,
         base_url=_FRED_BASE_URL,
+        credentials_ref=_FRED_CREDENTIALS_REF,
         is_active=True,
     ).model_dump()
     provider = await session.scalar(select(Provider).where(Provider.name == _FRED_PROVIDER_NAME))
@@ -730,7 +906,7 @@ async def _upsert_fred_provider(session: AsyncSession) -> Provider:
     assign_if_changed(
         provider,
         payload,
-        ("alt_name", "type", "homepage_url", "doc_url", "base_url", "is_active"),
+        ("alt_name", "type", "homepage_url", "doc_url", "base_url", "credentials_ref", "is_active"),
     )
     await session.flush()
     return provider
@@ -1034,12 +1210,6 @@ def _derived_series_payload(spec: RawSeriesSpec, *, geography_id: Any) -> dict[s
     ).model_dump()
 
 
-def _database_url(database: BootstrapDatabaseTarget) -> str:
-    if database is BootstrapDatabaseTarget.TEST:
-        return settings.db.test_url
-    return settings.db.app_url
-
-
 def _current_code_version() -> str | None:
     try:
         return version("macro-foundry")
@@ -1047,10 +1217,46 @@ def _current_code_version() -> str | None:
         return None
 
 
+def _resolve_fred_runtime_config(provider: Provider) -> FredRuntimeConfig:
+    credentials_ref = provider.credentials_ref
+    api_key = settings.resolve_credential_ref(credentials_ref)
+    if api_key is None:
+        raise ValueError(
+            f"Provider {provider.name!r} requires credentials_ref {credentials_ref!r}, but no matching environment value was found",
+        )
+    return FredRuntimeConfig(
+        api_key=api_key,
+        base_url=provider.base_url or _FRED_BASE_URL,
+    )
+
+
+def _all_bootstrap_series_codes() -> tuple[str, ...]:
+    return tuple(
+        code
+        for spec in RAW_SERIES_SPECS
+        for code in (spec.series_code, spec.derived_series_code)
+    )
+
+
+def _bootstrap_family_codes() -> tuple[str, ...]:
+    return tuple(dict.fromkeys(spec.family_code for spec in RAW_SERIES_SPECS))
+
+
+def _bootstrap_concept_codes() -> tuple[str, ...]:
+    return tuple(dict.fromkeys(spec.concept_code for spec in RAW_SERIES_SPECS))
+
+
+async def _execute_delete(session: AsyncSession, statement: Any) -> int:
+    result = await session.execute(statement)
+    return int(result.rowcount or 0)
+
+
 __all__ = [
-    "BootstrapDatabaseTarget",
+    "DatabaseTarget",
     "DerivedComputationOutcome",
     "FredUsMacroBootstrapResult",
+    "FredUsMacroResetResult",
     "compute_yoy_growth",
+    "reset_fred_us_macro_bootstrap",
     "run_fred_us_macro_bootstrap",
 ]
