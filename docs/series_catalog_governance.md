@@ -24,6 +24,15 @@ when the same series is sourced from different providers or redistributors.
    genuinely different.
 6. A code should be readable by both humans and agents without consulting a
    provider manual.
+7. Not every provider-exposed qualifier must appear in the canonical code.
+8. A family may have a curated default variant whose qualifier is omitted from
+   `series.code` when that omission is unlikely to create confusion inside the
+   project.
+9. If the methodological scope is materially ambiguous, an agent should flag
+   the ambiguity and propose rather than create a new canonical series.
+10. Once a canonical series has crossed the publication boundary described in
+    `CONTEXT.md`, identity corrections are dangerous and should not be applied
+    automatically by an agent.
 
 ## Canonical code grammar
 
@@ -48,6 +57,9 @@ Rules:
 
 - Omit the variant slot only when the family has a single obvious canonical
   variant.
+- A family may also omit a qualifier for its curated default variant when the
+  project has intentionally decided that one scope is the baseline reading for
+  that family.
 - Keep slots in this order. Do not invent ad hoc reorderings.
 - Prefer short, stable tokens over prose.
 - Compound variants are allowed. When a series needs more than one qualifier,
@@ -77,6 +89,25 @@ contain underscores, such as `CURRENT_ACCOUNT_BALANCE` or
 Machine parsing of `series.code` is a convenience, not the primary source of
 truth. For structured work, prefer the explicit series columns for frequency,
 seasonal adjustment, measure, and related methodology.
+
+## Default variants and omitted qualifiers
+
+Canonical codes should capture distinctions that matter to macrodb's intended
+identity, not every peripheral distinction a provider happens to expose.
+
+This means a family may define one methodological scope as the default reading
+and omit that qualifier from `series.code`, while still modeling non-default
+siblings explicitly if they are later curated.
+
+Example shape:
+
+- if the project treats one CPI population basis as the default reading for a
+  family, the default series may remain `..._CORE_M_NSA_LEVEL`
+- a non-default sibling added later should carry explicit qualifier tokens
+
+Use this sparingly. If omitting the qualifier is likely to confuse a future
+reader or block a likely sibling that should also exist, prefer explicit
+variant tokens from the start.
 
 ## Concept vs family vs variant
 
@@ -110,6 +141,31 @@ Matching `series_family_members.variant` values might be:
 
 - `Core, one-person household basket`
 - `Core, two-or-more-person household basket`
+
+## Ambiguity rule for agents
+
+Agents should make a best-effort inference from source metadata, existing
+macrodb rows, and external fact-checking where needed. They do not need to
+over-escalate small uncertainties.
+
+But when the uncertainty affects canonical identity, the agent should stop
+before creating the `series.code` and raise a proposal instead.
+
+In those cases, the agent should remain in proposal space only. It should not
+create a draft canonical `series` row in the main catalog just to reserve or
+test a guessed identity.
+
+Examples of identity-level ambiguity:
+
+- whether a provider label refers to the family's default scope or to a
+  narrower sibling variant
+- whether two labels are true synonyms or distinct methodological variants
+- whether a qualifier is peripheral metadata or should become part of the
+  canonical variant token set
+
+In those cases, the agent should surface the ambiguity, suggest the most likely
+interpretation, and ask for approval rather than silently minting a canonical
+series.
 
 ## Provider mapping rule
 
@@ -186,6 +242,24 @@ Do not:
 - invent one-off abbreviations that are not obvious from the surrounding family
 - rely on a naive fixed-position parser that assumes concept codes never contain
   underscores
+- silently create a broad or underspecified canonical code when the source may
+  actually refer to a narrower sibling variant
+
+## Correction discipline for published series
+
+If a published canonical series is later discovered to be underspecified or
+mis-scoped, do not let an agent auto-rename it.
+
+Instead, the agent should prepare a dangerous correction proposal describing:
+
+- the suspected problem with the existing canonical identity
+- the proposed corrected code and variant scope
+- affected source mappings, feeds, observations, and derivations
+- whether the repair should be rename-in-place, supersede-and-replace, or leave
+  history as-is and route future ingestion to a new series
+
+The default bias after publication should be toward human-reviewed correction,
+and often toward supersede-and-replace rather than silent rename.
 
 ## Change discipline
 

@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Macro Foundry Series Onboarding Graph</title>
+  <style>
+    :root {
+      --paper: #f5efe3;
+      --paper-2: #efe4cf;
+      --ink: #1f2a24;
+      --muted: #5c645f;
+      --line: #b7a98f;
+      --accent: #a64b2a;
+      --accent-2: #2d6a5a;
+      --accent-3: #3f5f8c;
+      --warn: #c77d1d;
+      --card: rgba(255, 250, 242, 0.86);
+      --shadow: 0 18px 45px rgba(61, 45, 23, 0.12);
+      --radius: 22px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(166, 75, 42, 0.18), transparent 30rem),
+        radial-gradient(circle at top right, rgba(45, 106, 90, 0.18), transparent 28rem),
+        linear-gradient(180deg, var(--paper) 0%, var(--paper-2) 100%);
+      font-family: "Avenir Next", "Gill Sans", "Trebuchet MS", sans-serif;
+      line-height: 1.45;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0;
+      font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+
+    p {
+      margin: 0;
+    }
+
+    .page {
+      max-width: 1380px;
+      margin: 0 auto;
+      padding: 40px 24px 56px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.4fr 0.9fr;
+      gap: 20px;
+      align-items: stretch;
+      margin-bottom: 24px;
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid rgba(92, 100, 95, 0.16);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+
+    .hero-main {
+      padding: 28px 28px 26px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-main::after {
+      content: "";
+      position: absolute;
+      right: -60px;
+      top: -60px;
+      width: 220px;
+      height: 220px;
+      border-radius: 999px;
+      background: radial-gradient(circle, rgba(63, 95, 140, 0.18), transparent 68%);
+    }
+
+    .eyebrow {
+      display: inline-block;
+      margin-bottom: 12px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: rgba(31, 42, 36, 0.08);
+      color: var(--muted);
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .hero-main h1 {
+      font-size: clamp(2.1rem, 3vw, 3.6rem);
+      max-width: 12ch;
+      margin-bottom: 12px;
+    }
+
+    .hero-main p {
+      max-width: 70ch;
+      color: var(--muted);
+      font-size: 1.02rem;
+    }
+
+    .hero-side {
+      padding: 24px;
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+
+    .metric {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 10px 14px;
+      padding: 14px 16px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.5);
+      border: 1px solid rgba(92, 100, 95, 0.12);
+    }
+
+    .metric strong {
+      font-size: 1.7rem;
+      font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+      color: var(--accent-2);
+      line-height: 1;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 0.94rem;
+    }
+
+    .section {
+      margin-top: 22px;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+
+    .section-head h2 {
+      font-size: 1.55rem;
+    }
+
+    .section-head p {
+      color: var(--muted);
+      max-width: 70ch;
+    }
+
+    .scope-grid,
+    .decision-grid,
+    .rules-grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .scope-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .scope-card,
+    .decision-card,
+    .rules-card {
+      padding: 20px;
+    }
+
+    .scope-card h3,
+    .decision-card h3,
+    .rules-card h3 {
+      font-size: 1.12rem;
+      margin-bottom: 10px;
+    }
+
+    .scope-card p,
+    .decision-card p,
+    .rules-card p {
+      color: var(--muted);
+    }
+
+    .tag {
+      display: inline-block;
+      margin-bottom: 10px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: white;
+    }
+
+    .tag.identity { background: var(--accent-3); }
+    .tag.workflow { background: var(--accent-2); }
+    .tag.future { background: var(--accent); }
+
+    .flow-board {
+      padding: 22px;
+      overflow: hidden;
+    }
+
+    .flow-stage {
+      margin-bottom: 18px;
+      padding-bottom: 18px;
+      border-bottom: 1px dashed rgba(92, 100, 95, 0.2);
+    }
+
+    .flow-stage:last-child {
+      margin-bottom: 0;
+      padding-bottom: 0;
+      border-bottom: 0;
+    }
+
+    .flow-stage h3 {
+      font-size: 1.05rem;
+      margin-bottom: 12px;
+    }
+
+    .flow-line {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .node {
+      min-width: 172px;
+      max-width: 220px;
+      padding: 14px 14px 12px;
+      border-radius: 18px;
+      border: 1px solid rgba(92, 100, 95, 0.14);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(255, 246, 234, 0.92));
+      box-shadow: 0 10px 24px rgba(61, 45, 23, 0.08);
+    }
+
+    .node .role {
+      display: inline-block;
+      margin-bottom: 7px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      background: rgba(31, 42, 36, 0.08);
+      color: var(--muted);
+    }
+
+    .node strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 0.98rem;
+      font-weight: 700;
+    }
+
+    .node p {
+      color: var(--muted);
+      font-size: 0.89rem;
+    }
+
+    .node.reviewer { border-color: rgba(166, 75, 42, 0.28); }
+    .node.human { border-color: rgba(199, 125, 29, 0.32); }
+    .node.executor { border-color: rgba(45, 106, 90, 0.28); }
+    .node.output { border-color: rgba(63, 95, 140, 0.28); }
+    .node.danger { border-color: rgba(166, 75, 42, 0.38); background: linear-gradient(180deg, rgba(255, 246, 240, 0.95), rgba(255, 236, 228, 0.94)); }
+
+    .arrow {
+      color: var(--line);
+      font-size: 1.1rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      font-family: "Courier New", "SFMono-Regular", monospace;
+    }
+
+    .subnote {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: rgba(45, 106, 90, 0.08);
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .decision-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .decision-card ul,
+    .rules-card ul {
+      margin: 10px 0 0;
+      padding-left: 18px;
+      color: var(--muted);
+    }
+
+    .decision-card li,
+    .rules-card li {
+      margin: 6px 0;
+    }
+
+    .rules-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .footer-note {
+      margin-top: 18px;
+      padding: 16px 18px;
+      border-radius: 18px;
+      background: rgba(31, 42, 36, 0.06);
+      color: var(--muted);
+    }
+
+    code {
+      font-family: "SFMono-Regular", "Cascadia Code", "Liberation Mono", monospace;
+      font-size: 0.95em;
+    }
+
+    @media (max-width: 1060px) {
+      .hero,
+      .scope-grid,
+      .decision-grid,
+      .rules-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .page {
+        padding: 22px 14px 40px;
+      }
+
+      .hero-main,
+      .hero-side,
+      .scope-card,
+      .decision-card,
+      .rules-card,
+      .flow-board {
+        padding: 18px;
+      }
+
+      .flow-line {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .node {
+        max-width: none;
+        width: 100%;
+      }
+
+      .arrow {
+        align-self: center;
+        transform: rotate(90deg);
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <article class="panel hero-main">
+        <span class="eyebrow">Macro Foundry / Series Onboarding</span>
+        <h1>Interactive graph, not a blind importer.</h1>
+        <p>
+          This visualization captures the decisions settled in the design session:
+          canonical identity stays governed by <code>series.code</code> rules,
+          onboarding stays interactive and proposal-driven, and the core graph
+          stops after a monitored initial ingestion in <code>test</code> plus a
+          durable test-approved onboarding package.
+        </p>
+      </article>
+      <aside class="panel hero-side">
+        <div class="metric">
+          <strong>2</strong>
+          <span>Default human gates: onboarding approval, and dangerous published-series correction approval.</span>
+        </div>
+        <div class="metric">
+          <strong>3</strong>
+          <span>Maximum reviewer refinement loops before escalation to the human gate.</span>
+        </div>
+        <div class="metric">
+          <strong>1</strong>
+          <span>First real execution surface: <code>test</code>, with monitored broad backfill before later promotion work.</span>
+        </div>
+      </aside>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Document Boundaries</h2>
+        <p>Three artifacts now do different jobs so the graph logic does not pollute canonical naming policy.</p>
+      </div>
+      <div class="scope-grid">
+        <article class="panel scope-card">
+          <span class="tag identity">Identity</span>
+          <h3><code>docs/series_catalog_governance.md</code></h3>
+          <p>
+            Governs canonical <code>series.code</code>, default variants,
+            ambiguity for code creation, compound variant tokens, and correction
+            discipline once a series is published.
+          </p>
+        </article>
+        <article class="panel scope-card">
+          <span class="tag workflow">Workflow</span>
+          <h3><code>docs/series_onboarding_workflow.md</code></h3>
+          <p>
+            Defines the gated onboarding graph: researcher, reviewer, human gate,
+            executor, monitored initial test ingestion, and the final
+            test-approved onboarding package.
+          </p>
+        </article>
+        <article class="panel scope-card">
+          <span class="tag future">Deferred</span>
+          <h3>Later outer deployment graph</h3>
+          <p>
+            <code>dev -&gt; prod</code> promotion is intentionally deferred. It will
+            consume the test-approved onboarding package instead of living inside
+            the core onboarding graph.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Core Onboarding Graph</h2>
+        <p>The normal path is read-heavy first, then gated, then monitored in <code>test</code>. Ambiguity blocks catalog creation. Dangerous published-series fixes take a separate branch.</p>
+      </div>
+      <div class="panel flow-board">
+        <div class="flow-stage">
+          <h3>Normal path</h3>
+          <div class="flow-line">
+            <article class="node">
+              <span class="role">Researcher</span>
+              <strong>Research + DB gap check</strong>
+              <p>Probe source, inspect existing catalog state, infer likely mapping.</p>
+            </article>
+            <div class="arrow">-&gt;</div>
+            <article class="node">
+              <span class="role">Researcher</span>
+              <strong>Draft proposal</strong>
+              <p>Summarize existing rows, new rows, assumptions, risks, and suggested derived series.</p>
+            </article>
+            <div class="arrow">-&gt;</div>
+            <article class="node reviewer">
+              <span class="role">Reviewer</span>
+              <strong>Fact-check + schema fit</strong>
+              <p>Read-only review of naming, source facts, and table-fit. May update workflow flags.</p>
+            </article>
+            <div class="arrow">-&gt;</div>
+            <article class="node human">
+              <span class="role">Human Gate 1</span>
+              <strong>Onboarding approval</strong>
+              <p>Required before any canonical catalog or feed mutation.</p>
+            </article>
+            <div class="arrow">-&gt;</div>
+            <article class="node executor">
+              <span class="role">Executor</span>
+              <strong>Apply in test</strong>
+              <p>Create or update approved catalog rows, source mappings, and feed config in <code>test</code>.</p>
+            </article>
+            <div class="arrow">-&gt;</div>
+            <article class="node executor">
+              <span class="role">Executor</span>
+              <strong>Initial full-history ingest</strong>
+              <p>Monitored broad backfill in <code>test</code>; tolerate late provider coverage, fail on trust issues.</p>
+            </article>
+            <div class="arrow">-&gt;</div>
+            <article class="node human">
+              <span class="role">Human</span>
+              <strong>Review test outcome</strong>
+              <p>Accept as test-approved or send back for refinement.</p>
+            </article>
+            <div class="arrow">-&gt;</div>
+            <article class="node output">
+              <span class="role">Output</span>
+              <strong>Emit onboarding package</strong>
+              <p>Durable handoff artifact for later promotion workflow.</p>
+            </article>
+          </div>
+          <div class="subnote">
+            Derived series are allowed as proposal suggestions, but they do not block new raw source onboarding.
+          </div>
+        </div>
+
+        <div class="flow-stage">
+          <h3>Review loop</h3>
+          <div class="flow-line">
+            <article class="node reviewer">
+              <span class="role">Reviewer</span>
+              <strong>Reject for refinement</strong>
+              <p>Reviewer can request changes without touching catalog or observations.</p>
+            </article>
+            <div class="arrow">-&gt;</div>
+            <article class="node">
+              <span class="role">Researcher</span>
+              <strong>Refine proposal</strong>
+              <p>Update reasoning, facts, mapping, or ambiguity notes.</p>
+            </article>
+            <div class="arrow">-&gt;</div>
+            <article class="node reviewer">
+              <span class="role">Reviewer</span>
+              <strong>Re-review</strong>
+              <p>Maximum three cycles. After that, escalate unresolved issues to the human gate.</p>
+            </article>
+          </div>
+        </div>
+
+        <div class="flow-stage">
+          <h3>Ambiguity branch</h3>
+          <div class="flow-line">
+            <article class="node danger">
+              <span class="role">Guardrail</span>
+              <strong>Identity ambiguity detected</strong>
+              <p>Example: unclear default variant versus narrower sibling variant.</p>
+            </article>
+            <div class="arrow">-&gt;</div>
+            <article class="node danger">
+              <span class="role">Policy</span>
+              <strong>Stay in proposal space</strong>
+              <p>No draft canonical <code>series</code> row is created in the main catalog.</p>
+            </article>
+            <div class="arrow">-&gt;</div>
+            <article class="node human">
+              <span class="role">Human</span>
+              <strong>Resolve or approve assumption</strong>
+              <p>Agent may suggest the likely interpretation, but cannot silently mint identity.</p>
+            </article>
+          </div>
+        </div>
+
+        <div class="flow-stage">
+          <h3>Dangerous correction branch</h3>
+          <div class="flow-line">
+            <article class="node danger">
+              <span class="role">Researcher</span>
+              <strong>Published-series identity problem</strong>
+              <p>Underspecified or wrong canonical variant discovered after publication boundary.</p>
+            </article>
+            <div class="arrow">-&gt;</div>
+            <article class="node reviewer">
+              <span class="role">Reviewer</span>
+              <strong>Impact review</strong>
+              <p>Check affected source mappings, feeds, observations, and derivations.</p>
+            </article>
+            <div class="arrow">-&gt;</div>
+            <article class="node human">
+              <span class="role">Human Gate 2</span>
+              <strong>Dangerous correction approval</strong>
+              <p>No auto-rename for published canonical series.</p>
+            </article>
+            <div class="arrow">-&gt;</div>
+            <article class="node executor">
+              <span class="role">Executor</span>
+              <strong>Apply approved repair</strong>
+              <p>Usually human-reviewed correction, often supersede-and-replace instead of silent rename.</p>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Decision Ledger</h2>
+        <p>These are the rules the graph now enforces.</p>
+      </div>
+      <div class="decision-grid">
+        <article class="panel decision-card">
+          <h3>Canonical identity</h3>
+          <ul>
+            <li><code>series.code</code> is semantic and provider-agnostic.</li>
+            <li>Provider tickers stay in <code>series_sources.external_code</code>.</li>
+            <li>Default variants are allowed when omission is an intentional curation choice.</li>
+            <li>If methodological scope is materially ambiguous, the agent proposes instead of creating identity.</li>
+          </ul>
+        </article>
+        <article class="panel decision-card">
+          <h3>Agent boundaries</h3>
+          <ul>
+            <li>Researcher gathers facts, probes, and drafts/refines proposals.</li>
+            <li>Reviewer is read-only for catalog/data, but may update workflow state and flags.</li>
+            <li>Executor writes only after approval.</li>
+            <li>Reviewer refinement loop is capped at <code>3</code> tries.</li>
+          </ul>
+        </article>
+        <article class="panel decision-card">
+          <h3>Initial ingestion</h3>
+          <ul>
+            <li>First real run happens in <code>test</code>.</li>
+            <li>It is monitored, not fire-and-forget.</li>
+            <li>It should aim for full history or a broad backfill.</li>
+            <li>Later recurring runs switch to overlap-window incremental fetches.</li>
+          </ul>
+        </article>
+        <article class="panel decision-card">
+          <h3>Published-series correction</h3>
+          <ul>
+            <li>Published canonical series are effectively immutable to autonomous agents.</li>
+            <li>No auto-rename once a series crosses the publication boundary.</li>
+            <li>Dangerous fixes require impact review and human approval.</li>
+            <li>The default repair bias is toward supersede-and-replace over silent rename.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Operational Rules</h2>
+        <p>Implementation notes that shape the future LangGraph build without overloading one prompt.</p>
+      </div>
+      <div class="rules-grid">
+        <article class="panel rules-card">
+          <h3>MCP database access</h3>
+          <p>The graph should inspect real Postgres state during research and review.</p>
+          <ul>
+            <li>Look up existing concepts, families, series, sources, feeds, and lineage.</li>
+            <li>Do not rely only on the model's internal memory.</li>
+          </ul>
+        </article>
+        <article class="panel rules-card">
+          <h3>Small context helpers</h3>
+          <p>Keep prompts narrow to avoid context overflow.</p>
+          <ul>
+            <li>Catalog lookup helper</li>
+            <li>Proposal drafting helper</li>
+            <li>Reviewer check helper</li>
+            <li>Correction impact helper</li>
+          </ul>
+        </article>
+        <article class="panel rules-card">
+          <h3>Deferred outer graph</h3>
+          <p>This diagram stops at a test-approved package by design.</p>
+          <ul>
+            <li><code>dev -&gt; prod</code> is a later workflow.</li>
+            <li>Promotion should consume the emitted onboarding package, not rediscover identity questions.</li>
+          </ul>
+        </article>
+      </div>
+      <div class="footer-note panel">
+        This HTML is a visualization artifact for the decisions captured in
+        <code>docs/series_catalog_governance.md</code>,
+        <code>docs/series_onboarding_workflow.md</code>, and <code>CONTEXT.md</code>.
+      </div>
+    </section>
+  </main>
+</body>
+</html>
