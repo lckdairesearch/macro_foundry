@@ -65,10 +65,9 @@ runtime. A stub or draft skill is documentation, not behavior.
 | [skill-macro-research-discipline](skill-macro-research-discipline.md) | stub | What to search for and verify when investigating a new source |
 | [skill-ingestion-selector-conventions](skill-ingestion-selector-conventions.md) | stub | The selector contract, conventions, and review criteria |
 | [skill-generic-runtime-selectors](skill-generic-runtime-selectors.md) | stub | Which selector_types currently exist and which provider shapes they cover |
-| [skill-metadata-standardisation](skill-metadata-standardisation.md) | draft | How the drafter writes prose fields consistently across related series, and the discipline for proposing updates to existing prose |
-| [skill-enum-gap-escalation](skill-enum-gap-escalation.md) | draft | When to emit an EnumGapProposal vs coerce to an existing enum value; the three conditions, evidence schema, and anti-pattern list |
-| [skill-credential-gap](skill-credential-gap.md) | draft | When the `research` role emits a CredentialGapProposal vs proceeds without a key; pre-check layers, three conditions, evidence schema, and anti-pattern list |
-| [skill-enum-gap-escalation](skill-enum-gap-escalation.md) | draft | When the drafter may emit an `EnumGapProposal` for a structural enum-backed field versus when it must pick the closest existing value |
+| [skill-metadata-standardisation](skill-metadata-standardisation.md) | accepted | How the drafter writes prose fields consistently across related series, and the discipline for proposing updates to existing prose |
+| [skill-enum-gap-escalation](skill-enum-gap-escalation.md) | accepted | When to emit an EnumGapProposal vs coerce to an existing enum value; the three conditions, evidence schema, and anti-pattern list |
+| [skill-credential-gap](skill-credential-gap.md) | accepted | When the `research` role emits a CredentialGapProposal vs proceeds without a key; pre-check layers, three conditions, evidence schema, and anti-pattern list |
 
 ## Authoring a new skill
 

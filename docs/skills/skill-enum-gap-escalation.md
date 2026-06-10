@@ -1,15 +1,16 @@
 ---
-status: draft
+status: accepted
 ---
 # skill-enum-gap-escalation
 
-**Status:** draft
+**Status:** accepted
 
-The body is content-complete; the skill is held at `draft` until the
-runtime exists to load it and the operator confirms the rendered
-operator-instruction block at `enum_gap_wait` matches the project's
-preferred Alembic invocation. Promote to `accepted` after that
-review.
+Accepted after operator review (issue #51): the operator confirmed the
+rendered operator-instruction block at `enum_gap_wait` (the Python
+enum-edit diff plus the ADR 0005-style Alembic CHECK-constraint
+migration template plus the resume command) matches the project's
+preferred Alembic invocation idiom. The runtime skill loader may now
+load this skill into role prompts.
 
 ## Scope
 

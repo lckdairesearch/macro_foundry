@@ -1,15 +1,16 @@
 ---
-status: draft
+status: accepted
 ---
+
 # skill-credential-gap
 
-**Status:** draft
+**Status:** accepted
 
-The body is content-complete; the skill is held at `draft` until the
-runtime exists to load it and the operator confirms the rendered
-operator-instruction block at `credential_gap_wait` matches the
-project's preferred env-var / secret-store conventions. Promote to
-`accepted` after that review.
+Accepted after operator review (issue #51): the operator confirmed the
+rendered operator-instruction block at `credential_gap_wait` (env-var
+instructions, key-acquisition guidance, and the resume command) matches
+the project's env-var / secret-store conventions. The runtime skill
+loader may now load this skill into role prompts.
 
 ## Scope
 
@@ -54,9 +55,16 @@ The pre-check (three layers in order) is the gating mechanism:
 2. Check `os.environ.get(<env_var_name>)`. If empty or unset,
    pre-check fails; gap proceeds.
 3. Run a real probe with the credential present. 200 OK with sensible
-   payload → pre-check passes; no gap. 401 or 403 → pre-check fails;
-   gap proceeds. Transient (5xx, network) → retry per the v1 retry
-   policy; on exhaustion, surface as a research error, not a gap.
+   payload → pre-check passes; no gap. 401 or 403 → the credential is
+   missing or invalid, and provenance decides what happens next: if the
+   env var name was *inferred fresh* for a provider with no blessed
+   `credentials_ref`, pre-check fails and the gap proceeds (a first-time
+   missing/invalid credential); if the env var name came from an
+   existing `credentials_ref` (layer 1), the credential was previously
+   blessed and has rotated or lost quota — surface that as a research
+   error, not a gap (see the anti-pattern below). Transient (5xx,
+   network) → retry per the v1 retry policy; on exhaustion, surface as
+   a research error, not a gap.
 
 Pre-check results are **cached per `(provider_identity, env_var_name)`
 pair per session**, so a research phase that probes twelve endpoints
@@ -71,7 +79,8 @@ must articulate each one before the proposal is allowed to leave the
 `research` role.
 
 1. **The provider materially requires a key for the data being
-   onboarded.** Provider documentation explicitly states that
+   onboarded.**
+   Provider documentation explicitly states that
    authentication is required for the endpoints or datasets in
    scope. "The provider has an API key registration page" is not
    sufficient — many providers offer optional keys that increase
@@ -86,6 +95,15 @@ must articulate each one before the proposal is allowed to leave the
    provider's authentication or access documentation. Inferred
    evidence ("vendor providers usually need a key") is not
    sufficient.
+
+Conditions 1 and 3 are deliberately paired: condition 1 is the
+substantive claim ("the data cannot be reached without auth") and
+condition 3 is its evidentiary obligation (the cited URL + snippet
+that backs the claim). This is why a proposal missing `evidence_url`
+or `evidence_snippet` is dropped (see below) — it has asserted
+condition 1 without discharging condition 3. Condition 2 is the
+independent gate the other two cannot substitute for: it confirms,
+via the probe, that we do not *already* hold a working credential.
 
 ### Per-proposal evidence structure
 
@@ -139,11 +157,17 @@ rationale:
 - **Pattern-matching on provider name or type.** "This is a vendor,
   so it probably needs a key." Not evidence. Vendors vary; some
   expose public APIs, some don't. Read the docs.
-- **Env var exists but probe fails.** Probably a key rotation, quota
-  exhaustion, or rotated permissions. Surface as a research error
-  with the response body recorded, not as a gap. The operator
-  decides whether to rotate or update the credential; that decision
-  is normal admin work, not gap escalation.
+- **A previously-blessed credential now fails.** When the env var
+  name came from an existing `providers.credentials_ref` (pre-check
+  layer 1 — the operator provisioned this provider in an earlier
+  session) and the probe now returns 401/403, this is a key rotation,
+  quota exhaustion, or rotated permissions, not a missing credential.
+  Surface as a research error with the response body recorded, not as
+  a gap. The operator rotates or updates the credential out of band;
+  that is normal admin work, not gap escalation. (A *first encounter*
+  with a provider that has no blessed `credentials_ref`, where the
+  probe returns 401/403, is the opposite case — that is a real gap;
+  see pre-check layer 3.)
 - **Drafter uncertainty about the auth scheme.** Uncertainty is not
   a gap. If the provider docs are unclear whether to send the key as
   a query param or a Bearer header, the agent picks the more likely
@@ -223,9 +247,13 @@ proposal using the env var present in `os.environ`. Four cases:
    whether to retry resume, try a different env var, or abort.
 
 All gaps must reach a terminal outcome (`provisioned`,
-`provisioned_renamed`, `declined`, or `aborted`) before research can
-complete and the graph can advance. Partial resolution across
-multiple resumes is fine.
+`provisioned_renamed`, or `aborted`) before research can complete and
+the graph can advance. Partial resolution across multiple resumes is
+fine. There is no `declined` outcome: unlike enum-gap — whose
+`Decline and coerce` branch continues the session with a coerced
+value — credential-gap's 2-option picker has no coerce path, so its
+only negative terminal is `aborted` (the operator picks `Abort` and
+types the required rationale).
 
 ### The drafter does not write the credential to anything but state
 
@@ -249,7 +277,7 @@ They are not anchors for new gap emission; the discipline above is.
   `https://www.alphavantage.co/query?function=REAL_GDP&apikey=demo`
   and receives 200 OK with a payload containing
   `"Information": "Thank you for using Alpha Vantage! ... claim
-  your free API key"`. The docs at
+your free API key"`. The docs at
   `https://www.alphavantage.co/support/#api-key` confirm that all
   productive use requires a key. Real gap; proposed env var
   `ALPHAVANTAGE_API_KEY`; `QUERY_PARAM` scheme; rate limit 25/day
