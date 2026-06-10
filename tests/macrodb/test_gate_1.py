@@ -330,7 +330,8 @@ async def test_apply_small_edit_no_collision_clears_outcome_and_updates_proposal
 
 @pytest.mark.no_db
 @pytest.mark.asyncio
-async def test_apply_small_edit_collision_sets_collision_choice_and_detail() -> None:
+async def test_apply_small_edit_rename_clears_collision_state_and_restores_original() -> None:
+    """Rename choice clears collision_choice so routing returns to gate_1_wait (issue 27)."""
     from macro_foundry.agent.gate import CollisionChoice, make_apply_small_edit_node
     from macro_foundry.agent.graph import OnboardingGraphState
 
@@ -338,19 +339,23 @@ async def test_apply_small_edit_collision_sets_collision_choice_and_detail() -> 
     unique_checker = AsyncMock(return_value=collision_detail)
     collision_picker = AsyncMock(return_value=CollisionChoice.RENAME.value)
 
+    original_proposal = _minimal_proposal().model_dump(mode="json")
     node = make_apply_small_edit_node(
         unique_checker=unique_checker,
         collision_picker=collision_picker,
     )
 
     state: OnboardingGraphState = {
-        "proposal": _minimal_proposal().model_dump(mode="json"),
-        "small_edit_instructions": "rename series code to CPI_HKG_ALL_M",
+        "proposal": original_proposal,
+        "small_edit_instructions": "rename series.code to CPI_HKG_ALL_M",
     }
     result = await node(state)
 
-    assert result.get("collision_choice") == CollisionChoice.RENAME.value
-    assert result.get("collision_detail") == collision_detail
+    # collision_choice cleared so EDGE_NEXT_FROM_APPLY_SMALL_EDIT routes to gate_1_wait
+    assert result.get("collision_choice") is None
+    assert result.get("collision_detail") is None
+    # Original proposal restored (operator will provide a different code next time)
+    assert result.get("proposal") == original_proposal
     collision_picker.assert_called_once()
 
 
