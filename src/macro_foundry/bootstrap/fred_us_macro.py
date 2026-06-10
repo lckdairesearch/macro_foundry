@@ -8,7 +8,7 @@ from decimal import Decimal
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -40,8 +40,8 @@ from macro_foundry.enums import (
     UnitKind,
     UnitScale,
 )
-from macro_foundry.ingestion.providers.fred import FredClient, FredClientProtocol
-from macro_foundry.ingestion.runners.fred_series import FredImportOutcome, import_fred_latest_snapshot
+from macro_foundry.ingestion.providers.fred import FredClient, FredClientProtocol, FredSeriesMetadata
+from macro_foundry.ingestion.runtime import execute_feed
 from macro_foundry.models import (
     ComputationRunLog,
     Concept,
@@ -79,11 +79,21 @@ _FRED_PROVIDER_NAME = "USA FRED"
 _FRED_CATALOG_NAME = "FRED default catalog"
 _FRED_CREDENTIALS_REF = "FRED_API_KEY"
 _FRED_ENDPOINT_PATH = "/series/observations"
+_FRED_METADATA_ENDPOINT_PATH = "/series"
 _FRED_DOC_URL = "https://fred.stlouisfed.org/docs/api/fred/"
 _FRED_HOMEPAGE_URL = "https://fred.stlouisfed.org/"
 _FRED_BASE_URL = "https://api.stlouisfed.org/fred"
 _FRED_SCHEDULE = "TZ=America/New_York 0 8 * * *"
 _YOY_CODE_REF = "macro_foundry.bootstrap.fred_us_macro.compute_yoy_growth"
+_FRED_MISSING_VALUE_TOKENS = [".", ""]
+_FRED_FREQUENCY_MAP = {
+    "A": Frequency.ANNUAL.value,
+    "D": Frequency.DAILY.value,
+    "M": Frequency.MONTHLY.value,
+    "Q": Frequency.QUARTERLY.value,
+    "SA": Frequency.SEMI_ANNUAL.value,
+    "W": Frequency.WEEKLY.value,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,6 +140,19 @@ class DerivedComputationOutcome:
     rows_computed: int
     rows_written: int
     rows_skipped: int
+
+
+@dataclass(frozen=True, slots=True)
+class FredImportOutcome:
+    """Summary of one FRED raw-series latest-snapshot import."""
+
+    series_code: str
+    external_code: str
+    metadata: FredSeriesMetadata
+    rows_fetched: int
+    rows_written: int
+    rows_skipped: int
+    run_log_id: Any
 
 
 @dataclass(frozen=True, slots=True)
@@ -415,16 +438,10 @@ async def _run_bootstrap_transaction(
 
                 raw_results: list[FredImportOutcome] = []
                 for prepared in prepared_raw_series:
-                    outcome = await import_fred_latest_snapshot(
+                    outcome = await _import_fred_latest_snapshot(
                         session,
                         client=runtime_client,
-                        series_id=prepared.series.id,
-                        series_code=prepared.series.code,
-                        frequency=prepared.spec.frequency,
-                        external_code=prepared.spec.external_code,
-                        ingestion_feed=prepared.feed,
-                        ingestion_feed_member=prepared.feed_member,
-                        series_source=prepared.source,
+                        prepared=prepared,
                         run_date=run_date,
                         code_version=code_version,
                         triggered_by=IngestionTriggeredBy.MANUAL,
@@ -679,8 +696,8 @@ async def _prepare_series_catalog(
         payload=IngestionFeedMemberCreate(
             ingestion_feed_id=feed.id,
             series_source_id=source.id,
-            selector_type="fred_series_id",
-            selector_config={"series_id": spec.external_code},
+            selector_type="json_path",
+            selector_config=_fred_json_path_selector_config(spec),
             is_active=True,
         ).model_dump(),
     )
@@ -731,6 +748,165 @@ async def _prepare_series_catalog(
             input_series=raw_series,
         ),
     )
+
+
+def _fred_json_path_selector_config(spec: RawSeriesSpec) -> dict[str, Any]:
+    return {
+        "series_id": spec.external_code,
+        "metadata_endpoint": _FRED_METADATA_ENDPOINT_PATH,
+        "observations_endpoint": _FRED_ENDPOINT_PATH,
+        "records_path": "observations",
+        "period_anchor_field": "date",
+        "value_field": "value",
+        "missing_value_tokens": _FRED_MISSING_VALUE_TOKENS,
+        "frequency": spec.frequency.value,
+        "frequency_map": _FRED_FREQUENCY_MAP,
+    }
+
+
+async def _import_fred_latest_snapshot(
+    session: AsyncSession,
+    *,
+    client: FredClientProtocol,
+    prepared: PreparedRawSeries,
+    run_date: date,
+    code_version: str | None,
+    triggered_by: IngestionTriggeredBy,
+) -> FredImportOutcome:
+    config = prepared.feed_member.selector_config or {}
+    external_code = str(config.get("series_id") or prepared.spec.external_code)
+    metadata_endpoint = str(config.get("metadata_endpoint") or _FRED_METADATA_ENDPOINT_PATH)
+    observations_endpoint = str(config.get("observations_endpoint") or prepared.feed.endpoint_url or _FRED_ENDPOINT_PATH)
+    observation_start = await _resolve_observation_start(
+        session,
+        series_id=prepared.series.id,
+        frequency=prepared.spec.frequency,
+        request_params=prepared.feed.request_params or {},
+    )
+
+    metadata = await client.fetch_series_metadata(
+        external_code,
+        endpoint_path=metadata_endpoint,
+    )
+    if metadata.frequency is not prepared.spec.frequency:
+        raise ValueError(
+            f"FRED frequency {metadata.frequency.value!r} for {external_code!r} does not match "
+            f"curated series frequency {prepared.spec.frequency.value!r}",
+        )
+
+    fetched_rows = await client.fetch_series_observations(
+        external_code,
+        observation_start=observation_start,
+        endpoint_path=observations_endpoint,
+    )
+    payload = {
+        "observations": [
+            {
+                "date": row.period_anchor.isoformat(),
+                "value": None if row.value is None else str(row.value),
+            }
+            for row in fetched_rows
+        ],
+    }
+    execution = await execute_feed(
+        session,
+        prepared.feed.id,
+        payload=payload,
+        run_date=run_date,
+        triggered_by=triggered_by,
+        code_version=code_version,
+        parameters=_build_fred_run_parameters(
+            external_code=external_code,
+            observation_start=observation_start,
+            run_date=run_date,
+        ),
+    )
+
+    return FredImportOutcome(
+        series_code=prepared.series.code,
+        external_code=external_code,
+        metadata=metadata,
+        rows_fetched=execution.rows_fetched,
+        rows_written=execution.rows_inserted,
+        rows_skipped=execution.rows_skipped,
+        run_log_id=execution.run_log_id,
+    )
+
+
+async def _resolve_observation_start(
+    session: AsyncSession,
+    *,
+    series_id: Any,
+    frequency: Frequency,
+    request_params: dict[str, Any],
+) -> date | None:
+    latest_period_start = await session.scalar(
+        select(func.max(Observation.period_start)).where(Observation.series_id == series_id),
+    )
+    if latest_period_start is None:
+        return None
+
+    overlap = request_params.get("overlap")
+    if overlap is None:
+        unit, value = _default_overlap_for_frequency(frequency)
+    else:
+        unit = str(overlap["unit"])
+        value = int(overlap["value"])
+
+    return _shift_period_start(latest_period_start, unit=unit, value=-value)
+
+
+def _default_overlap_for_frequency(frequency: Frequency) -> tuple[str, int]:
+    mapping = {
+        Frequency.DAILY: ("days", 35),
+        Frequency.WEEKLY: ("weeks", 12),
+        Frequency.MONTHLY: ("months", 18),
+        Frequency.QUARTERLY: ("quarters", 8),
+        Frequency.SEMI_ANNUAL: ("quarters", 6),
+        Frequency.ANNUAL: ("years", 5),
+    }
+    return mapping[frequency]
+
+
+def _shift_period_start(anchor: date, *, unit: str, value: int) -> date:
+    normalized_unit = unit.lower()
+    if normalized_unit in {"days", "day"}:
+        from datetime import timedelta
+
+        return anchor + timedelta(days=value)
+    if normalized_unit in {"weeks", "week"}:
+        from datetime import timedelta
+
+        return anchor + timedelta(weeks=value)
+    if normalized_unit in {"months", "month"}:
+        return _shift_months(anchor, value)
+    if normalized_unit in {"quarters", "quarter"}:
+        return _shift_months(anchor, value * 3)
+    if normalized_unit in {"years", "year"}:
+        return _shift_months(anchor, value * 12)
+    raise ValueError(f"Unsupported overlap unit {unit!r}")
+
+
+def _shift_months(anchor: date, months: int) -> date:
+    total_months = (anchor.year * 12 + (anchor.month - 1)) + months
+    year = total_months // 12
+    month = total_months % 12 + 1
+    return date(year, month, 1)
+
+
+def _build_fred_run_parameters(
+    *,
+    external_code: str,
+    observation_start: date | None,
+    run_date: date,
+) -> dict[str, str]:
+    payload = {
+        "series_id": external_code,
+        "snapshot_vintage_date": run_date.isoformat(),
+    }
+    if observation_start is not None:
+        payload["observation_start"] = observation_start.isoformat()
+    return payload
 
 
 async def _compute_and_write_yoy_series(

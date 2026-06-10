@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -38,6 +40,8 @@ from macro_foundry.models import (
     Series,
     SeriesSource,
 )
+
+_FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures"
 
 
 class StubSelector:
@@ -267,6 +271,73 @@ async def test_execute_feed_dispatches_multiple_active_members_against_shared_pa
         first_source.series_id,
         second_source.series_id,
         second_source.series_id,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_execute_feed_records_fred_shaped_json_path_fixture_rows(
+    session: AsyncSession,
+) -> None:
+    source = await _create_series_source(session, code="RUNTIME_TEST_FRED_JSON_PATH")
+    feed = IngestionFeed(
+        feed_method=FeedMethod.API,
+        endpoint_url="/series/observations",
+        is_active=True,
+    )
+    session.add(feed)
+    await session.flush()
+    member = IngestionFeedMember(
+        ingestion_feed_id=feed.id,
+        series_source_id=source.id,
+        selector_type="json_path",
+        selector_config={
+            "records_path": "observations",
+            "period_anchor_field": "date",
+            "value_field": "value",
+            "frequency": Frequency.MONTHLY.value,
+            "missing_value_tokens": [".", ""],
+        },
+        execution_order=1,
+        is_active=True,
+    )
+    session.add(member)
+    await session.flush()
+    payload = json.loads((_FIXTURES_DIR / "json_path_fred_observations.json").read_text())
+
+    outcome = await execute_feed(
+        session,
+        feed.id,
+        payload=payload,
+        run_date=date(2026, 6, 10),
+        triggered_by=IngestionTriggeredBy.MANUAL,
+    )
+
+    assert outcome.status is IngestionRunStatus.SUCCESS
+    assert outcome.rows_fetched == 2
+    assert outcome.rows_inserted == 2
+    run_log = await session.get(IngestionRunLog, outcome.run_log_id)
+    assert run_log is not None
+    assert run_log.rows_fetched == 2
+    assert run_log.rows_inserted == 2
+
+    member_log = await session.scalar(
+        select(IngestionRunLogMember).where(
+            IngestionRunLogMember.ingestion_run_log_id == run_log.id,
+        ),
+    )
+    assert member_log is not None
+    assert member_log.diagnostics == {"selector_type": "json_path", "outcome": "data"}
+
+    observations = (
+        await session.execute(
+            select(Observation)
+            .where(Observation.ingestion_run_log_member_id == member_log.id)
+            .order_by(Observation.period_start),
+        )
+    ).scalars().all()
+    assert [(row.period_start, row.period_end, row.value, row.vintage_date) for row in observations] == [
+        (date(2026, 1, 1), date(2026, 1, 31), Decimal("318.2"), date(2026, 6, 10)),
+        (date(2026, 2, 1), date(2026, 2, 28), None, date(2026, 6, 10)),
     ]
 
 

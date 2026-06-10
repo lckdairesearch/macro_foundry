@@ -38,6 +38,7 @@ async def execute_feed(
     run_date: date,
     triggered_by: IngestionTriggeredBy = IngestionTriggeredBy.MANUAL,
     code_version: str | None = None,
+    parameters: dict[str, Any] | None = None,
 ) -> FeedExecutionOutcome:
     """Execute one active ingestion feed against a shared provider payload."""
 
@@ -63,7 +64,7 @@ async def execute_feed(
         rows_skipped=0,
         triggered_by=triggered_by,
         code_version=code_version,
-        parameters=feed.request_params,
+        parameters=parameters if parameters is not None else feed.request_params,
     )
     session.add(run_log)
     await session.flush()
@@ -143,16 +144,27 @@ async def _execute_member(
             },
         )
 
-    rows_to_write = [
-        {
-            "series_id": member.series_source.series_id,
-            "period_start": observation.period_start,
-            "period_end": observation.period_end,
-            "value": observation.value,
-            "vintage_date": observation.vintage_date or run_date,
-        }
-        for observation in result.observations
-    ]
+    latest_by_period = await _load_latest_observations_by_period(
+        session,
+        series_id=member.series_source.series_id,
+        period_starts=[observation.period_start for observation in result.observations],
+    )
+    rows_to_write: list[dict[str, Any]] = []
+    rows_skipped = 0
+    for observation in result.observations:
+        existing = latest_by_period.get(observation.period_start)
+        if existing is not None and existing.value == observation.value:
+            rows_skipped += 1
+            continue
+        rows_to_write.append(
+            {
+                "series_id": member.series_source.series_id,
+                "period_start": observation.period_start,
+                "period_end": observation.period_end,
+                "value": observation.value,
+                "vintage_date": observation.vintage_date or run_date,
+            },
+        )
 
     member_log = IngestionRunLogMember(
         ingestion_run_log_id=run_log.id,
@@ -160,7 +172,7 @@ async def _execute_member(
         status=IngestionRunStatus.SUCCESS,
         rows_fetched=len(result.observations),
         rows_inserted=len(rows_to_write),
-        rows_skipped=0,
+        rows_skipped=rows_skipped,
         diagnostics={"selector_type": member.selector_type, "outcome": result.outcome},
     )
     session.add(member_log)
@@ -183,7 +195,7 @@ async def _execute_member(
         )
         await session.execute(statement)
 
-    return len(result.observations), len(rows_to_write), 0, False
+    return len(result.observations), len(rows_to_write), rows_skipped, False
 
 
 async def _record_failed_member(
@@ -218,6 +230,33 @@ async def _load_feed(session: AsyncSession, feed_id: UUID) -> IngestionFeed | No
             selectinload(IngestionFeed.members).selectinload(IngestionFeedMember.series_source),
         ),
     )
+
+
+async def _load_latest_observations_by_period(
+    session: AsyncSession,
+    *,
+    series_id: UUID,
+    period_starts: list[date],
+) -> dict[date, Observation]:
+    unique_period_starts = sorted(set(period_starts))
+    if not unique_period_starts:
+        return {}
+
+    rows = (
+        await session.execute(
+            select(Observation)
+            .where(
+                Observation.series_id == series_id,
+                Observation.period_start.in_(unique_period_starts),
+            )
+            .order_by(Observation.period_start, Observation.vintage_date.desc()),
+        )
+    ).scalars()
+
+    latest_by_period: dict[date, Observation] = {}
+    for row in rows:
+        latest_by_period.setdefault(row.period_start, row)
+    return latest_by_period
 
 
 __all__ = ["FeedExecutionOutcome", "execute_feed"]

@@ -203,8 +203,25 @@ async def test_fred_bootstrap_creates_curated_rows_and_run_logs(
             select(IngestionFeedMember).where(IngestionFeedMember.series_source_id == source.id),
         )
         assert feed_member is not None
-        assert feed_member.selector_type == "fred_series_id"
-        assert feed_member.selector_config == {"series_id": "GDP"}
+        assert feed_member.selector_type == "json_path"
+        assert feed_member.selector_config == {
+            "series_id": "GDP",
+            "metadata_endpoint": "/series",
+            "observations_endpoint": "/series/observations",
+            "records_path": "observations",
+            "period_anchor_field": "date",
+            "value_field": "value",
+            "missing_value_tokens": [".", ""],
+            "frequency": Frequency.QUARTERLY.value,
+            "frequency_map": {
+                "A": Frequency.ANNUAL.value,
+                "D": Frequency.DAILY.value,
+                "M": Frequency.MONTHLY.value,
+                "Q": Frequency.QUARTERLY.value,
+                "SA": Frequency.SEMI_ANNUAL.value,
+                "W": Frequency.WEEKLY.value,
+            },
+        }
         feed = await session.get(IngestionFeed, feed_member.ingestion_feed_id)
         assert feed is not None
         assert feed.cron_schedule == "TZ=America/New_York 0 8 * * *"
@@ -215,7 +232,7 @@ async def test_fred_bootstrap_creates_curated_rows_and_run_logs(
         )
         assert member_log is not None
         assert member_log.rows_inserted == 4
-        assert member_log.diagnostics == {"selector_type": "fred_series_id"}
+        assert member_log.diagnostics == {"selector_type": "json_path", "outcome": "data"}
         gdp_observations = (
             await session.execute(
                 select(Observation)

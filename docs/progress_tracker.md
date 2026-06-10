@@ -48,6 +48,26 @@ initialize and inspect that redesigned stack.
 
 ## Log
 
+### [2026-06-10] Issue 35 — FRED bootstrap migrated to generic runtime
+
+Migrated the curated FRED U.S. macro bootstrap off the bespoke
+`ingestion/runners/fred_series.py` path and onto the ADR 0012 generic runtime:
+
+- FRED feed members now use `selector_type = "json_path"` with selector config
+  carrying the FRED series id, metadata endpoint, observations endpoint,
+  records path, period anchor field, value field, missing-value tokens, curated
+  frequency, and frequency map
+- the bootstrap still uses the FRED client for provider fetches and metadata
+  validation, then hands a FRED-shaped payload to `execute_feed(...)`
+- the generic runtime now preserves snapshot-vintage skip behavior by comparing
+  parsed observations against latest stored observations before writing
+- member-level run diagnostics now come from the selector runtime and preserve
+  observation provenance through `ingestion_run_log_members`
+- removed the obsolete `src/macro_foundry/ingestion/runners/fred_series.py`
+  module and stale exports
+- added a runtime integration regression for the recorded FRED-shaped JSON-path
+  fixture
+
 ### [2026-06-10] Issue 33 — Generic ingestion runtime and json_path selector implemented
 
 Implemented the first ADR 0012 runtime slice:
