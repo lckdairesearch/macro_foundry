@@ -10,6 +10,7 @@ class LLMProvider(StrEnum):
     """Supported provider identifiers for role bindings."""
 
     OPENAI = "openai"
+    AZURE_OPENAI = "azure_openai"
     ANTHROPIC = "anthropic"
     GOOGLE = "google"
 
@@ -58,45 +59,75 @@ class RoleOverride:
     deep_model: str | None = None
 
 
-OPENAI_DEFAULT_MODEL = "gpt-5.1"
-OPENAI_DEEP_MODEL = "gpt-5.1-thinking"
+@dataclass(frozen=True)
+class ModelPreset:
+    """Model + decode + provider bundle for one agent role.
+
+    Separates the configurable model/provider/decode concern from the
+    structural tools/skills concern in RoleConfig.  Swap a role's provider
+    or model here without touching its tool/skill wiring.
+    """
+
+    model: str
+    decode: DecodeParams = field(default_factory=DecodeParams)
+    provider: LLMProvider = LLMProvider.OPENAI
+
+
+_MEDIUM = ModelPreset("gpt-5.4", DecodeParams(reasoning_effort="medium"))
+_HIGH = ModelPreset("gpt-5.4", DecodeParams(reasoning_effort="high"))
+_CLASSIFIER = ModelPreset("gpt-5.4", DecodeParams(temperature=0.0, max_tokens=1_000))
+_DEFAULT = ModelPreset("gpt-5.4")
+
+DEFAULT_MODEL_CONFIGURATION: dict[AgentRole, ModelPreset] = {
+    AgentRole.RESEARCHER:                   _MEDIUM,
+    AgentRole.PROPOSAL_DRAFTER:             _MEDIUM,
+    AgentRole.SCRIPT_DRAFTER:               _MEDIUM,
+    AgentRole.VALIDATOR:                    _DEFAULT,
+    AgentRole.GOVERNANCE_REVIEWER:          _HIGH,
+    AgentRole.DATA_CORRECTNESS_REVIEWER:    _MEDIUM,
+    AgentRole.APPROVAL_PARSER:              _CLASSIFIER,
+    AgentRole.TEST_REVIEWER:                _MEDIUM,
+    AgentRole.DANGEROUS_CORRECTION_PLANNER: _HIGH,
+}
+
+
+def _preset(role: AgentRole, **kwargs: object) -> RoleConfig:
+    p = DEFAULT_MODEL_CONFIGURATION[role]
+    return RoleConfig(
+        role=role,
+        default_model=p.model,
+        decode=p.decode,
+        provider=p.provider,
+        **kwargs,  # type: ignore[arg-type]
+    )
 
 
 def default_role_configs() -> dict[AgentRole, RoleConfig]:
-    """Return the v1 OpenAI-bound role inventory."""
+    """Return the v1 role inventory, pulling model/decode/provider from DEFAULT_MODEL_CONFIGURATION."""
 
     return {
-        AgentRole.RESEARCHER: RoleConfig(
-            role=AgentRole.RESEARCHER,
-            default_model=OPENAI_DEEP_MODEL,
-            decode=DecodeParams(reasoning_effort="medium"),
+        AgentRole.RESEARCHER: _preset(
+            AgentRole.RESEARCHER,
             tools=("macrodb_read", "provider_fetch"),
             skills=("skill-hierarchy-enrichment", "skill-credential-gap"),
         ),
-        AgentRole.PROPOSAL_DRAFTER: RoleConfig(
-            role=AgentRole.PROPOSAL_DRAFTER,
-            default_model=OPENAI_DEEP_MODEL,
-            decode=DecodeParams(reasoning_effort="medium"),
+        AgentRole.PROPOSAL_DRAFTER: _preset(
+            AgentRole.PROPOSAL_DRAFTER,
             tools=("macrodb_write_proposals",),
             skills=("skill-metadata-standardisation", "skill-enum-gap-escalation"),
         ),
-        AgentRole.SCRIPT_DRAFTER: RoleConfig(
-            role=AgentRole.SCRIPT_DRAFTER,
-            default_model=OPENAI_DEEP_MODEL,
-            decode=DecodeParams(reasoning_effort="medium"),
+        AgentRole.SCRIPT_DRAFTER: _preset(
+            AgentRole.SCRIPT_DRAFTER,
             tools=("selector_schema", "selector_sandbox"),
             skills=("skill-ingestion-selector-conventions",),
         ),
-        AgentRole.VALIDATOR: RoleConfig(
-            role=AgentRole.VALIDATOR,
-            default_model=OPENAI_DEFAULT_MODEL,
+        AgentRole.VALIDATOR: _preset(
+            AgentRole.VALIDATOR,
             tools=("selector_sandbox", "provider_fetch"),
         ),
-        AgentRole.GOVERNANCE_REVIEWER: RoleConfig(
-            role=AgentRole.GOVERNANCE_REVIEWER,
-            default_model=OPENAI_DEEP_MODEL,
-            models_by_task={"selector_code_review": OPENAI_DEEP_MODEL},
-            decode=DecodeParams(reasoning_effort="high"),
+        AgentRole.GOVERNANCE_REVIEWER: _preset(
+            AgentRole.GOVERNANCE_REVIEWER,
+            models_by_task={"selector_code_review": DEFAULT_MODEL_CONFIGURATION[AgentRole.GOVERNANCE_REVIEWER].model},
             tools=("macrodb_read",),
             skills=(
                 "skill-metadata-standardisation",
@@ -104,27 +135,17 @@ def default_role_configs() -> dict[AgentRole, RoleConfig]:
                 "skill-credential-gap",
             ),
         ),
-        AgentRole.DATA_CORRECTNESS_REVIEWER: RoleConfig(
-            role=AgentRole.DATA_CORRECTNESS_REVIEWER,
-            default_model=OPENAI_DEEP_MODEL,
-            decode=DecodeParams(reasoning_effort="medium"),
+        AgentRole.DATA_CORRECTNESS_REVIEWER: _preset(
+            AgentRole.DATA_CORRECTNESS_REVIEWER,
             tools=("provider_fetch",),
         ),
-        AgentRole.APPROVAL_PARSER: RoleConfig(
-            role=AgentRole.APPROVAL_PARSER,
-            default_model=OPENAI_DEFAULT_MODEL,
-            decode=DecodeParams(temperature=0.0, max_tokens=1_000),
-        ),
-        AgentRole.TEST_REVIEWER: RoleConfig(
-            role=AgentRole.TEST_REVIEWER,
-            default_model=OPENAI_DEEP_MODEL,
-            decode=DecodeParams(reasoning_effort="medium"),
+        AgentRole.APPROVAL_PARSER: _preset(AgentRole.APPROVAL_PARSER),
+        AgentRole.TEST_REVIEWER: _preset(
+            AgentRole.TEST_REVIEWER,
             tools=("macrodb_read", "provider_fetch"),
         ),
-        AgentRole.DANGEROUS_CORRECTION_PLANNER: RoleConfig(
-            role=AgentRole.DANGEROUS_CORRECTION_PLANNER,
-            default_model=OPENAI_DEEP_MODEL,
-            decode=DecodeParams(reasoning_effort="high"),
+        AgentRole.DANGEROUS_CORRECTION_PLANNER: _preset(
+            AgentRole.DANGEROUS_CORRECTION_PLANNER,
             tools=("macrodb_read",),
             skills=("skill-dangerous-correction",),
         ),
@@ -168,8 +189,10 @@ def apply_role_overrides(
 
 __all__ = [
     "AgentRole",
+    "DEFAULT_MODEL_CONFIGURATION",
     "DecodeParams",
     "LLMProvider",
+    "ModelPreset",
     "RoleConfig",
     "RoleOverride",
     "apply_role_overrides",

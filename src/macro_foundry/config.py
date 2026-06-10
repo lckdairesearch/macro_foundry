@@ -43,6 +43,31 @@ class ApiSettings(BaseModel):
     bearer_token: SecretStr
 
 
+class LLMSettings(BaseModel):
+    """LLM provider credentials and deployment config.
+
+    Both openai_api_key and the azure_* fields are optional so that only the
+    providers actually in use need to be configured.  When a role is bound to
+    AZURE_OPENAI the endpoint, api_version, and at least one deployment name
+    must be present; the client layer (wired in a later slice) will validate
+    this at session start rather than at import time.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    # --- plain OpenAI ---
+    openai_api_key: SecretStr | None = None
+
+    # --- Azure OpenAI ---
+    azure_openai_api_key: SecretStr | None = None
+    azure_openai_endpoint: str | None = None
+    # e.g. "2025-01-01-preview"
+    azure_openai_api_version: str | None = None
+    # deployment names as configured in your Azure portal
+    azure_openai_deployment_default: str | None = None
+    azure_openai_deployment_deep: str | None = None
+
+
 class Settings(BaseSettings):
     """Typed application settings loaded from the local environment."""
 
@@ -78,6 +103,32 @@ class Settings(BaseSettings):
     fred_api_key: SecretStr | None = Field(
         default=None,
         validation_alias="FRED_API_KEY",
+    )
+
+    # LLM provider credentials
+    openai_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias="OPENAI_API_KEY",
+    )
+    azure_openai_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias="AZURE_OPENAI_API_KEY",
+    )
+    azure_openai_endpoint: str | None = Field(
+        default=None,
+        validation_alias="AZURE_OPENAI_ENDPOINT",
+    )
+    azure_openai_api_version: str | None = Field(
+        default=None,
+        validation_alias="AZURE_OPENAI_API_VERSION",
+    )
+    azure_openai_deployment_default: str | None = Field(
+        default=None,
+        validation_alias="AZURE_OPENAI_DEPLOYMENT_DEFAULT",
+    )
+    azure_openai_deployment_deep: str | None = Field(
+        default=None,
+        validation_alias="AZURE_OPENAI_DEPLOYMENT_DEEP",
     )
     log_level: LogLevel = Field(
         default="INFO",
@@ -118,6 +169,17 @@ class Settings(BaseSettings):
     def api(self) -> ApiSettings:
         return ApiSettings(bearer_token=self.api_bearer_token)
 
+    @cached_property
+    def llm(self) -> LLMSettings:
+        return LLMSettings(
+            openai_api_key=self.openai_api_key,
+            azure_openai_api_key=self.azure_openai_api_key,
+            azure_openai_endpoint=self.azure_openai_endpoint,
+            azure_openai_api_version=self.azure_openai_api_version,
+            azure_openai_deployment_default=self.azure_openai_deployment_default,
+            azure_openai_deployment_deep=self.azure_openai_deployment_deep,
+        )
+
     def resolve_credential_ref(self, credentials_ref: str | None) -> str | None:
         """Resolve an indirect secret handle stored in the database."""
 
@@ -156,6 +218,7 @@ __all__ = [
     "AdminSettings",
     "ApiSettings",
     "DatabaseSettings",
+    "LLMSettings",
     "LogLevel",
     "Settings",
     "logger",
