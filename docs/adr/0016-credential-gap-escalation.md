@@ -120,10 +120,16 @@ session:
    pre-check fails; gap proceeds.
 3. **Run a real probe with the credential present.** If 200 OK with
    sensible payload, pre-check passes; no gap is emitted; the session
-   continues using the env var. If 401/403, pre-check fails; gap
-   proceeds. If a transient (5xx, network), retry per the v1 retry
-   policy; on retry exhaustion, surface as a research-phase error,
-   not a gap. The probe is the ground truth.
+   continues using the env var. If 401/403 against an env var name
+   inferred fresh for a provider with no blessed `credentials_ref`,
+   pre-check fails and the gap proceeds (first-time missing/invalid
+   credential). If 401/403 against an env var that came from an
+   existing `credentials_ref` (layer 1), the credential was
+   previously blessed and has rotated or lost quota — surface that as
+   a research-phase error (operator admin work), not a gap. If a
+   transient (5xx, network), retry per the v1 retry policy; on retry
+   exhaustion, surface as a research-phase error, not a gap. The probe
+   is the ground truth.
 
 This makes "redundant ask" structurally impossible: the gap can only
 fire when the credential is actually missing or invalid.
@@ -223,10 +229,12 @@ Two state fields drive the lifecycle:
   `existing_provider_id`. `apply_catalog` will UPDATE.
 
 `CredentialGapResolution` carries `outcome ∈ {provisioned,
-provisioned_renamed, declined, aborted}`, `applied_env_var_name`,
+provisioned_renamed, aborted}`, `applied_env_var_name`,
 `applied_auth_scheme`, `applied_rate_limit_config`,
-`operator_rationale` (required when `outcome == declined`), and
-`resolved_at`.
+`operator_rationale` (required when `outcome == aborted`), and
+`resolved_at`. There is no `declined` outcome: the 2-option picker has
+no `Decline and coerce` branch (that is enum-gap's `declined_coerce`),
+so the only negative terminal is `aborted`.
 
 On resume, `credential_gap_wait` walks each pending proposal and
 re-runs the probe with the env var. Cases:
@@ -249,8 +257,8 @@ re-runs the probe with the env var. Cases:
    error.
 
 All gaps must be resolved (`provisioned`, `provisioned_renamed`, or
-`declined`/`aborted`) before research can complete and the graph can
-advance. Partial resolution across multiple resumes is fine.
+`aborted`) before research can complete and the graph can advance.
+Partial resolution across multiple resumes is fine.
 
 ### No parallel reviewer scrutiny
 

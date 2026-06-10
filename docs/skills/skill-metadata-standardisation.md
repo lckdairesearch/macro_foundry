@@ -1,13 +1,16 @@
 ---
-status: draft
+status: accepted
 ---
 # skill-metadata-standardisation
 
-**Status:** draft
+**Status:** accepted
 
-The body is content-complete; the skill is held at `draft` until the
-operator reviews and signs off on the seed exemplars in the body. Promote
-to `accepted` after that review.
+Accepted after operator review (issue #51): the operator signed off on
+the five seed exemplars and confirmed the geography-prefix pattern using
+`geographies.code`, alongside the prose-rule corrections made during that
+review (en-dash separator, real V3 structural columns, relaxed `variant`
+rule, and the cosmetic-only scoping of the retroactive-edit anti-pattern).
+The runtime skill loader may now load this skill into role prompts.
 
 ## Scope
 
@@ -31,8 +34,7 @@ structure lives in
 
 ## When triggered
 
-- node is `draft_proposal`, `governance_review`, or
-  `data_correctness_review`
+- node is `draft_proposal` or `governance_review`
 - the proposal under construction touches a prose field (`description`,
   `name`, `variant`) on any of `concept`, `series_family`, `series`,
   `series_family_members`
@@ -68,15 +70,21 @@ burden is on the drafter to justify any deviation.
 
 1. **`series.name` follows a geography-prefixed pattern.** Start with the
    `geographies.code` (handles ISO3 countries, blocs, regions, and
-   subnational units uniformly), then an em-dash, then the human-readable
-   description. Example:
+   subnational units uniformly), then a spaced en-dash (` – `, U+2013),
+   then the human-readable description. Example:
    `USA – Consumer Price Index for All Urban Consumers: All Items Less Food and Energy in U.S. City Average`
 2. **Structural differences must surface in prose.** When this series
    differs from siblings on a controlled-vocabulary structural field
-   (`seasonal_adjustment`, `frequency`, `measure`, `basket`,
-   `household_scope`, etc.), the difference must appear in both `name`
-   and `description`. Never let SA vs NSA hide in the row's structural
-   fields alone.
+   (`seasonal_adjustment`, `frequency`, `measure`, `measure_horizon`,
+   `unit_kind`, `price_basis`, etc. — the enum-backed columns on
+   `series`), the difference must appear in both `name` and
+   `description`. Never let SA vs NSA hide in the row's structural
+   fields alone. Note that basket- or population-scope distinctions
+   (e.g. "all items" vs "core", "all households" vs "two-or-more-person
+   households") are **not** structural columns in V3 — they are carried
+   by `variant` and the prose itself, so they must be spelled out
+   explicitly in `name`/`description` rather than assumed legible from
+   a column.
 3. **Descriptions do not contain internal codes.** `series.code`,
    `concept.code`, `series_family.code` are identity, not prose.
    Descriptions describe the series in human terms; codes belong
@@ -92,9 +100,13 @@ burden is on the drafter to justify any deviation.
 7. **`description` soft cap 2000 characters.** Minor exceedance is OK
    when content is genuinely necessary; bloated descriptions are a
    `Request changes` flag at Gate 1.
-8. **`variant` is one short noun phrase, ≤120 characters.** The
-   structural distinctions are encoded on the `series` row itself;
-   `variant` is the human label only.
+8. **`variant` is a short human label, ≤120 characters.** Either one
+   noun phrase or a compact comma-separated list of the qualifiers that
+   distinguish this member from its family siblings (e.g.
+   `Core (ex food and energy), SA, monthly index`). The full
+   structural detail is encoded on the `series` row itself; `variant`
+   names just the distinguishing axes, in human terms, enough to pick
+   this member out of the family list.
 
 #### Soft conventions (emerge from cohorts)
 
@@ -150,8 +162,15 @@ of the four triggers below fires.
 - Tense or voice swaps when both forms are correct
 - Aesthetic preferences ("reads better", "more concise")
 - Single-sibling disagreement (no clear consensus to anchor on)
-- Retroactively applying the hard rules in Part 1 to grandfathered prose
-  (length cap, geography prefix format, temporal hedging, etc.)
+- Retroactively applying the **cosmetic/format** hard rules in Part 1 to
+  grandfathered prose (length cap, geography-prefix format, temporal
+  hedging, tense/voice). This exclusion is cosmetic only: a genuine
+  factual omission that would mislead a reader — e.g. grandfathered prose
+  that nowhere reflects the row's own `seasonal_adjustment = NSA` — is a
+  `factual_incompleteness` trigger (low bar, always propose), not a
+  forbidden retroactive reformat. The line is "does the old prose
+  *mislead*" (propose) vs "is the old prose merely *unfashionable*"
+  (leave it).
 
 The anti-pattern list exists because each item is a known way that
 "style drift" pretends to be a meaningful trigger when it is not.
@@ -215,7 +234,7 @@ Different prose-adjacent fields are touched differently by the agent:
 | `concept.name` | — | ✅ |
 | `series_family.name` | — | ✅ |
 | `series.code`, `concept.code`, `series_family.code` | — | ✅ (and only via Gate 2 if changing an existing code) |
-| Structural enum-backed fields (`unit_code`, `frequency`, `seasonal_adjustment`, etc.) | — | ✅ (may require enum-gap escalation, deferred to a separate ADR) |
+| Structural enum-backed fields (`unit_kind`, `frequency`, `seasonal_adjustment`, etc.) | — | ✅ (may require enum-gap escalation per [ADR 0014](../adr/0014-enum-gap-escalation.md) / [skill-enum-gap-escalation](skill-enum-gap-escalation.md)) |
 
 For propose-only fields, the agent emits a `change_proposal_item` with
 `action = suggest_human_apply`. The executor's `apply_catalog` node
@@ -227,8 +246,7 @@ stamping `applied_at` plus `applied_by`).
 ### Seed exemplars
 
 Loaded only when `reference_metadata.cohort_A_empty == true`. Status:
-**proposed; awaiting operator sign-off** before promoting the parent
-skill from `draft` to `accepted`.
+**operator-reviewed and accepted** (issue #51).
 
 #### Exemplar 1 — Headline level series, monthly index, NSA
 

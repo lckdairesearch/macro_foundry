@@ -12,6 +12,38 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-10] Issue 51 — HITL operator review + promotion of three `draft` skills to `accepted`
+
+Operator-driven HITL acceptance gate (PRD #32). Reviewed and promoted the
+three escalation/standardisation skills from `draft` to `accepted`, so the
+runtime skill loader may now load them into role prompts:
+
+- **`skill-credential-gap`** — reviewed the operator-instruction block at
+  `credential_gap_wait`. During review, reconciled a contradiction between
+  pre-check layer 3 and the "previously-blessed credential" anti-pattern
+  (now gated on credential provenance), and dropped the unreachable
+  `declined` resolution outcome (2-option picker has no coerce path; only
+  `aborted` is a negative terminal). Matching consistency fixes applied to
+  ADR 0016.
+- **`skill-enum-gap-escalation`** — cross-checked against the credential-gap
+  fixes; confirmed it has no analogous contradiction or vestigial outcome,
+  and that its rendered `enum_gap_wait` block (Python diff + ADR 0005 Alembic
+  template + resume command) is sound. No edits needed.
+- **`skill-metadata-standardisation`** — signed off on the five seed exemplars
+  and the geography-prefix pattern. Corrected against V3 source of truth:
+  replaced fabricated columns (`basket`, `household_scope`, `unit_code`) with
+  real `series` enum columns; fixed `series.name` separator to en-dash
+  (U+2013, matching all exemplars); scoped the retroactive-edit anti-pattern
+  to cosmetic rules so it no longer collides with the `factual_incompleteness`
+  trigger; relaxed the `variant` rule to permit a compact qualifier list;
+  pointed the enum-escalation note at ADR 0014 instead of "deferred."
+
+Also flipped `status:` frontmatter + body status lines in all three skills,
+updated the `docs/skills/README.md` inventory (and removed a duplicate
+`skill-enum-gap-escalation` row), and updated the Seed-exemplars status note.
+
+Blocked-by #43, #48, #49 all closed prior to this work. Closes #51.
+
 ### [2026-06-10] Issue 52 — End-to-end FRED onboarding smoke
 
 Implemented five deterministic integration smokes for the gated onboarding
