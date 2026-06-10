@@ -71,14 +71,31 @@ Enums added:
 - `Action.SUGGEST_HUMAN_APPLY`
 - `ValidationStatus.PENDING_HUMAN_APPLY`, `ValidationStatus.APPLIED_BY_OPERATOR`
 
-Tests: 11 new passing (4 no_db MCP server, 6 no_db apply_catalog, 1 SQLAdmin DB action).
+`DraftProposal` schema extended so `propose_create_series` can write actual catalog rows:
+
+- `DraftSeries` gains three required fields (`temporal_stock_flow`, `unit_scale`,
+  `seasonal_adjustment`) and optional fields mirroring the full `series` column set;
+  `annualized`, `origin_type` (`"ingested"`), `is_active` have sensible defaults
+- `DraftSeriesSource.provider_code` renamed to `provider_name` — maps to `Provider.name`
+  (no `code` column exists on `providers`); adds `provider_role` and `priority` with defaults
+- `DraftIngestionFeed` gains required `feed_method` and `is_active` (default True)
+- `DraftFamilyMember` gains `is_primary` (default True)
+
+`propose_create_series` now performs the full transactional catalog write:
+Geography lookup → get-or-create Concept → get-or-create SeriesFamily → Series →
+SeriesFamilyMember → Provider/ProviderCatalog lookup → SeriesSource → IngestionFeed →
+IngestionFeedMember → optional hierarchy edges → audit ChangeProposal with
+`status=APPLIED` and `applied_at` stamped (Gate 1 approval already happened in state).
+
+Tests: 13 new passing total (integration test AC #6 added, 2 existing write-tool DB
+tests updated to use full `DraftProposal` payloads and assert `status=APPLIED`).
 Pre-existing cross-test pollution (`test_observations_routes` → `test_concurrency_advisory`) confirmed
 on base branch — not introduced by this issue.
 
 Verification:
 
-- `uv run pytest tests/macrodb/test_write_mcp.py tests/macrodb/test_apply_catalog.py -q` exited 0 with `11 passed`
-- `uv run pytest tests/macrodb/ -q` exited 0 with `200 passed, 1 pre-existing failure`
+- `uv run pytest tests/macrodb/test_write_mcp.py tests/macrodb/test_apply_catalog.py -q` exited 0 with `13 passed`
+- `uv run pytest tests/macrodb/ -q` exited 0 with `201 passed, 1 pre-existing failure`
 
 ### [2026-06-10] Issue 45 — Gate 1 wait node, approval_parse, apply_small_edit, un-approval window
 
