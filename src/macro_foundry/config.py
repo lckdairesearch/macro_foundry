@@ -22,6 +22,7 @@ class DatabaseSettings(BaseModel):
     owner_url: str
     app_url: str
     test_url: str
+    staging_url: str | None = None
 
 
 class AdminSettings(BaseModel):
@@ -54,6 +55,10 @@ class Settings(BaseSettings):
     db_owner_url: str = Field(validation_alias="MACRODB_OWNER_URL")
     db_app_url: str = Field(validation_alias="MACRODB_APP_URL")
     db_test_url: str = Field(validation_alias="MACRODB_TEST_URL")
+    db_staging_url: str | None = Field(
+        default=None,
+        validation_alias="MACRODB_STAGING_URL",
+    )
     admin_username: str = Field(
         default="admin",
         validation_alias="MACRODB_ADMIN_USERNAME",
@@ -98,6 +103,7 @@ class Settings(BaseSettings):
             owner_url=self.db_owner_url,
             app_url=self.db_app_url,
             test_url=self.db_test_url,
+            staging_url=self.db_staging_url,
         )
 
     @cached_property

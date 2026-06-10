@@ -73,9 +73,60 @@ async def _assert_round_trip_and_reseed() -> None:
             table_names = {row[0] for row in table_rows}
             view_names = {row[0] for row in view_rows}
 
-        assert EXPECTED_TABLES <= table_names
-        assert table_names - EXPECTED_TABLES == {"alembic_version"}
-        assert view_names == {"latest_observations"}
+            schema_owner = (
+                await conn.exec_driver_sql(
+                    """
+                    SELECT pg_catalog.pg_get_userbyid(nspowner)
+                    FROM pg_catalog.pg_namespace
+                    WHERE nspname = 'langgraph'
+                    """,
+                )
+            ).scalar_one()
+            can_use = (
+                await conn.exec_driver_sql(
+                    """
+                    SELECT has_schema_privilege('macrodb_app', 'langgraph', 'USAGE')
+                    """,
+                )
+            ).scalar_one()
+            can_insert_checkpoints = (
+                await conn.exec_driver_sql(
+                    """
+                    SELECT has_table_privilege('macrodb_app', 'langgraph.checkpoints', 'INSERT')
+                    """,
+                )
+            ).scalar_one()
+            can_update_writes = (
+                await conn.exec_driver_sql(
+                    """
+                    SELECT has_table_privilege('macrodb_app', 'langgraph.checkpoint_writes', 'UPDATE')
+                    """,
+                )
+            ).scalar_one()
+            can_delete_blobs = (
+                await conn.exec_driver_sql(
+                    """
+                    SELECT has_table_privilege('macrodb_app', 'langgraph.checkpoint_blobs', 'DELETE')
+                    """,
+                )
+            ).scalar_one()
+            can_create = (
+                await conn.exec_driver_sql(
+                    """
+                    SELECT has_schema_privilege('macrodb_app', 'langgraph', 'CREATE')
+                    """,
+                )
+            ).scalar_one()
+
+            assert EXPECTED_TABLES <= table_names
+            assert table_names - EXPECTED_TABLES == {"alembic_version"}
+            assert view_names == {"latest_observations"}
+            assert schema_owner == "macrodb_owner"
+            assert can_use is True
+            assert can_insert_checkpoints is True
+            assert can_update_writes is True
+            assert can_delete_blobs is True
+            assert can_create is False
 
         async with session_factory() as session:
             await run_seed(session)
