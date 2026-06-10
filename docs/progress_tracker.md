@@ -48,6 +48,38 @@ initialize and inspect that redesigned stack.
 
 ## Log
 
+### [2026-06-10] Issue 47 — Write-enabled MCP server, apply_catalog node, suggest_human_apply executor skip, SQLAdmin mark-applied action
+
+Implemented the post-Gate-1 write path and operator tooling per issue 47:
+
+- `MacrodbWriteTools` service class with 7 async methods:
+  `propose_create_series`, `record_suggest_human_apply`, `mark_proposal_outcome`,
+  `apply_approved_proposal`, `trigger_feed_execution` (stub, slice 17),
+  `record_enum_gap_proposal` (stub, slice 14), `record_credential_gap_proposal` (stub, slice 15)
+- `build_write_enabled_server()` wires all 7 tools and commits after each write; `build_read_only_server()` unchanged
+- `macrodb-mcp-write` console script added as a dedicated entry point for the write-enabled server
+- `make_apply_catalog_node()` reads gate-1-approved state, calls `propose_create_series`, and records
+  `suggest_human_apply` items as `PENDING_HUMAN_APPLY` — never auto-applies them; guards on `gate_1_approved=True`
+- `ChangeProposalItemAdmin.mark_applied` SQLAdmin action: flips `PENDING_HUMAN_APPLY` items to
+  `APPLIED_BY_OPERATOR` and stamps `proposal.applied_at`; returns `RedirectResponse` (303)
+- `ChangeProposal` model gains `applied_by` and `source_agent_session_id` columns
+- Migration 0008 widens `action` and `validation_status` VARCHAR columns on `change_proposal_items`
+  to 19 chars (raw SQL — `op.alter_column` silently failed to widen on psycopg3), drops and re-creates
+  named CHECK constraints to include `suggest_human_apply` / `pending_human_apply` / `applied_by_operator`
+
+Enums added:
+- `Action.SUGGEST_HUMAN_APPLY`
+- `ValidationStatus.PENDING_HUMAN_APPLY`, `ValidationStatus.APPLIED_BY_OPERATOR`
+
+Tests: 11 new passing (4 no_db MCP server, 6 no_db apply_catalog, 1 SQLAdmin DB action).
+Pre-existing cross-test pollution (`test_observations_routes` → `test_concurrency_advisory`) confirmed
+on base branch — not introduced by this issue.
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_write_mcp.py tests/macrodb/test_apply_catalog.py -q` exited 0 with `11 passed`
+- `uv run pytest tests/macrodb/ -q` exited 0 with `200 passed, 1 pre-existing failure`
+
 ### [2026-06-10] Issue 45 — Gate 1 wait node, approval_parse, apply_small_edit, un-approval window
 
 Implemented the Gate 1 interrupt slice per issue 45 / ADR 0011 approval semantics:

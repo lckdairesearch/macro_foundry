@@ -1,6 +1,14 @@
 """SQLAdmin views for governance models."""
 
+from datetime import datetime, timezone
+
+from sqlalchemy import select
+from sqladmin import action
+from starlette.requests import Request
+from starlette.responses import RedirectResponse, Response
+
 from macro_foundry.backend.admin._base import BaseModelView, datetime_widget_args, json_widget_args, relation_formatter
+from macro_foundry.enums import ValidationStatus
 from macro_foundry.models import ChangeProposal, ChangeProposalItem
 
 
@@ -84,6 +92,40 @@ class ChangeProposalItemAdmin(BaseModelView, model=ChangeProposalItem):
         ChangeProposalItem.validation_notes,
     ]
     form_widget_args = json_widget_args("proposed_data")
+
+    @action(
+        "mark-applied",
+        label="Mark applied",
+        confirmation_message="Mark selected items as applied_by_operator?",
+        add_in_list=True,
+        add_in_detail=False,
+    )
+    async def mark_applied(self, request: Request) -> Response:
+        pks_raw = request.query_params.get("pks", "")
+        pk_list = [pk.strip() for pk in pks_raw.split(",") if pk.strip()]
+
+        async with self.session_maker() as session:
+            now = datetime.now(timezone.utc)
+            for pk in pk_list:
+                result = await session.execute(
+                    select(ChangeProposalItem).where(ChangeProposalItem.id == pk)
+                )
+                item = result.scalar_one_or_none()
+                if item is None or item.validation_status != ValidationStatus.PENDING_HUMAN_APPLY:
+                    continue
+                item.validation_status = ValidationStatus.APPLIED_BY_OPERATOR
+                result_proposal = await session.execute(
+                    select(ChangeProposal).where(ChangeProposal.id == item.proposal_id)
+                )
+                proposal = result_proposal.scalar_one_or_none()
+                if proposal is not None:
+                    proposal.applied_at = now
+            await session.commit()
+
+        return RedirectResponse(
+            url=f"/admin/{self.identity}/list",
+            status_code=303,
+        )
 
 
 __all__ = ["ChangeProposalAdmin", "ChangeProposalItemAdmin"]
