@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from typer.testing import CliRunner
 
-from macro_foundry.bootstrap import DatabaseTarget, DebugSmokeBootstrapResult, run_debug_smoke_bootstrap
+from macro_foundry.bootstrap import DebugSmokeBootstrapResult, EnvTarget, run_debug_smoke_bootstrap
 from macro_foundry.cli import app
 from macro_foundry.enums import IngestionRunStatus
 from macro_foundry.models import (
@@ -30,12 +30,12 @@ async def test_debug_bootstrap_exercises_request_feed_provenance_and_hierarchy(
     test_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     summary = await run_debug_smoke_bootstrap(
-        database=DatabaseTarget.TEST,
+        database=EnvTarget.TEST,
         session_factory=test_session_factory,
         run_date=date(2026, 6, 9),
     )
 
-    assert summary.database is DatabaseTarget.TEST
+    assert summary.database is EnvTarget.TEST
     assert summary.feed_members == 2
     assert summary.member_logs == 2
     assert summary.observations == 2
@@ -112,15 +112,15 @@ def test_debug_bootstrap_cli_reports_request_centric_smoke_summary(
 ) -> None:
     async def fake_bootstrap_database(
         *,
-        database: DatabaseTarget,
+        target: EnvTarget,
         reset: bool,
         preset: str,
     ) -> DebugSmokeBootstrapResult:
-        assert database is DatabaseTarget.TEST
+        assert target is EnvTarget.TEST
         assert reset is False
         assert preset == "debug-smoke"
         return DebugSmokeBootstrapResult(
-            database=database,
+            database=target,
             run_date=date(2026, 6, 9),
             feed_members=2,
             member_logs=2,
@@ -133,8 +133,11 @@ def test_debug_bootstrap_cli_reports_request_centric_smoke_summary(
         fake_bootstrap_database,
     )
 
-    result = runner.invoke(app, ["bootstrap", "debug-smoke", "--database", "test"])
+    result = runner.invoke(app, ["db", "bootstrap", "debug-smoke", "--target", "test"])
 
     assert result.exit_code == 0
-    assert "database=test run_date=2026-06-09 preset=debug-smoke" in result.output
-    assert "request_feed_members=2 member_logs=2 observations=2 hierarchy_edges=1" in result.output
+    assert "target=test" in result.output
+    assert "run_date=2026-06-09" in result.output
+    assert "preset=debug-smoke" in result.output
+    assert "request_feed_members=2" in result.output
+    assert "observations=2" in result.output

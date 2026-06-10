@@ -1,6 +1,6 @@
 """Curated bootstrap entrypoints."""
 
-from macro_foundry.db import DatabaseTarget
+from macro_foundry.db import EnvTarget
 from macro_foundry.bootstrap.debug_smoke import DebugSmokeBootstrapResult, run_debug_smoke_bootstrap
 from macro_foundry.bootstrap.fred_us_macro import (
     FredUsMacroResetResult,
@@ -10,7 +10,7 @@ from macro_foundry.bootstrap.fred_us_macro import (
 )
 
 __all__ = [
-    "DatabaseTarget",
+    "EnvTarget",
     "DebugSmokeBootstrapResult",
     "FredUsMacroBootstrapResult",
     "FredUsMacroResetResult",

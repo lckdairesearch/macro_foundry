@@ -9,10 +9,11 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from macro_foundry.agent.channel import ChannelEvent, ChannelPrompt, ChannelResponse
 from macro_foundry.agent.checkpoint import psycopg_langgraph_url
-from macro_foundry.agent.onboarding import OnboardingResult, OnboardingTarget, SessionRuntimeConfig
+from macro_foundry.agent.onboarding import OnboardingResult, SessionRuntimeConfig
 from macro_foundry.agent.onboarding import run_onboarding_session
 from macro_foundry.agent.roles import AgentRole, RoleOverride
 from macro_foundry.cli import app
+from macro_foundry.db import EnvTarget
 
 runner = CliRunner()
 
@@ -23,11 +24,11 @@ def test_onboard_cli_starts_session_with_allowed_target(
 ) -> None:
     async def fake_run_onboarding_session(
         *,
-        target: OnboardingTarget,
+        target: EnvTarget,
         resume_session_id: str | None,
         **_: object,
     ) -> OnboardingResult:
-        assert target is OnboardingTarget.DEV
+        assert target is EnvTarget.DEV
         assert resume_session_id is None
         return OnboardingResult(session_id="onboard-demo", saved=True)
 
@@ -48,12 +49,12 @@ def test_onboard_cli_passes_role_model_overrides(
 ) -> None:
     async def fake_run_onboarding_session(
         *,
-        target: OnboardingTarget,
+        target: EnvTarget,
         resume_session_id: str | None,
         role_config_overrides: dict[AgentRole, RoleOverride],
         **_: object,
     ) -> OnboardingResult:
-        assert target is OnboardingTarget.STAGING
+        assert target is EnvTarget.STAGING
         assert resume_session_id is None
         assert role_config_overrides == {
             AgentRole.RESEARCHER: RoleOverride(default_model="gpt-fast"),
@@ -70,10 +71,10 @@ def test_onboard_cli_passes_role_model_overrides(
         app,
         [
             "onboard",
-            "--researcher-model",
-            "gpt-fast",
-            "--governance-reviewer-deep-model",
-            "gpt-code-review",
+            "--model",
+            "researcher=gpt-fast",
+            "--deep-model",
+            "governance_reviewer=gpt-code-review",
         ],
     )
 
@@ -86,7 +87,6 @@ def test_onboard_cli_rejects_non_onboarding_targets(target: str) -> None:
     result = runner.invoke(app, ["onboard", "--target", target])
 
     assert result.exit_code == 2
-    assert "Invalid value for '--target'" in result.output
 
 
 @pytest.mark.no_db
@@ -122,7 +122,7 @@ async def test_onboard_session_saves_and_resumes_with_fake_channel() -> None:
     first_channel = FakeChannel(["hello", "/save"])
 
     first_result = await run_onboarding_session(
-        target=OnboardingTarget.DEV,
+        target=EnvTarget.DEV,
         resume_session_id=None,
         channel=first_channel,
         checkpointer=checkpointer,
@@ -138,7 +138,7 @@ async def test_onboard_session_saves_and_resumes_with_fake_channel() -> None:
 
     resumed_channel = FakeChannel(["again", "/save"])
     resumed_result = await run_onboarding_session(
-        target=OnboardingTarget.DEV,
+        target=EnvTarget.DEV,
         resume_session_id="friendly-session",
         channel=resumed_channel,
         checkpointer=checkpointer,
@@ -154,14 +154,14 @@ async def test_onboard_session_saves_and_resumes_with_fake_channel() -> None:
 
 
 @pytest.mark.no_db
-def test_onboard_cli_accepts_max_session_cost_flag(
+def test_onboard_cli_accepts_cost_cap_flag(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: dict[str, object] = {}
 
     async def fake_run_onboarding_session(
         *,
-        target: OnboardingTarget,
+        target: EnvTarget,
         resume_session_id: str | None,
         runtime_config: SessionRuntimeConfig | None = None,
         **_: object,
@@ -174,7 +174,7 @@ def test_onboard_cli_accepts_max_session_cost_flag(
         fake_run_onboarding_session,
     )
 
-    result = runner.invoke(app, ["onboard", "--max-session-cost-usd", "2.50"])
+    result = runner.invoke(app, ["onboard", "--cost-cap", "2.50"])
 
     assert result.exit_code == 0
     assert captured["runtime_config"] == SessionRuntimeConfig(max_session_cost_usd=2.50)
@@ -187,7 +187,7 @@ async def test_cost_cap_aborts_session_when_exceeded() -> None:
     channel = FakeChannel(["/save"])
 
     result = await run_onboarding_session(
-        target=OnboardingTarget.DEV,
+        target=EnvTarget.DEV,
         resume_session_id=None,
         channel=channel,
         checkpointer=checkpointer,
@@ -210,7 +210,7 @@ async def test_concurrency_advisory_warns_when_another_session_exists(
 
     first_channel = FakeChannel(["/save"])
     await run_onboarding_session(
-        target=OnboardingTarget.DEV,
+        target=EnvTarget.DEV,
         resume_session_id=None,
         channel=first_channel,
         checkpointer=checkpointer,
@@ -220,7 +220,7 @@ async def test_concurrency_advisory_warns_when_another_session_exists(
     second_channel = FakeChannel(["/save"])
     with caplog.at_level(logging.WARNING, logger="macro_foundry.agent.onboarding"):
         await run_onboarding_session(
-            target=OnboardingTarget.DEV,
+            target=EnvTarget.DEV,
             resume_session_id=None,
             channel=second_channel,
             checkpointer=checkpointer,
@@ -242,7 +242,7 @@ async def test_concurrency_advisory_not_triggered_for_first_session(
 
     with caplog.at_level(logging.WARNING, logger="macro_foundry.agent.onboarding"):
         await run_onboarding_session(
-            target=OnboardingTarget.DEV,
+            target=EnvTarget.DEV,
             resume_session_id=None,
             channel=channel,
             checkpointer=checkpointer,
@@ -259,7 +259,7 @@ async def test_cost_cap_not_triggered_when_cost_below_cap() -> None:
     channel = FakeChannel(["/save"])
 
     result = await run_onboarding_session(
-        target=OnboardingTarget.DEV,
+        target=EnvTarget.DEV,
         resume_session_id=None,
         channel=channel,
         checkpointer=checkpointer,

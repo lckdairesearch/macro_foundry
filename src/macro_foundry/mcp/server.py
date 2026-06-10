@@ -1,14 +1,15 @@
-"""Standalone macrodb MCP server entry point."""
+"""macrodb MCP server builders.
+
+Entry point is `macrodb serve mcp` (see cli/serve.py).
+"""
 
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar
 
-import typer
 from mcp.server.fastmcp import FastMCP
 
-from macro_foundry.config import settings
 from macro_foundry.db.session import create_async_engine_for_url, create_session_factory
 from macro_foundry.mcp.read_tools import (
     FindSiblingSeriesArgs,
@@ -308,48 +309,11 @@ def build_write_enabled_server(database_url: str) -> FastMCP:
     return server
 
 
-app = typer.Typer(help="Run macrodb MCP servers.")
-
-
-@app.command()
-def read_only(
-    database_url: str | None = typer.Option(
-        None,
-        "--database-url",
-        help="Async SQLAlchemy database URL for this MCP process.",
-    ),
-) -> None:
-    """Run the read-only macrodb MCP server over stdio."""
-
-    build_read_only_server(database_url or settings.db.app_url).run(transport="stdio")
-
-
-@app.command()
-def write_enabled(
-    database_url: str | None = typer.Option(
-        None,
-        "--database-url",
-        help="Async SQLAlchemy database URL for this MCP process.",
-    ),
-) -> None:
-    """Run the write-enabled macrodb MCP server over stdio."""
-
-    build_write_enabled_server(database_url or settings.db.app_url).run(transport="stdio")
-
-
-def main() -> None:
-    """Console-script entry point."""
-
-    app()
-
-
 __all__ = [
     "READ_ONLY_TOOL_NAMES",
     "WRITE_TOOL_NAMES",
-    "app",
     "bind_read_tool",
     "build_read_only_server",
     "build_write_enabled_server",
-    "main",
     "reject_write_tool",
 ]

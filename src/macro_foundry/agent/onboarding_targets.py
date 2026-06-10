@@ -1,28 +1,11 @@
-"""Onboarding target selection."""
+"""Onboarding target selection — re-exports EnvTarget from db.env_target."""
 
 from __future__ import annotations
 
-from enum import Enum
+from macro_foundry.db.env_target import EnvTarget, database_url_for_env_target
 
-from macro_foundry.config import settings
-
-
-class OnboardingTarget(str, Enum):
-    """Durable onboarding targets accepted by the agent CLI."""
-
-    DEV = "dev"
-    STAGING = "staging"
-
-
-def database_url_for_onboarding_target(target: OnboardingTarget) -> str:
-    """Resolve the app-role database URL for an onboarding target."""
-
-    if target is OnboardingTarget.DEV:
-        return settings.db.app_url
-    if settings.db.staging_url is None:
-        raise ValueError("MACRODB_STAGING_URL is required for --target staging")
-    return settings.db.staging_url
-
+OnboardingTarget = EnvTarget
+database_url_for_onboarding_target = database_url_for_env_target
 
 __all__ = [
     "OnboardingTarget",

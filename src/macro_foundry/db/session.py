@@ -3,26 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
-from enum import Enum
 
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from macro_foundry.config import settings
-
-
-class DatabaseTarget(str, Enum):
-    """Named runtime database targets supported by CLI workflows."""
-
-    APP = "app"
-    TEST = "test"
-
-
-def database_url_for_target(target: DatabaseTarget) -> str:
-    """Resolve one of the supported runtime database targets."""
-
-    if target is DatabaseTarget.TEST:
-        return settings.db.test_url
-    return settings.db.app_url
 
 
 def create_async_engine_for_url(url: str) -> AsyncEngine:
@@ -73,11 +57,9 @@ get_session = build_session_dependency(AsyncSessionLocal)
 
 __all__ = [
     "AsyncSessionLocal",
-    "DatabaseTarget",
     "async_engine",
     "build_session_dependency",
     "create_async_engine_for_url",
     "create_session_factory",
-    "database_url_for_target",
     "get_session",
 ]

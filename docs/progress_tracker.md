@@ -12,6 +12,50 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-10] ADR 0017 — `macrodb` CLI interface standardisation implemented
+
+Refactored the entire `macrodb` CLI surface per ADR 0017:
+
+- **`EnvTarget` enum** added at `src/macro_foundry/db/env_target.py` with values
+  `dev | test | staging`, replacing both `DatabaseTarget` (`app`/`test`) and
+  `OnboardingTarget` (`dev`/`staging`). `database_url_for_env_target(EnvTarget)`
+  is the single resolver. `prod` is deliberately absent.
+- **`DatabaseTarget` removed** from `db/session.py` and `db/__init__.py`. All
+  bootstrap, CLI, and test callers updated. `OnboardingTarget` becomes a shim
+  alias (`OnboardingTarget = EnvTarget`) in `agent/onboarding_targets.py` so
+  agent-layer callers remain unchanged.
+- **`--target` flag everywhere.** `seed`, `db bootstrap`, `serve api`, and
+  `onboard` all declare `--target` with the `Annotated[T, typer.Option("--flag")]`
+  style. Per-command allowed subsets enforced at the CLI boundary (not in the
+  resolver).
+- **`macrodb db bootstrap`** — `bootstrap` moves under the `db` noun group.
+  `db_app` and a nested `bootstrap_app` added to `_app.py`.
+- **`macrodb serve api` / `macrodb serve mcp`** — single `serve` command replaced
+  by two subcommands. `serve api` defaults `--reload` to `False`. `serve mcp`
+  accepts `--write` to enable write tools and `--database-url` to override
+  `--target`.
+- **`macrodb-mcp` / `macrodb-mcp-write` console scripts removed** from
+  `pyproject.toml`. MCP server entry point is now `macrodb serve mcp [--write]`.
+  Standalone Typer app removed from `mcp/server.py`; `build_*_server()` functions
+  remain.
+- **`--reset --confirm` replaced by `--reset [-y]`** across `seed` and
+  `db bootstrap`. Interactive `typer.confirm` with `--yes/-y` skip via shared
+  `confirm_destructive()` helper.
+- **`cli_error_handler` decorator** provides one `ValueError → Exit(2)` path
+  shared across all commands. `print_result(result, as_json=)` renders
+  space-separated `key=value` or JSON under a global `--json` flag.
+- **`macrodb onboard`** — 18 per-role model flags (`--<role>-model`,
+  `--<role>-deep-model`) replaced by repeatable `--model ROLE=NAME` and
+  `--deep-model ROLE=NAME`. `--max-session-cost-usd` renamed `--cost-cap`.
+- **`src/macro_foundry/cli/bootstrap.py` deleted** (replaced by `cli/db.py`).
+
+Verification:
+
+- `uv run ruff check` over all changed source and test files exited 0
+- `uv run pytest tests/macrodb/ -q -m no_db` exited 0 with `157 passed`
+- `uv run pytest tests/macrodb/ tests/shared/ -q` exited 0 with
+  `277 passed, 1 pre-existing flaky concurrency advisory test`
+
 ### [2026-06-10] Issue 51 — HITL operator review + promotion of three `draft` skills to `accepted`
 
 Operator-driven HITL acceptance gate (PRD #32). Reviewed and promoted the

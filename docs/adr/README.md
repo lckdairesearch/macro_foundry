@@ -27,7 +27,7 @@ references and supersedes the old one — don't edit the old one.
 | [0014](0014-enum-gap-escalation.md) | Enum-gap escalation in the gated onboarding workflow | Accepted |
 | [0015](0015-reviewer-role-consolidation.md) | Reviewer role consolidation in the gated onboarding workflow | Accepted (partially amends ADR 0011) |
 | [0016](0016-credential-gap-escalation.md) | Credential-gap escalation in the gated onboarding workflow | Accepted |
-| [0014](0014-enum-gap-escalation.md) | Enum-gap escalation in the gated onboarding workflow | Accepted |
+| [0017](0017-cli-interface-standardisation.md) | `macrodb` CLI interface standardisation | Accepted |
 
 ## Format
 
