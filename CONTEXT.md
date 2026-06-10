@@ -450,6 +450,41 @@ proposal because the enum value, once committed, is reusable in
 future sessions. See ADR 0014 and
 `docs/skills/skill-enum-gap-escalation.md`.
 
+### Credential gap
+
+A condition encountered by the gated onboarding agent where a
+candidate provider cannot be reached because authentication material
+(typically an API key) is missing or invalid. The `research` role
+runs a three-layer pre-check (existing `credentials_ref` lookup →
+`os.environ` check → real probe) and emits a `CredentialGapProposal`
+only when all three layers confirm the credential is required and
+absent. The session pauses at `credential_gap_wait`; the operator
+provisions the credential in their shell or secret store and resumes
+the session. On resume the graph verifies via a fresh probe
+(the truth) before research continues.
+
+Credential gaps differ from **enum gaps** in three respects: detection
+fires from `research` rather than `draft_proposal`; the picker offers
+two options (Apply later, Abort) rather than three, because the probe
+is ground truth and the override case routes through chat-level
+Request changes if needed; and the provider-row write is **deferred
+to Gate 1**, not committed at gap-apply time, because the gate
+invariant says no catalog writes happen pre-Gate-1 and the credential
+reference has no provider identity to attach to until then.
+
+The agent never records the credential value. It is read from
+`os.environ` at probe time and passed to the HTTP client. The audit
+row records the env var name, the auth scheme, the rate limit
+metadata, and the operator's rationale — never the value.
+
+The audit row for a credential gap lives in `change_proposals` with
+`Action.suggest_credential_provisioning` and
+`TargetType.CREDENTIAL_REF`. Its lifecycle is independent of the
+session's main onboarding proposal: a provisioned credential is real
+operator-machine state regardless of whether the session ultimately
+succeeds, and the audit row reflects that. See ADR 0016 and
+`docs/skills/skill-credential-gap.md`.
+
 ### External code
 
 The identifier used by a provider for a series. Lives on `series_sources`. Not

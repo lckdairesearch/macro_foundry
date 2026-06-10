@@ -48,6 +48,79 @@ initialize and inspect that redesigned stack.
 
 ## Log
 
+### [2026-06-10] Reviewer role consolidation (ADR 0015) and credential-gap escalation (ADR 0016) closed
+
+Closed two design threads in one `/grill-with-docs` pass, both arising
+from a holistic review of issue #19's staleness against ADRs 0011–0014.
+
+**ADR 0015 — Reviewer role consolidation.** Two parallel reviewer roles
+in v1 (governance + data_correctness) instead of three. Selector code
+review folded into governance as a conditional skill load when
+`extraction_mode == custom_python`, with `task_hint = selector_code_review`
+routing to a code-reviewing model via the existing within-role tiering
+mechanism from ADR 0011. Common case stays at 2 LLM calls; rare
+`custom_python` case drops from 3 to 2. The structural property
+"reviewer cannot write" is unchanged; it is enforced by MCP tool
+binding, not by role count. Partially amends ADR 0011's reviewer
+decision; the rest of ADR 0011 stands.
+
+**ADR 0016 — Credential-gap escalation.** New sibling escalation
+pattern mirroring ADR 0014 (enum-gap) for the case where the agent
+cannot reach a provider because authentication material is missing or
+invalid. Detection at `research` after a three-layer pre-check
+(existing `credentials_ref` → `os.environ` → real probe), cached per
+session. New `credential_gap_wait` node with 2-option picker
+(`Apply later (pause)` + `Abort`); no "Decline and override" because
+the probe is ground truth. Provider-row writes deferred to Gate 1
+`apply_catalog` (asymmetric with enum-gap, principled because the gate
+invariant forbids pre-Gate-1 catalog writes). New schema deltas: new
+`Action.suggest_credential_provisioning`, new `TargetType.CREDENTIAL_REF`,
+new `AuthScheme` enum, new columns on `providers`
+(`auth_scheme`, `rate_limit_config`); `credentials_ref` confirmed in
+CONTEXT.md and added to the model during implementation. Credential
+value never enters macrodb, audit rows, state, or logs. The
+escalation-gap pattern (shared shape: enum-gap + credential-gap) is
+documented in the workflow doc as a pattern, not abstracted into one
+node — distinct nodes preserve per-kind audit queryability and
+per-kind evolution.
+
+**Operational defaults locked for #32 PRD** (no ADRs; will land in the
+new PRD's operational-defaults section):
+
+- LLM cost: log per-call cost in `llm_calls`; no enforcement; CLI flag
+  `--max-session-cost-usd` as hard cap.
+- Retry on transient LLM failure: three retries with exponential
+  backoff per call; surface on exhaustion; checkpoint preserves
+  position.
+- Probe fetch timeouts: 30s per fetch; recorded as a node-level error.
+
+**Deferred to its own tracker:** concurrency semantics for parallel
+`macrodb onboard` sessions, filed as
+[#31](https://github.com/lckdairesearch/macro_foundry/issues/31).
+
+**Implication for PRD #32 and issue slicing.** Issue #19 is now
+materially stale across five places (node inventory, state schema,
+MCP tool surface, schema deltas, skill inventory). The new PRD is
+slot #32 (slot #31 was taken by the concurrency tracker). Child
+issues #22, #23, #24, #27 should be closed and re-sliced under #32;
+#20, #21, #25, #28, #30 are still correct and can be re-linked; #26
+should be re-scoped per ADR 0015; #29 re-scoped per the new state
+schema.
+
+Documentation updated:
+
+- new ADR `docs/adr/0015-reviewer-role-consolidation.md`
+- new ADR `docs/adr/0016-credential-gap-escalation.md`
+- new skill `docs/skills/skill-credential-gap.md` at `draft`
+- `CONTEXT.md` — new glossary entry **Credential gap**
+- `docs/series_onboarding_workflow.md` — Reviewers section updated to
+  reflect two-role design; new Credential-gap escalation section;
+  node inventory updated (added `credential_gap_wait`, removed
+  `selector_review` as a separate node); read-only enforcement
+  clarified
+- inventory updates in `docs/adr/README.md` and
+  `docs/skills/README.md`
+
 ### [2026-06-10] Enum-gap escalation design ratified as ADR 0014
 
 Closed a `/grill-with-docs` session on how the gated onboarding agent

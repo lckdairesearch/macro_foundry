@@ -129,33 +129,42 @@ relevant drafter.
 
 ### Reviewers
 
-The reviewer role is split into three specializations, each read-only with
-respect to catalog and observation data. They run in parallel after drafting
-and validation; their findings are merged before Gate 1.
+The reviewer role is split into **two specializations**, each read-only
+with respect to catalog and observation data. They run in parallel after
+drafting and validation; their findings are merged before Gate 1. See
+[ADR 0015](adr/0015-reviewer-role-consolidation.md) for the rationale
+behind consolidating from three roles to two.
 
-**Governance reviewer.** Checks schema fit, code-grammar conformance, concept
-vs. family vs. variant boundaries, hierarchy edge governance (same-concept
-default, no hidden placeholders), and provider locator quality. Loads
-governance skills.
+**Governance reviewer.** Checks schema fit, code-grammar conformance,
+concept vs. family vs. variant boundaries, hierarchy edge governance
+(same-concept default, no hidden placeholders), and provider locator
+quality. Reviews harmonisation items against the four closed triggers
+(ADR 0013) and `EnumGapProposal` items against the three conditions plus
+anti-pattern list (ADR 0014). When `extraction_mode == custom_python`,
+conditionally loads `skill-ingestion-selector-conventions` to review the
+sandboxed selector module as part of the same call, and the router sets
+`task_hint = "selector_code_review"` to route to a code-reviewing model
+configured in the role's `models_by_task` map. Selector code review is
+therefore a specialty *inside* governance, not a separate role.
 
 **Data correctness reviewer.** Inspects the validator's parsed sample
-observations against expected magnitude bands, frequency, period boundaries,
-and unit conventions for the concept. Uses web search and web fetch to
-cross-reference at least one recent observation against the provider's own
-published page or a reputable mirror. Loads `skill-macro-research-discipline`
-and concept-plausibility skills.
+observations against expected magnitude bands, frequency, period
+boundaries, and unit conventions for the concept. Uses web search and
+web fetch to cross-reference at least one recent observation against the
+provider's own published page or a reputable mirror. Loads
+`skill-macro-research-discipline` and concept-plausibility skills.
 
-**Selector reviewer.** Only runs when a new `selector_type` extension is
-proposed. Reviews the sandboxed Python module against
-`skill-ingestion-selector-conventions`. Skipped entirely for config-only
-changes.
-
-All three reviewers must not:
+Both reviewers must not:
 
 - create or modify canonical series
 - create or modify sources or feeds
 - write observations
 - commit or push code
+
+Read-only enforcement is structural, not prompt discipline: read-only
+reviewer roles bind to the read-only `macrodb-mcp` instance, which does
+not expose write tools. Folding selector code review into governance
+does not weaken this guarantee.
 
 Review loop policy:
 
@@ -387,6 +396,94 @@ column — are out of scope. The drafter aborts with reason
 `schema_deficiency` and the gap is addressed in a separate
 operator-led design pass.
 
+## Credential-gap escalation
+
+When the `research` role attempts a provider probe and the
+three-layer pre-check fails (existing `providers.credentials_ref`
+lookup → `os.environ.get` → real probe), the agent must not coerce
+silently. It emits a `CredentialGapProposal` on its
+`credential_gap_proposals` output and blocks. The graph routes to a
+new human-interrupt node `credential_gap_wait`, distinct from both
+Gate 1 and `enum_gap_wait`.
+
+The discipline for emitting a gap (the three conditions —
+provider-materially-requires-key, pre-check-confirmed-missing,
+direct-doc-evidence — plus the anti-pattern list and the
+drop-on-missing-evidence rule) lives in
+[skill-credential-gap](skills/skill-credential-gap.md). The
+architectural rationale lives in
+[ADR 0016](adr/0016-credential-gap-escalation.md).
+
+`credential_gap_wait` renders, for each gap: the provider identity,
+the proposed env var name, the proposed auth scheme, the inferred
+rate limit (operator can confirm or edit), the cited evidence URL
+and snippet, the rationale, and inline operator instructions
+(where to obtain the key, how to set the env var, and the exact
+resume command). The picker is **2-option**: `Apply later (pause)`
+and `Abort`. There is no "Decline and override" option (asymmetric
+with `enum_gap_wait`'s 3-option picker) because the probe is the
+ground truth: the operator can leave the env var unset, pick
+`Apply later`, and the resume probe will decide whether a key is
+genuinely required.
+
+On `Apply later`, the session checkpoints and the CLI exits
+cleanly. The operator obtains the key out of band, sets the env
+var in their shell or secret store, and resumes with
+`macrodb onboard --resume <session-id>`. On resume,
+`credential_gap_wait` re-runs the probe with the env var. Success
+records `outcome = provisioned`; a renamed env var (operator pasted
+a different name in chat) records `outcome = provisioned_renamed`;
+persistent 401/403 re-renders the picker for rotation or abort.
+
+On `Abort`, the operator types a rationale (required); the session
+terminates via the existing `abort` node with reason
+`credential_unavailable`.
+
+Provider-row write timing is **asymmetric with enum-gap**:
+credential-gap-apply does NOT write to `providers`. The agent reads
+the env var directly from `os.environ` during research and
+`validate_script`. At Gate 1 `apply_catalog`, the `providers` row
+is INSERTED (new provider) or UPDATED (existing provider) with
+`credentials_ref`, `auth_scheme`, `rate_limit_config` populated
+from the audit row. This honours the gate invariant that nothing
+is committed before Gate 1 approves.
+
+Each `CredentialGapProposal` produces its own `change_proposals`
+row, linked to the session via `source_agent_session_id` but with
+an independent lifecycle. A provisioned credential is real
+operator-machine state regardless of whether the session ultimately
+succeeds; the audit row reflects that.
+
+Schema additions ADR 0016 introduces:
+
+- `Action`: new value `suggest_credential_provisioning`
+- `TargetType`: new value `CREDENTIAL_REF`
+- new column `providers.auth_scheme` (column-backed `AuthScheme`
+  enum with values `BEARER_HEADER`, `QUERY_PARAM`, `HEADER_CUSTOM`,
+  `BASIC_AUTH`, `NONE`)
+- new column `providers.rate_limit_config` (JSONB)
+- `providers.credentials_ref` reused if present or added if not
+
+OAuth flows, IP allowlists, and client-certificate auth are out of
+scope for v1. If a future provider needs an auth scheme not in the
+`AuthScheme` enum, the gap composes with enum-gap: an
+`EnumGapProposal` on `AuthScheme` fires first, the operator widens
+the enum, and only then can the credential-gap proceed.
+
+The agent **never** records the credential value itself. The
+schema, audit rows, state fields, and logs contain only the env
+var name, auth scheme, and rate-limit metadata. The value is
+read from `os.environ` at probe time and passed directly to the
+HTTP client; both research probes and the ingestion runtime use
+the same path.
+
+The credential-gap pattern and the enum-gap pattern share a
+documented shape ("escalation gap") — same picker semantics, same
+pause/resume mechanics, same audit-row-per-gap discipline — but
+distinct nodes, state fields, and audit values. Shared Python
+implementation lives in `agent/escalation/`. See ADR 0014 and
+ADR 0016 for the per-kind rationale.
+
 ## Skill loading
 
 Domain knowledge lives in narrow, single-purpose skills under `docs/skills/`.
@@ -578,8 +675,8 @@ Minimum contents:
 
 - approved proposal summary
 - the canonical rows created or updated in `staging`
-- reviewer findings, flags, and final status (governance, data correctness,
-  selector code)
+- reviewer findings, flags, and final status (governance — including
+  any conditional selector-code findings — and data correctness)
 - first-run ingestion summary
 - warnings or tolerated issues recorded during the initial backfill
 - explicit status that the package is `test-approved`
@@ -625,8 +722,21 @@ Node inventory (v1):
 - `draft_script` — only when `extraction_mode == "custom_python"`, writes to
   sandbox
 - `validate_script` — executes the selector against a probe payload
-- `governance_review`, `data_correctness_review`, `selector_review` —
-  parallel reviewers
+- `credential_gap_wait` — human-interrupt; reached only when
+  `credential_gap_proposals` is non-empty (research's pre-check
+  failed). Renders provider identity, proposed env var name and
+  auth scheme, inferred rate limit, cited evidence, and inline
+  operator instructions. Picker: `Apply later (pause)` | `Abort`.
+  On resume, re-runs the probe with `os.environ` to verify;
+  records resolutions in `credential_gap_resolutions` and one
+  `change_proposals` row per gap. Provider-row writes are deferred
+  to Gate 1 `apply_catalog`. See
+  [ADR 0016](adr/0016-credential-gap-escalation.md).
+- `governance_review`, `data_correctness_review` — parallel
+  reviewers. Selector code review is folded into governance as a
+  conditional skill load when `extraction_mode == custom_python`;
+  it is not a separate role. See
+  [ADR 0015](adr/0015-reviewer-role-consolidation.md).
 - `gate_1_wait` — interrupt, awaits structured approval
 - `approval_parse` — classifies user reply via the structured picker; extracts
   edit instructions inside the `Request changes` branch
