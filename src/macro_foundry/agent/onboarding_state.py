@@ -184,6 +184,11 @@ class OnboardingCheckpointState(BaseModel):
     collision_detail: dict[str, object] | None = None
     gate_2_escalation: bool = False
     unapprove_rejected: bool = False
+    # Script drafter + sandbox (issue 46)
+    proposed_selector_path: str | None = None
+    proposed_selector_name: str | None = None
+    validation_result: str | None = None
+    validation_error: str | None = None
     # Post-Gate-1 executor state (issue 50)
     applied_catalog: dict[str, object] = Field(default_factory=dict)
     first_run: dict[str, object] = Field(default_factory=dict)
