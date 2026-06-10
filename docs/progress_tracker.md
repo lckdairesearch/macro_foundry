@@ -48,6 +48,22 @@ initialize and inspect that redesigned stack.
 
 ## Log
 
+### [2026-06-10] Issue 40 — Shared escalation helpers implemented
+
+Added the reusable `agent/escalation/` helper layer for ADR 0014/0016
+gap wait nodes:
+
+- `picker.py` renders two-option credential-gap and three-option enum-gap
+  Questionary pickers with structured outcomes and inline operator
+  instruction blocks
+- `lifecycle.py` exposes pause/exit and resume-walk helpers that preserve
+  checkpoint position and verify only unresolved gaps
+- `audit.py` emits one independent `change_proposals` audit row plus one
+  item row per gap through a narrow store protocol, with caller-supplied
+  action, target type, proposed payload, and validation lifecycle values
+- added focused no-DB tests covering picker dispatch, pause/resume walking,
+  and fake-store audit emission
+
 ### [2026-06-10] Issue 37 — Role configs and LLM call telemetry initialized
 
 Added the v1 typed onboarding-agent role configuration slice:
