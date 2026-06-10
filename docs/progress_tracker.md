@@ -48,6 +48,43 @@ initialize and inspect that redesigned stack.
 
 ## Log
 
+### [2026-06-10] Issue 44 — Reviewer fan-out: governance + data_correctness implemented
+
+Implemented the two-reviewer parallel fan-out per ADR 0015:
+
+- added `ReviewBundle` model (`specialty`, `findings`, `review_cycle`,
+  `bounce_to_drafter`) with `Literal` specialty validation in
+  `src/macro_foundry/agent/review.py`
+- added `governance_review`, `data_correctness_review`, `extraction_mode`,
+  and `review_cycle` fields to `OnboardingGraphState` and
+  `OnboardingCheckpointState`
+- `make_governance_review_node`: writes `ReviewBundle(specialty="governance")`,
+  increments `review_cycle`, sets `task_hint="selector_code_review"` when
+  `extraction_mode == "custom_python"`, records `LLMCallRecord` with task_hint,
+  enforces read-only tool binding via `bound_tools` frozenset excluding write tools
+- `make_data_correctness_review_node`: writes `ReviewBundle(specialty="data_correctness")`,
+  enforces same read-only tool binding
+- `build_reviewer_fanout_graph`: compiles both reviewer nodes as parallel START
+  branches — exactly two LLM calls regardless of `extraction_mode`
+- `review_cycle` increments continuously; soft cap of 3 is visible via
+  `bundle.review_cycle == 3`
+
+All six acceptance criteria from issue 44 satisfied:
+- ✅ Exactly two parallel reviewer nodes
+- ✅ Read-only enforcement via bound_tools frozenset
+- ✅ Governance conditional selector skill fires only for custom_python; task_hint set
+- ✅ ReviewBundle per reviewer under specialty headings
+- ✅ Review cycle counter visible in state
+- ✅ Integration tests: config_only (2 calls, no task_hint) and custom_python
+  (2 calls, governance gets task_hint=selector_code_review)
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_reviewer_nodes.py -q -m no_db` exited 0 with
+  `18 passed`
+- `uv run pytest tests/macrodb/ -q -m no_db` exited 0 with `81 passed`
+- `uv run ruff check src/macro_foundry/agent/graph.py src/macro_foundry/agent/review.py src/macro_foundry/agent/onboarding_state.py tests/macrodb/test_reviewer_nodes.py` exited 0
+
 ### [2026-06-10] Issue 39 — Read-only macrodb MCP server implemented
 
 Implemented the read-only `macrodb-mcp` slice for ADR 0011 / PRD #32:
