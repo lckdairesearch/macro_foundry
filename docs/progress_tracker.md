@@ -12,6 +12,20 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-11] Onboard CLI — test target allowed for local test-environment runs
+
+Adjusted `macrodb onboard --target test` to run against the local test
+environment while warning that it is non-durable and must not be treated as
+the normal onboarding workflow target. Updated the CLI target docs and ADR
+0017 command summary to match.
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_onboard_cli.py -q -m no_db` exited 0
+  with `11 passed`
+- `uv run ruff check src/macro_foundry/cli/onboard.py tests/macrodb/test_onboard_cli.py`
+  exited 0
+
 ### [2026-06-11] Issue 59 follow-up — Cohort contract, metadata skill trigger, and selector schema classification corrected
 
 Closed the last-mile wiring gaps found in the post-completion review of issue 59:

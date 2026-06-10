@@ -78,8 +78,7 @@ backward-compatible aliases.
   `prod` is deliberately absent: the CLI never targets production
   (promotion is an outer workflow). The flag is always `--target`.
   Each command declares the subset it accepts and rejects the rest with
-  a uniform error (e.g. `seed` refuses `staging`; `onboard` refuses
-  `test`). The `app` value is retired.
+  a uniform error (e.g. `seed` refuses `staging`). The `app` value is retired.
 
 - **One raw-URL escape hatch.** `--database-url` survives only on
   `serve mcp`, where an MCP client may need to point a process at an
@@ -104,7 +103,7 @@ backward-compatible aliases.
 ### Command tree
 
 ```
-macrodb onboard [--target dev|staging] [--resume ID]
+macrodb onboard [--target dev|test|staging] [--resume ID]
                 [--model ROLE=NAME ...] [--cost-cap USD]
 macrodb seed    [--only ...] [--dry-run] [--reset] [-y]   --target dev|test
 macrodb db bootstrap <preset> [--reset] [-y]              --target dev|test

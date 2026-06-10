@@ -251,6 +251,33 @@ def test_onboard_cli_starts_session_with_allowed_target(
 
 
 @pytest.mark.no_db
+def test_onboard_cli_accepts_test_target_with_non_durable_note(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_run_onboarding_session(
+        *,
+        target: EnvTarget,
+        resume_session_id: str | None,
+        **_: object,
+    ) -> OnboardingResult:
+        assert target is EnvTarget.TEST
+        assert resume_session_id is None
+        return OnboardingResult(session_id="onboard-test", saved=True)
+
+    _patch_production_deps(monkeypatch)
+    monkeypatch.setattr(
+        "macro_foundry.cli.onboard.run_onboarding_session",
+        fake_run_onboarding_session,
+    )
+
+    result = runner.invoke(app, ["onboard", "--target", "test"])
+
+    assert result.exit_code == 0
+    assert "test-environment onboarding only" in result.output
+    assert "session_id=onboard-test saved=true" in result.output
+
+
+@pytest.mark.no_db
 def test_onboard_cli_passes_role_model_overrides(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -290,7 +317,7 @@ def test_onboard_cli_passes_role_model_overrides(
 
 
 @pytest.mark.no_db
-@pytest.mark.parametrize("target", ["prod", "test"])
+@pytest.mark.parametrize("target", ["prod"])
 def test_onboard_cli_rejects_non_onboarding_targets(target: str) -> None:
     result = runner.invoke(app, ["onboard", "--target", target])
 
