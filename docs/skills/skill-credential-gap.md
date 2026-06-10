@@ -1,3 +1,6 @@
+---
+status: draft
+---
 # skill-credential-gap
 
 **Status:** draft

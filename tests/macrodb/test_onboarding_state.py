@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from macro_foundry.agent.onboarding import OnboardingTarget
 from macro_foundry.agent.onboarding_state import (
     LLMCallRecord,
+    LoadedSkill,
     NodeTransition,
     OnboardingCheckpointState,
     RawMessage,
@@ -33,6 +34,14 @@ def test_onboarding_checkpoint_state_enforces_append_only_fields() -> None:
         raw_messages=(RawMessage(role="user", text="hello", created_at=created_at),),
         transcript=(TranscriptEntry(role="user", text="hello", created_at=created_at),),
         node_transitions=(NodeTransition(node="hello_world", event="responded", created_at=created_at),),
+        loaded_skills=(
+            LoadedSkill(
+                skill_id="skill-one",
+                trigger_id="trigger-one",
+                node="draft_proposal",
+                created_at=created_at,
+            ),
+        ),
     )
 
     appended = OnboardingCheckpointState.model_validate(
@@ -49,6 +58,20 @@ def test_onboarding_checkpoint_state_enforces_append_only_fields() -> None:
             "node_transitions": [
                 NodeTransition(node="hello_world", event="responded", created_at=created_at).model_dump(),
                 NodeTransition(node="hello_world", event="responded", created_at=created_at).model_dump(),
+            ],
+            "loaded_skills": [
+                LoadedSkill(
+                    skill_id="skill-one",
+                    trigger_id="trigger-one",
+                    node="draft_proposal",
+                    created_at=created_at,
+                ).model_dump(),
+                LoadedSkill(
+                    skill_id="skill-two",
+                    trigger_id="trigger-two",
+                    node="governance_review",
+                    created_at=created_at,
+                ).model_dump(),
             ],
         },
         context={"previous_state": base},
@@ -75,6 +98,19 @@ def test_onboarding_checkpoint_state_enforces_append_only_fields() -> None:
                 "raw_messages": [entry.model_dump() for entry in base.raw_messages],
                 "transcript": [entry.model_dump() for entry in base.transcript],
                 "node_transitions": [entry.model_dump() for entry in base.node_transitions],
+                "loaded_skills": [entry.model_dump() for entry in base.loaded_skills],
+            },
+            context={"previous_state": base},
+        )
+
+    with pytest.raises(ValidationError, match="loaded_skills is append-only"):
+        OnboardingCheckpointState.model_validate(
+            {
+                "session_metadata": metadata.model_dump(),
+                "raw_messages": [entry.model_dump() for entry in base.raw_messages],
+                "transcript": [entry.model_dump() for entry in base.transcript],
+                "node_transitions": [entry.model_dump() for entry in base.node_transitions],
+                "loaded_skills": [],
             },
             context={"previous_state": base},
         )

@@ -1,3 +1,6 @@
+---
+status: stub
+---
 # skill-concept-vs-family-vs-variant
 
 **Status:** stub

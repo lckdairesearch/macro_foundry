@@ -1,3 +1,6 @@
+---
+status: stub
+---
 # skill-ingestion-selector-conventions
 
 **Status:** stub

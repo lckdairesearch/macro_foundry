@@ -67,6 +67,18 @@ class LLMCallRecord(BaseModel):
     created_at: datetime
 
 
+class LoadedSkill(BaseModel):
+    """Append-only record of a skill body loaded for an LLM call."""
+
+    model_config = ConfigDict(frozen=True)
+
+    skill_id: str
+    trigger_id: str
+    node: str
+    created_at: datetime
+    section_title: str | None = None
+
+
 class OnboardingCheckpointState(BaseModel):
     """Validated onboarding checkpoint state.
 
@@ -82,6 +94,7 @@ class OnboardingCheckpointState(BaseModel):
     transcript: tuple[TranscriptEntry, ...] = ()
     node_transitions: tuple[NodeTransition, ...] = ()
     llm_calls: tuple[LLMCallRecord, ...] = ()
+    loaded_skills: tuple[LoadedSkill, ...] = ()
 
     @model_validator(mode="after")
     def enforce_checkpoint_invariants(self, info: ValidationInfo) -> "OnboardingCheckpointState":
@@ -98,6 +111,7 @@ class OnboardingCheckpointState(BaseModel):
         self._assert_append_only("transcript", previous.transcript, self.transcript)
         self._assert_append_only("node_transitions", previous.node_transitions, self.node_transitions)
         self._assert_append_only("llm_calls", previous.llm_calls, self.llm_calls)
+        self._assert_append_only("loaded_skills", previous.loaded_skills, self.loaded_skills)
         return self
 
     @staticmethod
@@ -113,6 +127,7 @@ class OnboardingCheckpointState(BaseModel):
 __all__ = [
     "LLMCallRecord",
     "NodeTransition",
+    "LoadedSkill",
     "OnboardingCheckpointState",
     "RawMessage",
     "SessionMetadata",

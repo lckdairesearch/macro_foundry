@@ -1,3 +1,6 @@
+---
+status: stub
+---
 # skill-series-source-ingestion-feed-linking
 
 **Status:** stub

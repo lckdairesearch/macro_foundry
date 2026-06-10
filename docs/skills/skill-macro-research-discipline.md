@@ -1,3 +1,6 @@
+---
+status: stub
+---
 # skill-macro-research-discipline
 
 **Status:** stub
