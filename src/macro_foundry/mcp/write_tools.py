@@ -59,6 +59,7 @@ class ProposeCreateSeriesArgs(SchemaModel):
     session_id: str
     payload: dict[str, Any]
     rationale: str | None = None
+    harmonisation_items: list[dict[str, Any]] = []
 
 
 class ApplyApprovedProposalArgs(SchemaModel):
@@ -71,6 +72,8 @@ class TriggerFeedExecutionArgs(SchemaModel):
     """Arguments for trigger_feed_execution."""
 
     feed_id: UUID
+    payload: Any | None = None
+    run_date: date_type | None = None
 
 
 class ApplyCredentialGapResolutionsArgs(SchemaModel):
@@ -251,6 +254,7 @@ class MacrodbWriteTools:
             ingestion_feed_id=feed.id,
             series_source_id=series_source.id,
             selector_type=draft.feed.selector_type,
+            selector_config=draft.feed.selector_config,
             is_active=True,
         )
         self._session.add(feed_member)
@@ -276,6 +280,23 @@ class MacrodbWriteTools:
                     )
                 )
         if draft.hierarchy_edges:
+            await self._session.flush()
+
+        for item in args.harmonisation_items:
+            if item.get("schema_field") != "series.description":
+                continue
+            target_code = item.get("target_series_code")
+            proposed_value = item.get("proposed_value")
+            if not target_code or proposed_value is None:
+                continue
+            target_series = (
+                await self._session.execute(
+                    select(Series).where(Series.code == target_code)
+                )
+            ).scalar_one_or_none()
+            if target_series is not None:
+                target_series.description = proposed_value
+        if args.harmonisation_items:
             await self._session.flush()
 
         # Audit ChangeProposal (status=APPLIED — Gate 1 already approved)
@@ -330,8 +351,26 @@ class MacrodbWriteTools:
         return {"proposal_id": str(proposal.id), "status": proposal.status.value}
 
     async def trigger_feed_execution(self, args: TriggerFeedExecutionArgs) -> dict[str, Any]:
-        # Slice 17 integration point — stub for now.
-        return {"feed_id": str(args.feed_id), "triggered": True}
+        from macro_foundry.ingestion.runtime.runner import execute_feed
+
+        if args.payload is None:
+            raise ValueError("trigger_feed_execution requires a provider payload")
+
+        outcome = await execute_feed(
+            self._session,
+            args.feed_id,
+            payload=args.payload,
+            run_date=args.run_date or date_type.today(),
+        )
+        return {
+            "feed_id": str(args.feed_id),
+            "run_log_id": str(outcome.run_log_id),
+            "status": outcome.status.value,
+            "rows_fetched": outcome.rows_fetched,
+            "rows_inserted": outcome.rows_inserted,
+            "rows_skipped": outcome.rows_skipped,
+            "triggered": True,
+        }
 
     async def apply_credential_gap_resolutions(
         self,

@@ -12,6 +12,37 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-10] Issue 52 — End-to-end FRED onboarding smoke
+
+Implemented five deterministic integration smokes for the gated onboarding
+runtime against the migrated FRED `json_path` selector path:
+
+- added a full injectable `build_onboarding_smoke_graph` spanning research,
+  reference metadata, extraction-mode classification, draft proposal,
+  enum/credential gap waits, reviewer nodes, Gate 1, `apply_catalog`,
+  first-run trigger/monitor, test review, and `emit_package`
+- extended draft feed payloads with `selector_config` and persisted that config
+  to `ingestion_feed_members`
+- replaced the write-tool `trigger_feed_execution` stub with a call to the
+  selector-registry `execute_feed` runtime using a recorded provider payload
+- carried `first_run_payload`, `first_run_run_date`, and
+  `credential_gap_resolutions` through graph state so executor nodes can resume
+  and persist access metadata
+- passed approved harmonisation items into the transactional catalog write for
+  `series.description` updates
+- added `tests/macrodb/test_onboarding_smoke.py` covering happy path,
+  harmonisation, enum-gap resume, credential-gap resume without secret leakage,
+  and suggest-human-apply mark-applied workflow
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_onboarding_smoke.py -q` exited 0 with
+  `5 passed`
+- `uv run pytest tests/macrodb/test_onboarding_smoke.py tests/macrodb/test_executor_nodes.py tests/macrodb/test_apply_catalog.py tests/macrodb/test_write_mcp.py tests/macrodb/test_reference_metadata_nodes.py -q`
+  exited 0 with `54 passed`
+- `uv run ruff check src/macro_foundry/agent/proposal.py src/macro_foundry/agent/executor.py src/macro_foundry/agent/catalog.py src/macro_foundry/agent/graph.py src/macro_foundry/mcp/write_tools.py tests/macrodb/test_onboarding_smoke.py`
+  exited 0
+
 ### [2026-06-10] Issue 48 — Enum-gap escalation vertical slice
 
 Implemented the ADR 0014 enum-gap escalation path:

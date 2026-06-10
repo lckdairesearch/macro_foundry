@@ -53,6 +53,7 @@ def make_apply_catalog_node(
                 session_id=session_id,
                 payload=proposal_dict,
                 rationale="Gate 1 approved",
+                harmonisation_items=list(state.get("harmonisation_items") or []),
             )
         )
         proposal_id = proposal_result.get("proposal_id")

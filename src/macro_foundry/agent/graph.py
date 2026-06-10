@@ -9,7 +9,21 @@ from typing import Annotated, Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
+from macro_foundry.agent.catalog import WriteToolsProtocol, make_apply_catalog_node
+from macro_foundry.agent.channel import Channel
+from macro_foundry.agent.credential_gap import make_credential_gap_wait_node
 from macro_foundry.agent.enum_gap import make_enum_gap_wait_node
+from macro_foundry.agent.executor import (
+    FirstRunLogReaderProtocol,
+    FirstRunWriteToolsProtocol,
+    OnboardingPackageStoreProtocol,
+    TestReviewerProtocol,
+    make_emit_package_node,
+    make_monitor_first_run_node,
+    make_test_review_node,
+    make_trigger_first_run_node,
+)
+from macro_foundry.agent.gate import ApprovalLLMCallable, PickerCallable, make_gate_1_wait_node
 from macro_foundry.agent.onboarding_state import (
     EnumGapProposal,
     LLMCallRecord,
@@ -60,6 +74,7 @@ class OnboardingGraphState(TypedDict, total=False):
     existing_catalog_hits: list[dict[str, Any]]
     ambiguity_flags: list[str]
     credential_gap_proposals: list[dict[str, Any]]
+    credential_gap_resolutions: list[dict[str, Any]]
     # Reference metadata (gather_reference_metadata node)
     reference_metadata: dict[str, Any] | None
     is_first_in_family: bool | None
@@ -90,6 +105,8 @@ class OnboardingGraphState(TypedDict, total=False):
     unapprove_rejected: bool
     # Post-Gate-1 executor state (issue 50)
     applied_catalog: dict[str, Any]
+    first_run_payload: Any
+    first_run_run_date: Any
     first_run: dict[str, Any]
     test_review: dict[str, Any]
     onboarding_package: dict[str, Any]
@@ -378,6 +395,7 @@ def make_draft_proposal_node(
             "enum_gap_proposals": enum_gap_proposals,
             "harmonisation_items": filtered_harmonisation,
             "suggest_human_apply": result.get("suggest_human_apply", []),
+            "suggest_human_apply_items": result.get("suggest_human_apply", []),
             "llm_calls": [llm_record.model_dump(mode="json")],
             "loaded_skills": [],
             "node_transitions": [
@@ -402,6 +420,28 @@ def EDGE_NEXT_FROM_ENUM_GAP_WAIT(state: OnboardingGraphState) -> str:
     if state.get("checkpoint_position") == "enum_gap_wait" or state.get("abort_reason"):
         return END
     return "draft_proposal"
+
+
+def _edge_next_from_research_for_smoke(state: OnboardingGraphState) -> str:
+    if state.get("credential_gap_proposals") and not state.get("credential_gap_resolutions"):
+        return "credential_gap_wait"
+    return "gather_reference_metadata"
+
+
+def _edge_next_from_credential_gap_wait_for_smoke(state: OnboardingGraphState) -> str:
+    if state.get("abort_reason") or state.get("checkpoint_position") == "credential_gap_wait":
+        return END
+    if state.get("credential_gap_resolutions"):
+        return "research"
+    return END
+
+
+def _edge_next_from_draft_for_smoke(state: OnboardingGraphState) -> str:
+    if state.get("enum_gap_proposals"):
+        return "enum_gap_wait"
+    if state.get("extraction_mode") == "custom_python":
+        return "draft_script"
+    return "governance_review"
 
 
 def make_governance_review_node(
@@ -611,6 +651,121 @@ def build_reviewer_fanout_graph(
     return graph.compile(checkpointer=checkpointer)
 
 
+def build_onboarding_smoke_graph(
+    *,
+    checkpointer: Any,
+    research_llm: LLMCallable,
+    cohort_lookup: CohortLookupCallable,
+    extraction_mode_classifier: ExtractionModeCallable,
+    draft_llm: LLMCallable,
+    governance_llm: ReviewerLLMCallable,
+    data_correctness_llm: ReviewerLLMCallable,
+    approval_llm: ApprovalLLMCallable,
+    gate_1_picker: PickerCallable,
+    channel: Channel,
+    write_tools: WriteToolsProtocol | FirstRunWriteToolsProtocol,
+    run_logs: FirstRunLogReaderProtocol,
+    test_reviewer: TestReviewerProtocol,
+    package_store: OnboardingPackageStoreProtocol,
+    role_configs: dict[AgentRole, RoleConfig],
+    registry: SkillRegistry,
+    enum_gap_wait_node: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]] | None = None,
+    credential_gap_wait_node: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]] | None = None,
+) -> Any:
+    """Compile the deterministic end-to-end onboarding smoke graph.
+
+    This graph intentionally keeps external services injectable so integration
+    tests can drive the real runtime and database writes without live LLM or
+    provider access.
+    """
+
+    research_node = make_research_node(research_llm, role_configs[AgentRole.RESEARCHER], registry)
+    gather_node = make_gather_reference_metadata_node(cohort_lookup)
+    classify_node = make_classify_extraction_mode_node(extraction_mode_classifier)
+    draft_node = make_draft_proposal_node(draft_llm, role_configs[AgentRole.PROPOSAL_DRAFTER], registry)
+    gov_node = make_governance_review_node(
+        governance_llm, role_configs[AgentRole.GOVERNANCE_REVIEWER], registry
+    )
+    data_node = make_data_correctness_review_node(
+        data_correctness_llm, role_configs[AgentRole.DATA_CORRECTNESS_REVIEWER], registry
+    )
+    gate_node = make_gate_1_wait_node(
+        channel=channel,
+        approval_llm=approval_llm,
+        picker=gate_1_picker,
+    )
+    apply_node = make_apply_catalog_node(write_tools=write_tools)  # type: ignore[arg-type]
+    trigger_node = make_trigger_first_run_node(write_tools=write_tools)  # type: ignore[arg-type]
+    monitor_node = make_monitor_first_run_node(run_logs=run_logs)
+    test_review_node = make_test_review_node(reviewer=test_reviewer)
+    emit_node = make_emit_package_node(package_store=package_store)
+    enum_wait = enum_gap_wait_node or make_enum_gap_wait_node()
+    credential_wait = credential_gap_wait_node or make_credential_gap_wait_node(
+        write_tools=write_tools,
+        environ={},
+        probe=lambda _name, _value: "ok",  # type: ignore[return-value]
+    )
+
+    async def _draft_script_placeholder(state: OnboardingGraphState) -> dict[str, Any]:
+        now = datetime.now(timezone.utc)
+        return {
+            "node_transitions": [
+                NodeTransition(
+                    node="draft_script",
+                    event="skipped_config_only" if state.get("extraction_mode") == "config_only" else "completed",
+                    created_at=now,
+                ).model_dump(mode="json")
+            ],
+        }
+
+    graph = StateGraph(OnboardingGraphState)
+    graph.add_node("research", research_node)
+    graph.add_node("credential_gap_wait", credential_wait)
+    graph.add_node("gather_reference_metadata", gather_node)
+    graph.add_node("classify_extraction_mode", classify_node)
+    graph.add_node("draft_proposal", draft_node)
+    graph.add_node("enum_gap_wait", enum_wait)
+    graph.add_node("draft_script", _draft_script_placeholder)
+    graph.add_node("governance_review", gov_node)
+    graph.add_node("data_correctness_review", data_node)
+    graph.add_node("gate_1_wait", gate_node)
+    graph.add_node("apply_catalog", apply_node)
+    graph.add_node("trigger_first_run", trigger_node)
+    graph.add_node("monitor_first_run", monitor_node)
+    graph.add_node("test_review", test_review_node)
+    graph.add_node("emit_package", emit_node)
+
+    graph.add_edge(START, "research")
+    graph.add_conditional_edges(
+        "research",
+        _edge_next_from_research_for_smoke,
+        ["credential_gap_wait", "gather_reference_metadata"],
+    )
+    graph.add_conditional_edges(
+        "credential_gap_wait",
+        _edge_next_from_credential_gap_wait_for_smoke,
+        ["research", END],
+    )
+    graph.add_edge("gather_reference_metadata", "classify_extraction_mode")
+    graph.add_edge("classify_extraction_mode", "draft_proposal")
+    graph.add_conditional_edges(
+        "draft_proposal",
+        _edge_next_from_draft_for_smoke,
+        ["enum_gap_wait", "draft_script", "governance_review"],
+    )
+    graph.add_conditional_edges("enum_gap_wait", EDGE_NEXT_FROM_ENUM_GAP_WAIT, ["draft_proposal", END])
+    graph.add_edge("draft_script", "governance_review")
+    graph.add_edge("governance_review", "data_correctness_review")
+    graph.add_edge("data_correctness_review", "gate_1_wait")
+    graph.add_edge("gate_1_wait", "apply_catalog")
+    graph.add_edge("apply_catalog", "trigger_first_run")
+    graph.add_edge("trigger_first_run", "monitor_first_run")
+    graph.add_edge("monitor_first_run", "test_review")
+    graph.add_edge("test_review", "emit_package")
+    graph.add_edge("emit_package", END)
+    return graph.compile(checkpointer=checkpointer)
+
+
 __all__ = [
     "CohortLookupCallable",
     "EDGE_NEXT_FROM_ENUM_GAP_WAIT",
@@ -621,6 +776,7 @@ __all__ = [
     "ReviewerLLMCallable",
     "build_hello_world_graph",
     "build_reference_metadata_graph",
+    "build_onboarding_smoke_graph",
     "build_research_draft_graph",
     "build_reviewer_fanout_graph",
     "initial_graph_update",

@@ -58,7 +58,13 @@ def make_trigger_first_run_node(
         if not feed_id:
             raise RuntimeError("trigger_first_run requires an applied catalog feed_id")
 
-        result = await write_tools.trigger_feed_execution(TriggerFeedExecutionArgs(feed_id=feed_id))
+        result = await write_tools.trigger_feed_execution(
+            TriggerFeedExecutionArgs(
+                feed_id=feed_id,
+                payload=state.get("first_run_payload"),
+                run_date=state.get("first_run_run_date"),
+            )
+        )
         now = datetime.now(timezone.utc)
         return {
             "first_run": {

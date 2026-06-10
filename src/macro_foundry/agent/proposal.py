@@ -68,6 +68,7 @@ class DraftIngestionFeed(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     selector_type: str
+    selector_config: dict[str, Any] | None = None
     cron_schedule: str
     feed_method: str
     fetch_url: str | None = None
