@@ -28,6 +28,7 @@ from macro_foundry.mcp.write_tools import (
     MarkProposalOutcomeArgs,
     ProposeCreateSeriesArgs,
     RecordCredentialGapProposalArgs,
+    RecordEnumGapProposalArgs,
     RecordSuggestHumanApplyArgs,
 )
 
@@ -212,6 +213,48 @@ async def test_apply_credential_gap_resolutions_updates_existing_provider_access
     assert refreshed.credentials_ref == "HKG_CENSTATD_API_KEY"
     assert refreshed.auth_scheme.value == "bearer_header"
     assert refreshed.rate_limit_config == {"requests_per_minute": 60}
+
+
+@pytest.mark.asyncio
+async def test_record_enum_gap_proposal_writes_independent_enum_value_audit_row(
+    session: AsyncSession,
+) -> None:
+    tools = MacrodbWriteTools(session)
+    gap = {
+        "enum_path": "macro_foundry.enums.series.SeasonalAdjustment",
+        "proposed_value": "TCA",
+        "proposed_name": "TREND_CYCLE_ADJUSTED",
+        "existing_values_considered": {
+            "SA": "Seasonally adjusted is not the trend-cycle component.",
+            "SAAR": "Annualized seasonal adjustment is not the trend-cycle component.",
+            "NSA": "Unadjusted data is not the trend-cycle component.",
+            "unknown": "Provider documentation is explicit, not unknown.",
+        },
+        "provider_evidence": {
+            "url": "https://example.test/provider-methodology",
+            "snippet": "Trend-cycle adjusted series are published separately.",
+        },
+        "catalog_impact": "Queries for seasonally adjusted data must not include trend-cycle data.",
+        "rationale": "Provider publishes trend-cycle adjusted data as a distinct methodology.",
+    }
+
+    result = await tools.record_enum_gap_proposal(
+        RecordEnumGapProposalArgs(gap=gap, session_id="sess-enum-gap-001")
+    )
+
+    proposal = await session.get(ChangeProposal, result["proposal_id"])
+    assert proposal is not None
+    assert proposal.proposal_type == ProposalType.SCHEMA_CHANGE
+    assert proposal.status == ProposalStatus.PROPOSED
+    assert proposal.source_agent_session_id == "sess-enum-gap-001"
+
+    item = await session.get(ChangeProposalItem, result["item_id"])
+    assert item is not None
+    assert item.item_type == ItemType.CODE_CHANGE
+    assert item.target_type == TargetType.ENUM_VALUE
+    assert item.action == Action.SUGGEST_ENUM_ADDITION
+    assert item.validation_status == ValidationStatus.PENDING
+    assert item.proposed_data == gap
 
 
 @pytest.mark.asyncio

@@ -439,8 +439,8 @@ class MacrodbWriteTools:
         item = ChangeProposalItem(
             proposal_id=proposal.id,
             item_type=ItemType.CODE_CHANGE,
-            target_type=TargetType.FILE,
-            action=Action.MODIFY_FILE,
+            target_type=TargetType.ENUM_VALUE,
+            action=Action.SUGGEST_ENUM_ADDITION,
             proposed_data=args.gap,
             validation_status=ValidationStatus.PENDING,
         )

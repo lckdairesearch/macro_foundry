@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, model_validator
 
 from macro_foundry.agent.proposal import CredentialGapProposal, CredentialGapResolution, DraftProposal
@@ -93,14 +95,53 @@ class NodeError(BaseModel):
     created_at: datetime
 
 
-class EnumGapProposal(BaseModel):
-    """Placeholder for slice 14 enum-gap escalation proposal."""
+EnumGapPath = Literal[
+    "macro_foundry.enums.series.Frequency",
+    "macro_foundry.enums.series.SeasonalAdjustment",
+    "macro_foundry.enums.series.Measure",
+    "macro_foundry.enums.series.MeasureHorizon",
+    "macro_foundry.enums.series.UnitKind",
+    "macro_foundry.enums.series.UnitScale",
+    "macro_foundry.enums.series.PriceBasis",
+    "macro_foundry.enums.series.ReferenceKind",
+    "macro_foundry.enums.series.TemporalStockFlow",
+]
+
+
+class ProviderEvidence(BaseModel):
+    """Provider citation supporting an enum-gap proposal."""
 
     model_config = ConfigDict(frozen=True)
 
-    column: str
-    proposed_value: str
-    rationale: str
+    url: str = Field(min_length=1)
+    snippet: str = Field(min_length=1)
+
+
+class EnumGapProposal(BaseModel):
+    """Structured enum-gap escalation proposal per ADR 0014."""
+
+    model_config = ConfigDict(frozen=True)
+
+    enum_path: EnumGapPath
+    proposed_value: str = Field(min_length=1)
+    proposed_name: str = Field(min_length=1)
+    existing_values_considered: dict[str, str] = Field(min_length=1)
+    provider_evidence: ProviderEvidence
+    catalog_impact: str = Field(min_length=1)
+    rationale: str = Field(min_length=1, max_length=200)
+
+
+class EnumGapResolution(BaseModel):
+    """Operator or resume-verification resolution for one enum gap."""
+
+    model_config = ConfigDict(frozen=True)
+
+    gap_id: str
+    enum_path: EnumGapPath
+    outcome: Literal["applied", "applied_renamed", "declined_coerce", "aborted"]
+    applied_value: str | None = None
+    operator_rationale: str | None = None
+    resolved_at: datetime
 
 
 class OnboardingCheckpointState(BaseModel):
@@ -122,6 +163,9 @@ class OnboardingCheckpointState(BaseModel):
     errors: tuple[NodeError, ...] = ()
     proposal: DraftProposal | None = None
     enum_gap_proposals: tuple[EnumGapProposal, ...] = ()
+    enum_gap_resolutions: tuple[EnumGapResolution, ...] = ()
+    coerce_hints: dict[str, str] = Field(default_factory=dict)
+    coerce_rationales: dict[str, str] = Field(default_factory=dict)
     credential_gap_proposals: tuple[CredentialGapProposal, ...] = ()
     credential_gap_resolutions: tuple[CredentialGapResolution, ...] = ()
     # Reviewer fan-out (issue 44)
@@ -187,12 +231,15 @@ class OnboardingCheckpointState(BaseModel):
 __all__ = [
     "CredentialGapProposal",
     "CredentialGapResolution",
+    "EnumGapPath",
     "EnumGapProposal",
+    "EnumGapResolution",
     "LLMCallRecord",
     "LoadedSkill",
     "NodeError",
     "NodeTransition",
     "OnboardingCheckpointState",
+    "ProviderEvidence",
     "RawMessage",
     "SessionMetadata",
     "TranscriptEntry",

@@ -9,7 +9,14 @@ from typing import Annotated, Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from macro_foundry.agent.onboarding_state import LLMCallRecord, NodeTransition, RawMessage, TranscriptEntry
+from macro_foundry.agent.enum_gap import make_enum_gap_wait_node
+from macro_foundry.agent.onboarding_state import (
+    EnumGapProposal,
+    LLMCallRecord,
+    NodeTransition,
+    RawMessage,
+    TranscriptEntry,
+)
 from macro_foundry.agent.proposal import CredentialGapProposal, HarmonisationItem, ReferenceMetadata
 from macro_foundry.agent.review import ReviewBundle
 from macro_foundry.agent.roles import AgentRole, RoleConfig
@@ -46,6 +53,8 @@ class OnboardingGraphState(TypedDict, total=False):
     llm_calls: Annotated[list[dict[str, Any]], add]
     loaded_skills: Annotated[list[dict[str, Any]], add]
     pending_input: str | None
+    checkpoint_position: str | None
+    abort_reason: str | None
     # Research outputs
     source_summary: str | None
     existing_catalog_hits: list[dict[str, Any]]
@@ -59,6 +68,9 @@ class OnboardingGraphState(TypedDict, total=False):
     # Proposal outputs
     proposal: dict[str, Any] | None
     enum_gap_proposals: list[dict[str, Any]]
+    enum_gap_resolutions: list[dict[str, Any]]
+    coerce_hints: dict[str, str]
+    coerce_rationales: dict[str, str]
     harmonisation_items: list[dict[str, Any]]
     suggest_human_apply: list[dict[str, Any]]
     # Reviewer fan-out outputs (issue 44)
@@ -283,6 +295,25 @@ def _filter_harmonisation_items(raw_items: list[dict[str, Any]]) -> list[dict[st
     return valid
 
 
+def _filter_enum_gap_proposals(
+    raw_items: list[dict[str, Any]],
+    *,
+    suppressed_enum_paths: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Drop enum gaps that fail ADR 0014 allowlist or evidence validation."""
+    valid = []
+    suppressed = suppressed_enum_paths or set()
+    for item in raw_items:
+        try:
+            proposal = EnumGapProposal.model_validate(item)
+            if proposal.enum_path in suppressed:
+                continue
+            valid.append(proposal.model_dump(mode="json"))
+        except Exception:
+            pass
+    return valid
+
+
 def make_draft_proposal_node(
     llm: LLMCallable,
     role_config: RoleConfig,
@@ -306,13 +337,17 @@ def make_draft_proposal_node(
 
         source_summary = state.get("source_summary") or ""
         catalog_hits = state.get("existing_catalog_hits") or []
+        coerce_hints = state.get("coerce_hints") or {}
+        coerce_rationales = state.get("coerce_rationales") or {}
         messages = [
             {
                 "role": "user",
                 "content": (
                     f"source_summary: {source_summary}\n"
                     f"existing_catalog_hits: {catalog_hits}\n"
-                    f"reference_metadata: {reference_metadata}"
+                    f"reference_metadata: {reference_metadata}\n"
+                    f"coerce_hints: {coerce_hints}\n"
+                    f"coerce_rationales: {coerce_rationales}"
                 ),
             }
         ]
@@ -333,10 +368,14 @@ def make_draft_proposal_node(
 
         raw_harmonisation = result.get("harmonisation_items") or []
         filtered_harmonisation = _filter_harmonisation_items(raw_harmonisation)
+        enum_gap_proposals = _filter_enum_gap_proposals(
+            result.get("enum_gap_proposals") or [],
+            suppressed_enum_paths=set(coerce_hints),
+        )
 
         return {
-            "proposal": result["proposal"],
-            "enum_gap_proposals": result.get("enum_gap_proposals", []),
+            "proposal": None if enum_gap_proposals else result["proposal"],
+            "enum_gap_proposals": enum_gap_proposals,
             "harmonisation_items": filtered_harmonisation,
             "suggest_human_apply": result.get("suggest_human_apply", []),
             "llm_calls": [llm_record.model_dump(mode="json")],
@@ -351,9 +390,18 @@ def make_draft_proposal_node(
 
 def EDGE_NEXT_FROM_DRAFT(state: OnboardingGraphState) -> str:
     """Conditional edge out of draft_proposal; reads extraction_mode deterministically."""
+    if state.get("enum_gap_proposals"):
+        return "enum_gap_wait"
     if state.get("extraction_mode") == "custom_python":
         return "draft_script"
     return END
+
+
+def EDGE_NEXT_FROM_ENUM_GAP_WAIT(state: OnboardingGraphState) -> str:
+    """Conditional edge out of enum_gap_wait."""
+    if state.get("checkpoint_position") == "enum_gap_wait" or state.get("abort_reason"):
+        return END
+    return "draft_proposal"
 
 
 def make_governance_review_node(
@@ -368,6 +416,7 @@ def make_governance_review_node(
 
     async def _governance_review_node(state: OnboardingGraphState) -> dict[str, Any]:
         proposal = state.get("proposal") or {}
+        enum_gap_proposals = state.get("enum_gap_proposals") or []
         extraction_mode = state.get("extraction_mode") or "config_only"
         cycle = (state.get("review_cycle") or 0) + 1
 
@@ -375,7 +424,12 @@ def make_governance_review_node(
         if extraction_mode == "custom_python":
             task_hint = "selector_code_review"
 
-        messages = [{"role": "user", "content": f"proposal: {proposal}"}]
+        messages = [
+            {
+                "role": "user",
+                "content": f"proposal: {proposal}\nenum_gap_proposals: {enum_gap_proposals}",
+            }
+        ]
         result = await llm(messages, task_hint=task_hint)
 
         now = datetime.now(timezone.utc)
@@ -501,6 +555,7 @@ def build_reference_metadata_graph(
     gather_node = make_gather_reference_metadata_node(cohort_lookup)
     classify_node = make_classify_extraction_mode_node(extraction_mode_classifier)
     draft_node = make_draft_proposal_node(draft_llm, role_configs[AgentRole.PROPOSAL_DRAFTER], registry)
+    enum_gap_wait_node = make_enum_gap_wait_node()
 
     async def _draft_script_placeholder(state: OnboardingGraphState) -> dict[str, Any]:
         now = datetime.now(timezone.utc)
@@ -515,6 +570,7 @@ def build_reference_metadata_graph(
     graph.add_node("gather_reference_metadata", gather_node)
     graph.add_node("classify_extraction_mode", classify_node)
     graph.add_node("draft_proposal", draft_node)
+    graph.add_node("enum_gap_wait", enum_gap_wait_node)
     graph.add_node("draft_script", _draft_script_placeholder)
 
     graph.add_edge(START, "research")
@@ -522,7 +578,8 @@ def build_reference_metadata_graph(
     graph.add_edge("research", "classify_extraction_mode")
     graph.add_edge("gather_reference_metadata", "draft_proposal")
     graph.add_edge("classify_extraction_mode", "draft_proposal")
-    graph.add_conditional_edges("draft_proposal", EDGE_NEXT_FROM_DRAFT, ["draft_script", END])
+    graph.add_conditional_edges("draft_proposal", EDGE_NEXT_FROM_DRAFT, ["enum_gap_wait", "draft_script", END])
+    graph.add_conditional_edges("enum_gap_wait", EDGE_NEXT_FROM_ENUM_GAP_WAIT, ["draft_proposal", END])
     graph.add_edge("draft_script", END)
     return graph.compile(checkpointer=checkpointer)
 
@@ -556,6 +613,7 @@ def build_reviewer_fanout_graph(
 
 __all__ = [
     "CohortLookupCallable",
+    "EDGE_NEXT_FROM_ENUM_GAP_WAIT",
     "EDGE_NEXT_FROM_DRAFT",
     "ExtractionModeCallable",
     "LLMCallable",

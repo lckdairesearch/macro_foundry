@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timezone
 from typing import Any
 
@@ -172,9 +171,16 @@ def test_state_invariant_blocks_proposal_when_enum_gap_proposals_non_empty() -> 
             proposal=_minimal_proposal(),
             enum_gap_proposals=(
                 EnumGapProposal(
-                    column="frequency",
+                    enum_path="macro_foundry.enums.series.Frequency",
                     proposed_value="quarterly_avg",
-                    rationale="Provider reports 3-month moving average, no existing value fits.",
+                    proposed_name="QUARTERLY_AVG",
+                    existing_values_considered={"M": "Monthly does not represent this cadence."},
+                    provider_evidence={
+                        "url": "https://example.test/docs",
+                        "snippet": "Provider reports a quarterly-average cadence.",
+                    },
+                    catalog_impact="Frequency queries would otherwise group it with standard quarterly data.",
+                    rationale="Provider reports a 3-month moving-average cadence.",
                 ),
             ),
         )
@@ -187,13 +193,37 @@ def test_state_allows_enum_gap_proposals_without_proposal() -> None:
         proposal=None,
         enum_gap_proposals=(
             EnumGapProposal(
-                column="frequency",
+                enum_path="macro_foundry.enums.series.Frequency",
                 proposed_value="quarterly_avg",
-                rationale="Provider reports 3-month moving average.",
+                proposed_name="QUARTERLY_AVG",
+                existing_values_considered={"M": "Monthly does not represent this cadence."},
+                provider_evidence={
+                    "url": "https://example.test/docs",
+                    "snippet": "Provider reports a quarterly-average cadence.",
+                },
+                catalog_impact="Frequency queries would otherwise group it with standard quarterly data.",
+                rationale="Provider reports a 3-month moving-average cadence.",
             ),
         ),
     )
     assert len(state.enum_gap_proposals) == 1
+
+
+@pytest.mark.no_db
+def test_enum_gap_proposal_rejects_non_allowlisted_enum_path() -> None:
+    with pytest.raises(ValidationError):
+        EnumGapProposal(
+            enum_path="macro_foundry.enums.governance.Action",
+            proposed_value="suggest_new_control_value",
+            proposed_name="SUGGEST_NEW_CONTROL_VALUE",
+            existing_values_considered={"insert": "Not an insertion."},
+            provider_evidence={
+                "url": "https://example.test/docs",
+                "snippet": "Provider says something unrelated to series methodology.",
+            },
+            catalog_impact="Governance enums are not series methodology.",
+            rationale="Governance values are intentionally outside enum-gap escalation.",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -426,6 +456,244 @@ async def test_draft_proposal_node_records_llm_call() -> None:
     assert call["total_tokens"] == 300
 
 
+@pytest.mark.no_db
+@pytest.mark.asyncio
+async def test_draft_proposal_node_forwards_evidence_complete_enum_gap_without_proposal() -> None:
+    from macro_foundry.agent.graph import make_draft_proposal_node
+    from macro_foundry.agent.roles import AgentRole, default_role_configs
+    from macro_foundry.agent.skills import SkillRegistry
+
+    registry = SkillRegistry({})
+
+    async def fake_llm(messages: list[dict[str, str]]) -> dict[str, Any]:
+        return {
+            "proposal": {
+                "concept": {"action": "new", "code": "CPI", "name": "Consumer Price Index"},
+                "family": {
+                    "action": "new",
+                    "code": "US_CPI",
+                    "name": "US CPI",
+                    "concept_code": "CPI",
+                    "geography_code": "USA",
+                },
+                "series": {
+                    "action": "new",
+                    "code": "US_CPI_TCA_M",
+                    "name": "US CPI trend-cycle monthly",
+                    "frequency": "M",
+                    "measure": "level",
+                    "unit_kind": "index",
+                    "temporal_stock_flow": "index",
+                    "unit_scale": "one",
+                    "seasonal_adjustment": "NSA",
+                },
+                "source": {"provider_name": "USA FRED", "external_code": "CPIAUCSL"},
+                "feed": {"selector_type": "json_path", "cron_schedule": "0 14 * * 5", "feed_method": "api"},
+                "family_member": {"variant": "Trend-cycle"},
+                "hierarchy_edges": [],
+            },
+            "enum_gap_proposals": [
+                {
+                    "enum_path": "macro_foundry.enums.series.SeasonalAdjustment",
+                    "proposed_value": "TCA",
+                    "proposed_name": "TREND_CYCLE_ADJUSTED",
+                    "existing_values_considered": {
+                        "SA": "Seasonally adjusted is not the trend-cycle component.",
+                        "SAAR": "Annualized seasonal adjustment is not the trend-cycle component.",
+                        "NSA": "Unadjusted data is not the trend-cycle component.",
+                        "unknown": "Provider documentation is explicit, not unknown.",
+                    },
+                    "provider_evidence": {
+                        "url": "https://example.test/provider-methodology",
+                        "snippet": "Trend-cycle adjusted series are published separately from seasonally adjusted series.",
+                    },
+                    "catalog_impact": "Queries for seasonally adjusted data must not include trend-cycle data.",
+                    "rationale": "Provider publishes trend-cycle adjusted data as a distinct methodology.",
+                }
+            ],
+            "harmonisation_items": [],
+            "suggest_human_apply": [],
+            "prompt_tokens": 200,
+            "completion_tokens": 100,
+            "total_tokens": 300,
+            "cost_estimate_usd": 0.002,
+            "latency_ms": 350,
+        }
+
+    role_config = default_role_configs()[AgentRole.PROPOSAL_DRAFTER]
+    node = make_draft_proposal_node(fake_llm, role_config, registry)
+
+    result = await node({
+        "source_summary": "Provider publishes trend-cycle CPI.",
+        "existing_catalog_hits": [],
+        "ambiguity_flags": [],
+        "reference_metadata": {"cohort_a": [], "cohort_b": [], "cohort_c": [], "is_first_in_family": True},
+        "llm_calls": [],
+        "loaded_skills": [],
+        "node_transitions": [],
+    })
+
+    assert result["proposal"] is None
+    assert len(result["enum_gap_proposals"]) == 1
+    assert result["enum_gap_proposals"][0]["enum_path"] == "macro_foundry.enums.series.SeasonalAdjustment"
+
+
+@pytest.mark.no_db
+@pytest.mark.asyncio
+async def test_draft_proposal_node_drops_enum_gap_missing_required_evidence() -> None:
+    from macro_foundry.agent.graph import make_draft_proposal_node
+    from macro_foundry.agent.roles import AgentRole, default_role_configs
+    from macro_foundry.agent.skills import SkillRegistry
+
+    registry = SkillRegistry({})
+
+    async def fake_llm(messages: list[dict[str, str]]) -> dict[str, Any]:
+        return {
+            "proposal": {
+                "concept": {"action": "new", "code": "CPI", "name": "Consumer Price Index"},
+                "family": {
+                    "action": "new",
+                    "code": "US_CPI",
+                    "name": "US CPI",
+                    "concept_code": "CPI",
+                    "geography_code": "USA",
+                },
+                "series": {
+                    "action": "new",
+                    "code": "US_CPI_SA_M",
+                    "name": "US CPI monthly",
+                    "frequency": "M",
+                    "measure": "level",
+                    "unit_kind": "index",
+                    "temporal_stock_flow": "index",
+                    "unit_scale": "one",
+                    "seasonal_adjustment": "SA",
+                },
+                "source": {"provider_name": "USA FRED", "external_code": "CPIAUCSL"},
+                "feed": {"selector_type": "json_path", "cron_schedule": "0 14 * * 5", "feed_method": "api"},
+                "family_member": {"variant": "SA"},
+                "hierarchy_edges": [],
+            },
+            "enum_gap_proposals": [
+                {
+                    "enum_path": "macro_foundry.enums.series.SeasonalAdjustment",
+                    "proposed_value": "TCA",
+                    "proposed_name": "TREND_CYCLE_ADJUSTED",
+                    "existing_values_considered": {"SA": "Not trend-cycle."},
+                    "provider_evidence": {"url": "", "snippet": ""},
+                    "catalog_impact": "Queries would differ.",
+                    "rationale": "Missing evidence should drop this gap.",
+                }
+            ],
+            "harmonisation_items": [],
+            "suggest_human_apply": [],
+            "prompt_tokens": 200,
+            "completion_tokens": 100,
+            "total_tokens": 300,
+            "cost_estimate_usd": 0.002,
+            "latency_ms": 350,
+        }
+
+    role_config = default_role_configs()[AgentRole.PROPOSAL_DRAFTER]
+    node = make_draft_proposal_node(fake_llm, role_config, registry)
+
+    result = await node({
+        "source_summary": "Provider publishes CPI.",
+        "existing_catalog_hits": [],
+        "ambiguity_flags": [],
+        "reference_metadata": {"cohort_a": [], "cohort_b": [], "cohort_c": [], "is_first_in_family": True},
+        "llm_calls": [],
+        "loaded_skills": [],
+        "node_transitions": [],
+    })
+
+    assert result["proposal"] is not None
+    assert result["enum_gap_proposals"] == []
+
+
+@pytest.mark.no_db
+@pytest.mark.asyncio
+async def test_draft_proposal_node_passes_coerce_hints_and_suppresses_matching_enum_gap() -> None:
+    from macro_foundry.agent.graph import make_draft_proposal_node
+    from macro_foundry.agent.roles import AgentRole, default_role_configs
+    from macro_foundry.agent.skills import SkillRegistry
+
+    registry = SkillRegistry({})
+    captured_messages: list[dict[str, str]] = []
+
+    async def fake_llm(messages: list[dict[str, str]]) -> dict[str, Any]:
+        captured_messages.extend(messages)
+        return {
+            "proposal": {
+                "concept": {"action": "new", "code": "CPI", "name": "Consumer Price Index"},
+                "family": {
+                    "action": "new",
+                    "code": "US_CPI",
+                    "name": "US CPI",
+                    "concept_code": "CPI",
+                    "geography_code": "USA",
+                },
+                "series": {
+                    "action": "new",
+                    "code": "US_CPI_SA_M",
+                    "name": "US CPI monthly",
+                    "frequency": "M",
+                    "measure": "level",
+                    "unit_kind": "index",
+                    "temporal_stock_flow": "index",
+                    "unit_scale": "one",
+                    "seasonal_adjustment": "SA",
+                },
+                "source": {"provider_name": "USA FRED", "external_code": "CPIAUCSL"},
+                "feed": {"selector_type": "json_path", "cron_schedule": "0 14 * * 5", "feed_method": "api"},
+                "family_member": {"variant": "SA"},
+                "hierarchy_edges": [],
+            },
+            "enum_gap_proposals": [
+                {
+                    "enum_path": "macro_foundry.enums.series.SeasonalAdjustment",
+                    "proposed_value": "TCA",
+                    "proposed_name": "TREND_CYCLE_ADJUSTED",
+                    "existing_values_considered": {"SA": "Not trend-cycle."},
+                    "provider_evidence": {
+                        "url": "https://example.test/provider-methodology",
+                        "snippet": "Trend-cycle adjusted series are published separately.",
+                    },
+                    "catalog_impact": "Queries would differ.",
+                    "rationale": "Provider publishes trend-cycle adjusted data.",
+                }
+            ],
+            "harmonisation_items": [],
+            "suggest_human_apply": [],
+            "prompt_tokens": 200,
+            "completion_tokens": 100,
+            "total_tokens": 300,
+            "cost_estimate_usd": 0.002,
+            "latency_ms": 350,
+        }
+
+    role_config = default_role_configs()[AgentRole.PROPOSAL_DRAFTER]
+    node = make_draft_proposal_node(fake_llm, role_config, registry)
+
+    result = await node({
+        "source_summary": "Provider publishes CPI.",
+        "existing_catalog_hits": [],
+        "ambiguity_flags": [],
+        "reference_metadata": {"cohort_a": [], "cohort_b": [], "cohort_c": [], "is_first_in_family": True},
+        "coerce_hints": {"macro_foundry.enums.series.SeasonalAdjustment": "SA"},
+        "coerce_rationales": {
+            "macro_foundry.enums.series.SeasonalAdjustment": "Operator chose SA."
+        },
+        "llm_calls": [],
+        "loaded_skills": [],
+        "node_transitions": [],
+    })
+
+    assert "coerce_hints" in captured_messages[0]["content"]
+    assert result["proposal"] is not None
+    assert result["enum_gap_proposals"] == []
+
+
 # ---------------------------------------------------------------------------
 # Integration: research → draft_proposal happy path
 # ---------------------------------------------------------------------------
@@ -436,9 +704,8 @@ async def test_draft_proposal_node_records_llm_call() -> None:
 async def test_research_then_draft_integration() -> None:
     """Full graph: research → gather + classify (parallel) → draft_proposal."""
     from macro_foundry.agent.graph import build_reference_metadata_graph
-    from macro_foundry.agent.roles import AgentRole, default_role_configs
+    from macro_foundry.agent.roles import default_role_configs
     from macro_foundry.agent.skills import SkillRegistry
-    from typing import Any
     from langgraph.checkpoint.memory import MemorySaver
 
     registry = SkillRegistry({})

@@ -374,7 +374,6 @@ async def test_draft_proposal_node_forwards_harmonisation_items_with_full_eviden
     from macro_foundry.agent.graph import make_draft_proposal_node
     from macro_foundry.agent.roles import AgentRole, default_role_configs
     from macro_foundry.agent.skills import SkillRegistry
-    from macro_foundry.agent.proposal import DraftProposal
 
     valid_item = {
         "trigger": "factual_incompleteness",
@@ -592,7 +591,7 @@ async def test_draft_proposal_node_forwards_suggest_human_apply_items() -> None:
 async def test_build_reference_metadata_graph_runs_all_nodes() -> None:
     """Full graph: research → gather + classify (parallel) → draft_proposal."""
     from macro_foundry.agent.graph import build_reference_metadata_graph
-    from macro_foundry.agent.roles import AgentRole, default_role_configs
+    from macro_foundry.agent.roles import default_role_configs
     from macro_foundry.agent.skills import SkillRegistry
     from macro_foundry.agent.proposal import DraftProposal
     from langgraph.checkpoint.memory import MemorySaver
@@ -704,7 +703,7 @@ async def test_build_reference_metadata_graph_draft_anchors_on_cohort_a_and_emit
     factual_incompleteness harmonisation item citing the sibling with evidence.
     """
     from macro_foundry.agent.graph import build_reference_metadata_graph
-    from macro_foundry.agent.roles import AgentRole, default_role_configs
+    from macro_foundry.agent.roles import default_role_configs
     from macro_foundry.agent.skills import SkillRegistry
     from macro_foundry.agent.proposal import ReferenceMetadata
     from langgraph.checkpoint.memory import MemorySaver
@@ -821,7 +820,7 @@ async def test_build_reference_metadata_graph_draft_anchors_on_cohort_a_and_emit
 async def test_build_reference_metadata_graph_conditional_edge_reads_extraction_mode() -> None:
     """The conditional edge out of draft_proposal reads extraction_mode, not LLM output."""
     from macro_foundry.agent.graph import build_reference_metadata_graph, EDGE_NEXT_FROM_DRAFT
-    from macro_foundry.agent.roles import AgentRole, default_role_configs
+    from macro_foundry.agent.roles import default_role_configs
     from macro_foundry.agent.skills import SkillRegistry
     from langgraph.checkpoint.memory import MemorySaver
 
@@ -887,3 +886,22 @@ async def test_build_reference_metadata_graph_conditional_edge_reads_extraction_
     # The conditional edge function is exported; call it directly to confirm routing
     edge_result = EDGE_NEXT_FROM_DRAFT(final_state)
     assert edge_result == "draft_script"
+
+
+@pytest.mark.no_db
+def test_draft_proposal_conditional_edge_prioritizes_enum_gap_wait() -> None:
+    from macro_foundry.agent.graph import EDGE_NEXT_FROM_DRAFT
+
+    edge_result = EDGE_NEXT_FROM_DRAFT(
+        {
+            "extraction_mode": "custom_python",
+            "enum_gap_proposals": [
+                {
+                    "enum_path": "macro_foundry.enums.series.SeasonalAdjustment",
+                    "proposed_value": "TCA",
+                }
+            ],
+        }
+    )
+
+    assert edge_result == "enum_gap_wait"

@@ -61,6 +61,7 @@ class TargetType(str, Enum):
     SERIES_FAMILY_MEMBERS = "series_family_members"
     GEOGRAPHY_MEMBERSHIPS = "geography_memberships"
     CREDENTIAL_REF = "credential_ref"
+    ENUM_VALUE = "enum_value"
 
 
 class Action(str, Enum):
@@ -73,6 +74,7 @@ class Action(str, Enum):
     VALIDATE = "validate"
     SUGGEST_HUMAN_APPLY = "suggest_human_apply"
     SUGGEST_CREDENTIAL_PROVISIONING = "suggest_credential_provisioning"
+    SUGGEST_ENUM_ADDITION = "suggest_enum_addition"
 
 
 class ValidationStatus(str, Enum):
