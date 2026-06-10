@@ -32,4 +32,17 @@ class ReviewerOutput(BaseModel):
     bounce_to_drafter: bool = False
 
 
-__all__ = ["DraftOutput", "ResearchOutput", "ReviewerOutput"]
+class ApprovalOutput(BaseModel):
+    """Structured output for the approval_parser role."""
+
+    edit_instructions: str = Field(default="")
+
+
+class TestReviewOutput(BaseModel):
+    """Structured output for the test_reviewer role."""
+
+    summary: str = Field(default="")
+    passed: bool = True
+
+
+__all__ = ["ApprovalOutput", "DraftOutput", "ResearchOutput", "ReviewerOutput", "TestReviewOutput"]

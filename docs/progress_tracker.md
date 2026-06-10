@@ -12,6 +12,37 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-11] Issue 57 (last mile) — Production dependency factory wired into CLI
+
+Connected the OpenAI provider module to the real CLI path so `macrodb onboard`
+no longer hits `_missing_graph_dependencies()`.
+
+- `src/macro_foundry/agent/production_deps.py` (new) — `build_production_dependencies`
+  factory: OpenAI LLM callables for all roles via `make_openai_llm_callable` /
+  `make_openai_reviewer_callable`, Questionary-backed `gate_1_picker`, keyword-heuristic
+  `extraction_mode_classifier`, empty-cohort `cohort_lookup` (v1 best-effort),
+  pass-through `approval_llm` (pending_input → edit_instructions), `MacrodbWriteTools`
+  and `_DbRunLogReader` for DB seams, `_FilePackageStore` to `~/.macrodb/packages/`,
+  `SkillRegistry.from_directory(docs/skills/)` for accepted-skill loading
+- `src/macro_foundry/agent/llm_schemas.py` — added `ApprovalOutput` and
+  `TestReviewOutput` Pydantic schemas
+- `src/macro_foundry/cli/onboard.py` — refactored to `_async_onboard` wrapper that
+  opens a DB session, calls `build_production_dependencies`, and injects populated
+  `OnboardingGraphDependencies` into `SessionRuntimeConfig`; `role_config_overrides`
+  still passed through to `run_onboarding_session` for graph-level role logging
+- Three existing CLI tests updated: `_patch_production_deps` helper patches the
+  factory, session factory, engine, and `database_url_for_env_target` so
+  argument-parsing unit tests don't need a real DB connection or OpenAI key
+- `test_production_deps.py` (new) — 6 tests: type check, no-raising-stub guard,
+  research_llm format via mock HTTP transport, governance_llm task_hint tiering,
+  CLI deps-populated guard, end-to-end full graph through emit_package
+
+Verification:
+
+- `uv run ruff check src/macro_foundry/agent/production_deps.py src/macro_foundry/agent/llm_schemas.py src/macro_foundry/cli/onboard.py tests/macrodb/test_production_deps.py tests/macrodb/test_onboard_cli.py` exited 0
+- `uv run pytest tests/macrodb/ -q -m no_db` exited 0 with `215 passed`
+- `uv run pytest tests/macrodb/ tests/shared/ -q` exited 0 with `335 passed` (1 pre-existing flaky concurrency advisory test)
+
 ### [2026-06-10] Issue 27 — Small-edit subflow with uniqueness collision and Gate 2 dangerous-correction branch
 
 Implemented the Gate 2 dangerous-correction path per issue 27:
