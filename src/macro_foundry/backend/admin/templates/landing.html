@@ -1,0 +1,107 @@
+{% extends "sqladmin/layout.html" %}
+
+{% block content_header %}
+<div class="row align-items-center">
+  <div class="col">
+    <h1 class="page-title">macro_foundry Admin</h1>
+    <p class="page-pretitle">Curated Macroeconomic Database</p>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="container-xl">
+
+  <div class="row mb-4">
+    <div class="col-12">
+      <p class="text-muted">
+        macro_foundry organises macroeconomic data into
+        <strong>concepts</strong> (what is measured),
+        <strong>series families</strong> (a group of related series across geographies or variants),
+        <strong>series</strong> (a single time series, either ingested or derived),
+        and <strong>observations</strong> (vintage-dated data points).
+        Providers publish series via ingestion feeds.
+      </p>
+    </div>
+  </div>
+
+  <div class="row row-cards mb-4">
+
+    <div class="col-sm-6 col-lg-2">
+      <div class="card">
+        <div class="card-body">
+          <div class="subheader">Concepts</div>
+          <div class="h1 mb-0">{{ stats.concept_count }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-sm-6 col-lg-2">
+      <div class="card">
+        <div class="card-body">
+          <div class="subheader">Series Families</div>
+          <div class="h1 mb-0">{{ stats.series_family_count }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-sm-6 col-lg-4">
+      <div class="card">
+        <div class="card-body">
+          <div class="subheader">Series</div>
+          <div class="d-flex gap-3 mt-1">
+            {% for origin_type, count in stats.series_count_by_origin_type.items() %}
+            <div>
+              <div class="h3 mb-0">{{ count }}</div>
+              <div class="text-muted small">{{ origin_type }}</div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-sm-6 col-lg-2">
+      <div class="card">
+        <div class="card-body">
+          <div class="subheader">Observations</div>
+          <div class="h1 mb-0">{{ stats.observation_count }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-sm-6 col-lg-1">
+      <div class="card">
+        <div class="card-body">
+          <div class="subheader">Providers</div>
+          <div class="h1 mb-0">{{ stats.provider_count }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-sm-6 col-lg-1">
+      <div class="card">
+        <div class="card-body">
+          <div class="subheader">Ingestion Feeds</div>
+          <div class="h1 mb-0">{{ stats.ingestion_feed_count }}</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="row">
+    <div class="col-12">
+      <h3>Model views</h3>
+      <ul>
+        <li><a href="{{ request.url_for('admin:list', identity='concept') }}">Concepts</a></li>
+        <li><a href="{{ request.url_for('admin:list', identity='series-family') }}">Series Families</a></li>
+        <li><a href="{{ request.url_for('admin:list', identity='series') }}">Series</a></li>
+        <li><a href="{{ request.url_for('admin:list', identity='provider') }}">Providers</a></li>
+        <li><a href="{{ request.url_for('admin:list', identity='observation') }}">Observations</a></li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
