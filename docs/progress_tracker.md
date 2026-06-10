@@ -12,6 +12,33 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-10] Issue 58 — Skill loader wired into LLM node prompt assembly
+
+Replaced all `_ = registry  # skill loading is wired in future slices` stubs
+in the four LLM node factories with live `assemble_prompt` calls:
+
+- `make_research_node` — wired with `skill_triggers=[]` (no triggers declared yet)
+- `make_draft_proposal_node` — wired with `METADATA_STANDARDISATION_SKILL_TRIGGERS`;
+  metadata-standardisation prose fires when `proposal.touches_prose == True` and
+  the Seed exemplars subsection fires when `reference_metadata.cohort_A_empty == True`
+- `make_governance_review_node` — wired with `GOVERNANCE_SKILL_TRIGGERS`;
+  selector-conventions skill fires only when `extraction_mode == custom_python`
+- `make_data_correctness_review_node` — wired with `skill_triggers=[]`
+
+Each node now:
+- calls `assemble_prompt(base_role_prompt="", node=..., state=..., registry=..., skill_triggers=...)`
+- prepends skill bodies as a `system` message when the assembled text is non-empty
+- derives `loaded_skills` from `assembled.state_update()` instead of hardcoding `[]`
+
+`assemble_prompt` in `skills.py` updated to filter empty strings before joining
+bodies, so `base_role_prompt=""` does not produce a leading `\n\n`.
+
+Verification:
+
+- `uv run ruff check src/macro_foundry/agent/graph.py src/macro_foundry/agent/skills.py tests/macrodb/test_skill_wiring.py` exited 0
+- `uv run pytest tests/macrodb/test_skill_wiring.py -q -m no_db` exited 0 with `8 passed`
+- `uv run pytest tests/macrodb/ -q -m no_db` exited 0 with `165 passed, 85 deselected`
+
 ### [2026-06-10] Issue 56 — Production onboarding graph assembled and wired into CLI loop
 
 Promoted the injectable end-to-end onboarding graph to the canonical
