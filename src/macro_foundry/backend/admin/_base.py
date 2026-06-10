@@ -157,7 +157,7 @@ def datetime_widget_args(*field_names: str) -> dict[str, dict[str, Any]]:
 class BaseModelView(ModelView):
     """Project-level SQLAdmin defaults shared by all concrete views."""
 
-    can_view_details = False
+    can_view_details = True
     page_size = 25
     page_size_options = [25, 50, 100]
     use_pretty_export = True
