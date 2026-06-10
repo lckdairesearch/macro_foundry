@@ -12,6 +12,34 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-11] Issue 59 — MCP-backed cohorts and selector-registry extraction classification
+
+Replaced the two production dependency placeholders from issue 59:
+
+- `build_production_dependencies` now injects a DB-backed `cohort_lookup` that
+  resolves ADR 0013 cohort A/B/C from `existing_catalog_hits` through
+  `MacrodbReadTools.find_sibling_series`, `list_series_for_concept`, and
+  `list_provider_series_for_concept`; repeated rows are deduped before graph
+  state receives `reference_metadata`.
+- `is_first_in_family` remains graph-owned and is now based on genuine cohort A
+  read-tool results in the production path, rather than `_empty_cohort_lookup`.
+- `extraction_mode_classifier` now consults `MacrodbReadTools.list_selector_types`
+  and treats matching registered selectors / known selector shapes as
+  `config_only` before falling back to the custom-Python keyword signals.
+- `approval_llm` remains the documented v1 pass-through from operator
+  `pending_input` to `edit_instructions`; no architectural change made.
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_production_deps.py -q -m no_db` exited 0
+  with `8 passed`
+- `uv run pytest tests/macrodb/test_reference_metadata_nodes.py -q -m no_db`
+  exited 0 with `27 passed`
+- `uv run ruff check src/macro_foundry/agent/production_deps.py tests/macrodb/test_production_deps.py`
+  exited 0
+- `uv run pytest tests/macrodb/ -q -m no_db` exited 0 with
+  `217 passed, 85 deselected`
+
 ### [2026-06-11] Issue 57 (last mile) — Production dependency factory wired into CLI
 
 Connected the OpenAI provider module to the real CLI path so `macrodb onboard`

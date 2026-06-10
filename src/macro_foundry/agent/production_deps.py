@@ -29,6 +29,12 @@ from macro_foundry.agent.llm_schemas import (
 from macro_foundry.agent.onboarding import OnboardingGraphDependencies
 from macro_foundry.agent.roles import AgentRole, RoleConfig
 from macro_foundry.agent.skills import SkillRegistry
+from macro_foundry.mcp.read_tools import (
+    FindSiblingSeriesArgs,
+    ListProviderSeriesForConceptArgs,
+    ListSeriesForConceptArgs,
+    MacrodbReadTools,
+)
 
 _SKILLS_DIR = Path(__file__).resolve().parents[3] / "docs" / "skills"
 
@@ -42,16 +48,126 @@ async def _questionary_picker(options: list[str], *_args: Any) -> str:
     return await questionary.select("Select:", choices=options).unsafe_ask_async()
 
 
-async def _classify_extraction_mode(source_summary: str) -> str:
-    lower = source_summary.lower()
-    if any(kw in lower for kw in _CUSTOM_PYTHON_KEYWORDS):
-        return "custom_python"
-    return "config_only"
+def _make_extraction_mode_classifier(
+    *,
+    session: AsyncSession,
+) -> Callable[[str], Awaitable[str]]:
+    read_tools = MacrodbReadTools(session)
+
+    async def _classify_extraction_mode(source_summary: str) -> str:
+        lower = source_summary.lower()
+        selector_types = await read_tools.list_selector_types()
+        if _matches_registered_selector(lower, selector_types):
+            return "config_only"
+        if any(kw in lower for kw in _CUSTOM_PYTHON_KEYWORDS):
+            return "custom_python"
+        return "config_only"
+
+    return _classify_extraction_mode
 
 
-async def _empty_cohort_lookup(_catalog_hits: list[dict[str, Any]]) -> dict[str, Any]:
-    """Return empty cohorts for v1. The graph handles empty cohorts correctly."""
-    return {"cohort_a": [], "cohort_b": [], "cohort_c": []}
+def _matches_registered_selector(source_summary: str, selector_types: list[str]) -> bool:
+    for selector_type in selector_types:
+        selector_phrase = selector_type.lower().replace("_", " ")
+        selector_token = selector_type.lower()
+        if selector_token in source_summary or selector_phrase in source_summary:
+            return True
+
+    registry_shape_terms = {
+        "json_path": (
+            "records_path",
+            "period_anchor_field",
+            "value_field",
+            "json array",
+            "record path",
+        ),
+        "csv_column": ("period_column", "value_column", "csv column"),
+        "estat_value_filter": ("e-stat", "estat"),
+        "censtatd_json": ("censtatd", "census and statistics department"),
+    }
+    for selector_type in selector_types:
+        for term in registry_shape_terms.get(selector_type, ()):
+            if term in source_summary:
+                return True
+    return False
+
+
+def _make_cohort_lookup(
+    *,
+    session: AsyncSession,
+) -> Callable[[list[dict[str, Any]]], Awaitable[dict[str, Any]]]:
+    read_tools = MacrodbReadTools(session)
+
+    async def _cohort_lookup(catalog_hits: list[dict[str, Any]]) -> dict[str, Any]:
+        cohort_a: list[dict[str, Any]] = []
+        cohort_b: list[dict[str, Any]] = []
+        cohort_c: list[dict[str, Any]] = []
+
+        for hit in catalog_hits:
+            family_id = _first_present(hit, "family_id", "series_family_id")
+            concept_id = _first_present(hit, "concept_id")
+            provider_id = _first_present(hit, "provider_id")
+
+            if family_id is not None:
+                siblings = await read_tools.find_sibling_series(
+                    FindSiblingSeriesArgs(family_id=family_id)
+                )
+                cohort_a.extend(_dump_tool_rows(siblings))
+
+            if concept_id is not None:
+                concept_series = await read_tools.list_series_for_concept(
+                    ListSeriesForConceptArgs(concept_id=concept_id)
+                )
+                cohort_b.extend(_dump_tool_rows(concept_series))
+
+            if provider_id is not None and concept_id is not None:
+                provider_series = await read_tools.list_provider_series_for_concept(
+                    ListProviderSeriesForConceptArgs(
+                        provider_id=provider_id,
+                        concept_id=concept_id,
+                    )
+                )
+                cohort_c.extend(_dump_tool_rows(provider_series))
+
+        return {
+            "cohort_a": _dedupe_rows(cohort_a),
+            "cohort_b": _dedupe_rows(cohort_b),
+            "cohort_c": _dedupe_rows(cohort_c),
+        }
+
+    return _cohort_lookup
+
+
+def _first_present(item: dict[str, Any], *keys: str) -> Any | None:
+    for key in keys:
+        value = item.get(key)
+        if value is not None:
+            return value
+    return None
+
+
+def _dump_tool_rows(rows: list[Any]) -> list[dict[str, Any]]:
+    dumped: list[dict[str, Any]] = []
+    for row in rows:
+        if hasattr(row, "model_dump"):
+            dumped.append(row.model_dump(mode="json"))
+        elif isinstance(row, dict):
+            dumped.append(row)
+        else:
+            dumped.append(dict(row))
+    return dumped
+
+
+def _dedupe_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen: set[str] = set()
+    deduped: list[dict[str, Any]] = []
+    for row in rows:
+        key = str(row.get("id") or row.get("code") or row)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(row)
+    return deduped
 
 
 def _make_approval_llm(
@@ -182,8 +298,8 @@ def build_production_dependencies(
 
     return OnboardingGraphDependencies(
         research_llm=research_llm,
-        cohort_lookup=_empty_cohort_lookup,
-        extraction_mode_classifier=_classify_extraction_mode,
+        cohort_lookup=_make_cohort_lookup(session=session),
+        extraction_mode_classifier=_make_extraction_mode_classifier(session=session),
         draft_llm=draft_llm,
         governance_llm=governance_llm,
         data_correctness_llm=data_correctness_llm,

@@ -68,6 +68,15 @@ def _make_mock_openai_client(responses: list[bytes]) -> Any:
     return openai_lib.AsyncOpenAI(api_key="test-key", http_client=http_client)
 
 
+class _ToolSeries:
+    def __init__(self, code: str) -> None:
+        self.code = code
+        self.name = f"{code} name"
+
+    def model_dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        return {"code": self.code, "name": self.name}
+
+
 # ---------------------------------------------------------------------------
 # Cycle 1 — build_production_dependencies returns OnboardingGraphDependencies
 # ---------------------------------------------------------------------------
@@ -226,7 +235,123 @@ def test_cli_populates_graph_dependencies_not_missing_stubs() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Cycle 5 — End-to-end: full onboarding graph with mock OpenAI through emit_package
+# Cycle 5 — cohort_lookup uses MCP read tools instead of a hardcoded empty cohort
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.no_db
+async def test_cohort_lookup_returns_real_mcp_cohorts(monkeypatch: pytest.MonkeyPatch) -> None:
+    from macro_foundry.agent.production_deps import build_production_dependencies
+    from macro_foundry.agent.roles import default_role_configs
+
+    calls: list[tuple[str, Any]] = []
+
+    class _StubReadTools:
+        def __init__(self, session: Any) -> None:
+            self.session = session
+
+        async def find_sibling_series(self, args: Any) -> list[_ToolSeries]:
+            calls.append(("siblings", str(args.family_id)))
+            return [_ToolSeries("US_CPI_HEADLINE"), _ToolSeries("US_CPI_CORE")]
+
+        async def list_series_for_concept(self, args: Any) -> list[_ToolSeries]:
+            calls.append(("concept", str(args.concept_id)))
+            return [_ToolSeries("JP_CPI_HEADLINE")]
+
+        async def list_provider_series_for_concept(self, args: Any) -> list[_ToolSeries]:
+            calls.append(
+                ("provider_concept", (str(args.provider_id), str(args.concept_id)))
+            )
+            return [_ToolSeries("FRED_US_CPI_HEADLINE")]
+
+    monkeypatch.setattr(
+        "macro_foundry.agent.production_deps.MacrodbReadTools",
+        _StubReadTools,
+    )
+
+    deps = build_production_dependencies(
+        default_role_configs(),
+        session=_make_mock_session(),
+        client=MagicMock(),
+    )
+
+    cohorts = await deps.cohort_lookup(
+        [
+            {
+                "family_id": "00000000-0000-0000-0000-000000000001",
+                "concept_id": "00000000-0000-0000-0000-000000000002",
+                "provider_id": "00000000-0000-0000-0000-000000000003",
+            }
+        ]
+    )
+
+    assert calls == [
+        ("siblings", "00000000-0000-0000-0000-000000000001"),
+        ("concept", "00000000-0000-0000-0000-000000000002"),
+        (
+            "provider_concept",
+            (
+                "00000000-0000-0000-0000-000000000003",
+                "00000000-0000-0000-0000-000000000002",
+            ),
+        ),
+    ]
+    assert [item["code"] for item in cohorts["cohort_a"]] == [
+        "US_CPI_HEADLINE",
+        "US_CPI_CORE",
+    ]
+    assert [item["code"] for item in cohorts["cohort_b"]] == ["JP_CPI_HEADLINE"]
+    assert [item["code"] for item in cohorts["cohort_c"]] == [
+        "FRED_US_CPI_HEADLINE"
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Cycle 6 — extraction_mode_classifier consults selector registry
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.no_db
+async def test_extraction_mode_classifier_prefers_registered_selector_over_keyword(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from macro_foundry.agent.production_deps import build_production_dependencies
+    from macro_foundry.agent.roles import default_role_configs
+
+    list_selector_types_called = False
+
+    class _StubReadTools:
+        def __init__(self, session: Any) -> None:
+            self.session = session
+
+        async def list_selector_types(self) -> list[str]:
+            nonlocal list_selector_types_called
+            list_selector_types_called = True
+            return ["json_path"]
+
+    monkeypatch.setattr(
+        "macro_foundry.agent.production_deps.MacrodbReadTools",
+        _StubReadTools,
+    )
+
+    deps = build_production_dependencies(
+        default_role_configs(),
+        session=_make_mock_session(),
+        client=MagicMock(),
+    )
+
+    mode = await deps.extraction_mode_classifier(
+        "Provider has a custom JSON API, but the response fits json_path."
+    )
+
+    assert list_selector_types_called is True
+    assert mode == "config_only"
+
+
+# ---------------------------------------------------------------------------
+# Cycle 7 — End-to-end: full onboarding graph with mock OpenAI through emit_package
 # ---------------------------------------------------------------------------
 
 
