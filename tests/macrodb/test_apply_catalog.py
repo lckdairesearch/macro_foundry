@@ -36,16 +36,20 @@ def _base_state(**overrides: Any) -> dict[str, Any]:
             code="CPI_HKG_TOTAL_M",
             name="CPI Hong Kong Total Monthly",
             frequency="M",
-            measure="index",
+            measure="level",
             unit_kind="index",
+            temporal_stock_flow="index",
+            unit_scale="one",
+            seasonal_adjustment="NSA",
         ),
         source=DraftSeriesSource(
-            provider_code="HKG_CENSTATD",
+            provider_name="HKG Census and Statistics Department",
             external_code="CPI_HKG_001",
         ),
         feed=DraftIngestionFeed(
             selector_type="json_path",
             cron_schedule="0 9 * * *",
+            feed_method="api",
         ),
         family_member=DraftFamilyMember(variant=None),
     )

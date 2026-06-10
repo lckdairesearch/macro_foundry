@@ -65,15 +65,19 @@ def test_gate_1_summary_contains_three_section_headings() -> None:
             frequency="M",
             measure="level",
             unit_kind="index",
+            temporal_stock_flow="index",
+            unit_scale="one",
+            seasonal_adjustment="NSA",
         ),
         source=DraftSeriesSource(
-            provider_code="HKG_CENSTATD",
+            provider_name="HKG Census and Statistics Department",
             external_code="A",
             external_name="CPI All Items",
         ),
         feed=DraftIngestionFeed(
             selector_type="censtatd_json",
             cron_schedule="0 9 * * 1",
+            feed_method="api",
         ),
         family_member=DraftFamilyMember(),
     )
@@ -127,14 +131,18 @@ def _minimal_proposal() -> Any:
             frequency="M",
             measure="level",
             unit_kind="index",
+            temporal_stock_flow="index",
+            unit_scale="one",
+            seasonal_adjustment="NSA",
         ),
         source=DraftSeriesSource(
-            provider_code="HKG_CENSTATD",
+            provider_name="HKG Census and Statistics Department",
             external_code="A",
         ),
         feed=DraftIngestionFeed(
             selector_type="censtatd_json",
             cron_schedule="0 9 * * 1",
+            feed_method="api",
         ),
         family_member=DraftFamilyMember(),
     )

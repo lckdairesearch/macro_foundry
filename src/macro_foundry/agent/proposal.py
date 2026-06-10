@@ -37,14 +37,30 @@ class DraftSeries(BaseModel):
     frequency: str
     measure: str
     unit_kind: str
+    temporal_stock_flow: str
+    unit_scale: str
+    seasonal_adjustment: str
+    annualized: bool = False
+    origin_type: str = "ingested"
+    is_active: bool = True
+    measure_horizon: str | None = None
+    price_basis: str | None = None
+    currency_code: str | None = None
+    reference_kind: str | None = None
+    reference_year: int | None = None
+    reference_label: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
 
 
 class DraftSeriesSource(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    provider_code: str
+    provider_name: str
     external_code: str
     external_name: str | None = None
+    provider_role: str = "primary_source"
+    priority: int = 1
 
 
 class DraftIngestionFeed(BaseModel):
@@ -52,13 +68,16 @@ class DraftIngestionFeed(BaseModel):
 
     selector_type: str
     cron_schedule: str
+    feed_method: str
     fetch_url: str | None = None
+    is_active: bool = True
 
 
 class DraftFamilyMember(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     variant: str | None = None
+    is_primary: bool = True
 
 
 class DraftHierarchyEdge(BaseModel):

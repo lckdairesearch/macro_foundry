@@ -7,16 +7,67 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from macro_foundry.agent.catalog import make_apply_catalog_node
+from macro_foundry.agent.proposal import (
+    DraftConcept,
+    DraftFamily,
+    DraftFamilyMember,
+    DraftIngestionFeed,
+    DraftProposal,
+    DraftSeries,
+    DraftSeriesSource,
+    SuggestHumanApplyItem,
+)
 from macro_foundry.backend.main import admin, app
 from macro_foundry.config import settings
 from macro_foundry.enums import Action, ItemType, ProposalStatus, ProposalType, RequestedBy, RiskLevel, TargetType, ValidationStatus
-from macro_foundry.models import ChangeProposal, ChangeProposalItem
+from macro_foundry.models import ChangeProposal, ChangeProposalItem, IngestionFeedMember, Series, SeriesSource
 from macro_foundry.mcp.write_tools import (
     MacrodbWriteTools,
     MarkProposalOutcomeArgs,
     ProposeCreateSeriesArgs,
     RecordSuggestHumanApplyArgs,
 )
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _minimal_draft_payload(series_code: str) -> dict:
+    """Minimal valid DraftProposal dict for write-tool tests."""
+    return DraftProposal(
+        concept=DraftConcept(action="new", code=f"CONCEPT_{series_code}", name=f"Concept {series_code}"),
+        family=DraftFamily(
+            action="new",
+            code=f"FAM_{series_code}",
+            name=f"Family {series_code}",
+            concept_code=f"CONCEPT_{series_code}",
+            geography_code="HKG",
+        ),
+        series=DraftSeries(
+            action="new",
+            code=series_code,
+            name=f"Series {series_code}",
+            frequency="M",
+            measure="level",
+            unit_kind="index",
+            temporal_stock_flow="index",
+            unit_scale="one",
+            seasonal_adjustment="NSA",
+        ),
+        source=DraftSeriesSource(
+            provider_name="HKG Census and Statistics Department",
+            external_code=f"EXT_{series_code}",
+        ),
+        feed=DraftIngestionFeed(
+            selector_type="json_path",
+            cron_schedule="0 9 * * *",
+            feed_method="api",
+        ),
+        family_member=DraftFamilyMember(variant=None),
+    ).model_dump(mode="json")
 
 
 # ---------------------------------------------------------------------------
@@ -32,12 +83,13 @@ async def test_propose_create_series_writes_proposal_and_item(
     result = await tools.propose_create_series(
         ProposeCreateSeriesArgs(
             session_id="sess-test-001",
-            payload={"series_code": "CPI_HKG_M"},
+            payload=_minimal_draft_payload("CPI_HKG_M_TST"),
             rationale="Test",
         )
     )
     assert "proposal_id" in result
     assert "item_id" in result
+    assert "series_id" in result
 
     proposal = (
         await session.execute(
@@ -46,7 +98,8 @@ async def test_propose_create_series_writes_proposal_and_item(
             )
         )
     ).scalar_one()
-    assert proposal.status == ProposalStatus.PROPOSED
+    assert proposal.status == ProposalStatus.APPLIED
+    assert proposal.applied_at is not None
     assert proposal.applied_by is None
 
 
@@ -87,7 +140,7 @@ async def test_apply_approved_proposal_validates_status(
     create_result = await tools.propose_create_series(
         ProposeCreateSeriesArgs(
             session_id="sess-reject-001",
-            payload={"series_code": "REJECT_TEST"},
+            payload=_minimal_draft_payload("REJECT_TST_SRS"),
         )
     )
     import uuid
@@ -210,5 +263,119 @@ async def test_admin_mark_applied_action_flips_pending_item(
     await session.refresh(item)
     assert item.validation_status == ValidationStatus.APPLIED_BY_OPERATOR
 
-    await session.refresh(proposal)
-    assert proposal.applied_at is not None
+
+# ---------------------------------------------------------------------------
+# Integration test — AC #6
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_apply_catalog_writes_catalog_rows_and_pending_sha_items(
+    admin_test_session_maker: None,
+    session: AsyncSession,
+) -> None:
+    """Gate 1 approval → apply_catalog → catalog rows written + SHA items pending → SQLAdmin flip."""
+    draft = DraftProposal(
+        concept=DraftConcept(action="new", code="TST_CONCEPT_AC6", name="Test AC6 Concept"),
+        family=DraftFamily(
+            action="new",
+            code="TST_FAM_AC6",
+            name="Test AC6 Family",
+            concept_code="TST_CONCEPT_AC6",
+            geography_code="HKG",
+        ),
+        series=DraftSeries(
+            action="new",
+            code="TST_SERIES_AC6",
+            name="Test AC6 Series",
+            frequency="M",
+            measure="level",
+            unit_kind="index",
+            temporal_stock_flow="index",
+            unit_scale="one",
+            seasonal_adjustment="NSA",
+        ),
+        source=DraftSeriesSource(
+            provider_name="HKG Census and Statistics Department",
+            external_code="TST_EXT_AC6",
+        ),
+        feed=DraftIngestionFeed(
+            selector_type="json_path",
+            cron_schedule="0 9 * * *",
+            feed_method="api",
+        ),
+        family_member=DraftFamilyMember(variant=None),
+    )
+    sha_item = SuggestHumanApplyItem(
+        schema_field="concept.name",
+        proposed_value="Test AC6 Concept (Revised)",
+        rationale="test sha",
+    ).model_dump(mode="json")
+
+    state = {
+        "gate_1_approved": True,
+        "proposal": draft.model_dump(mode="json"),
+        "suggest_human_apply_items": [sha_item],
+        "session_metadata": {"session_id": "sess-ac6-001"},
+    }
+
+    tools = MacrodbWriteTools(session)
+    node = make_apply_catalog_node(write_tools=tools)
+    result = await node(state)
+
+    assert result["gate_1_applied"] is True
+
+    # Catalog rows written
+    series = (
+        await session.execute(select(Series).where(Series.code == "TST_SERIES_AC6"))
+    ).scalar_one()
+    assert series.name == "Test AC6 Series"
+
+    feed_member = (
+        await session.execute(
+            select(IngestionFeedMember)
+            .join(SeriesSource, IngestionFeedMember.series_source_id == SeriesSource.id)
+            .where(SeriesSource.series_id == series.id)
+        )
+    ).scalar_one()
+    assert feed_member is not None
+
+    # SHA item recorded as PENDING_HUMAN_APPLY
+    sha_items = (
+        await session.execute(
+            select(ChangeProposalItem).where(
+                ChangeProposalItem.action == Action.SUGGEST_HUMAN_APPLY
+            )
+        )
+    ).scalars().all()
+    assert len(sha_items) == 1
+    sha = sha_items[0]
+    assert sha.validation_status == ValidationStatus.PENDING_HUMAN_APPLY
+    sha_id = str(sha.id)
+
+    # SQLAdmin mark-applied flips the SHA item
+    transport = ASGITransport(app=app, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        login_response = await client.post(
+            "/admin/login",
+            data={
+                "username": settings.admin.username,
+                "password": settings.admin.password.get_secret_value(),
+            },
+            follow_redirects=False,
+        )
+        assert login_response.status_code == 302
+        response = await client.get(
+            f"/admin/change-proposal-item/action/mark-applied?pks={sha_id}",
+            follow_redirects=False,
+        )
+    assert response.status_code in (302, 303)
+
+    await session.refresh(sha)
+    assert sha.validation_status == ValidationStatus.APPLIED_BY_OPERATOR
+
+    sha_proposal = (
+        await session.execute(select(ChangeProposal).where(ChangeProposal.id == sha.proposal_id))
+    ).scalar_one()
+    await session.refresh(sha_proposal)
+    assert sha_proposal.applied_at is not None
