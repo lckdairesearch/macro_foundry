@@ -4,9 +4,15 @@ from __future__ import annotations
 
 from macro_foundry.ingestion.runtime.types import Selector
 
+from .censtatd_json import CenstatdJsonSelector
+from .csv_column import CsvColumnSelector
+from .estat_value_filter import EstatValueFilterSelector
 from .json_path import JsonPathSelector
 
 _SELECTORS: dict[str, Selector] = {
+    CenstatdJsonSelector.name: CenstatdJsonSelector(),
+    CsvColumnSelector.name: CsvColumnSelector(),
+    EstatValueFilterSelector.name: EstatValueFilterSelector(),
     JsonPathSelector.name: JsonPathSelector(),
 }
 

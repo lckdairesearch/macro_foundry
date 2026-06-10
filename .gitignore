@@ -1,6 +1,7 @@
 .DS_Store
 .env.local
 .venv/
+.worktree/
 .uv-bootstrap/
 .vscode/
 __pycache__/

@@ -48,6 +48,22 @@ initialize and inspect that redesigned stack.
 
 ## Log
 
+### [2026-06-10] Issue 36 — Second-wave ingestion selectors implemented
+
+Implemented the ADR 0012 second-wave selector roster:
+
+- added `csv_column` for file-method CSV payloads, including delimiter/BOM
+  header handling, missing-value tokens, empty-data reporting, and CSV-shaped
+  provider error wrappers
+- added `censtatd_json` for Hong Kong CenStatD JSON payloads, including
+  LZ-string request-param preparation, code-length hierarchy filtering,
+  monthly period parsing, empty-data reporting, and CenStatD error wrappers
+- added `estat_value_filter` for Japan e-Stat `getStatsData` payloads, including
+  exact multi-dimensional value filtering, e-Stat monthly time-code parsing,
+  single-object/list `VALUE` handling, empty-data reporting, and
+  `RESULT.STATUS != 0` provider errors
+- registered all three selectors in the runtime selector registry
+
 ### [2026-06-10] Issue 35 — FRED bootstrap migrated to generic runtime
 
 Migrated the curated FRED U.S. macro bootstrap off the bespoke
