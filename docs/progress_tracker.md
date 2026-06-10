@@ -48,6 +48,21 @@ initialize and inspect that redesigned stack.
 
 ## Log
 
+### [2026-06-10] Issue 39 — Read-only macrodb MCP server implemented
+
+Implemented the read-only `macrodb-mcp` slice for ADR 0011 / PRD #32:
+
+- added the `macrodb-mcp` console script, serving a FastMCP stdio process with
+  `--database-url` so the same binary can target different macrodb databases
+- added a read-only semantic tool service for `lookup_concept`, `lookup_family`,
+  `find_sibling_series`, concept/provider cohort lookups, selector registry
+  discovery, selector-config validation, and enum CHECK-constraint value lookup
+- kept MCP argument validation on Pydantic schemas and reused existing
+  application read schemas for catalog results
+- enforced a read-only tool binding that rejects write-tool registration
+- covered each read tool with smoke tests against `macrodb_test`, including
+  `list_enum_values` parsing the real named CHECK constraint in Postgres
+
 ### [2026-06-10] Issue 40 — Shared escalation helpers implemented
 
 Added the reusable `agent/escalation/` helper layer for ADR 0014/0016
