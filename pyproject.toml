@@ -26,10 +26,12 @@ dependencies = [
     "langgraph>=1.2.4",
     "langgraph-checkpoint-postgres>=3.1.0",
     "questionary>=2.1.1",
+    "mcp>=1.27.2",
 ]
 
 [project.scripts]
 macrodb = "macro_foundry.cli:app"
+macrodb-mcp = "macro_foundry.mcp.server:main"
 
 [dependency-groups]
 dev = [
