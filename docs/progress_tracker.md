@@ -86,6 +86,29 @@ Implemented the first ADR 0012 runtime slice:
 - covered the work with selector, calendar, one-member runner, and multi-member
   runner tests
 
+### [2026-06-10] Issue 34 — Onboarding agent foundation slice implemented
+
+Added the first runtime slice for the gated onboarding agent from ADR 0011:
+
+- `macrodb onboard` Typer command with `--target {dev,staging}` and `--resume`
+  support; `prod` and `test` are rejected by Typer enum parsing
+- typed `Channel` abstraction plus a Rich/Questionary CLI implementation
+- hello-world LangGraph state machine with checkpoint-backed save/resume and
+  transcript replay through a fake-channel smoke test
+- Pydantic checkpoint state records for immutable session metadata and
+  append-only `raw_messages`, `transcript`, and `node_transitions`
+- PostgresSaver wiring scoped to the `langgraph` schema via connection
+  `search_path`
+- Alembic migration `0007` creating the `langgraph` schema and current
+  checkpoint tables as `macrodb_owner`, with app-role DML grants but no app-role
+  schema DDL grant
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_onboard_cli.py tests/macrodb/test_onboarding_state.py -q`
+- `uv run pytest tests/shared/test_migrations.py -q`
+- `uv run ruff check .`
+
 ### [2026-06-10] Reviewer role consolidation (ADR 0015) and credential-gap escalation (ADR 0016) closed
 
 Closed two design threads in one `/grill-with-docs` pass, both arising

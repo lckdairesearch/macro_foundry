@@ -10,6 +10,6 @@ from __future__ import annotations
 from ._app import app, bootstrap_app
 
 # Import subcommand modules for their decorator side effects.
-from . import bootstrap, seed, serve  # noqa: F401  (side-effect imports)
+from . import bootstrap, onboard, seed, serve  # noqa: F401  (side-effect imports)
 
 __all__ = ["app", "bootstrap_app"]
