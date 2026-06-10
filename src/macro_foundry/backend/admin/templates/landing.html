@@ -27,8 +27,8 @@
 
   <div class="row row-cards mb-4">
 
-    <div class="col-sm-6 col-lg-2">
-      <div class="card">
+    <div class="col-6 col-md-4 col-lg-2">
+      <div class="card h-100">
         <div class="card-body">
           <div class="subheader">Concepts</div>
           <div class="h1 mb-0">{{ stats.concept_count }}</div>
@@ -36,8 +36,8 @@
       </div>
     </div>
 
-    <div class="col-sm-6 col-lg-2">
-      <div class="card">
+    <div class="col-6 col-md-4 col-lg-2">
+      <div class="card h-100">
         <div class="card-body">
           <div class="subheader">Series Families</div>
           <div class="h1 mb-0">{{ stats.series_family_count }}</div>
@@ -45,24 +45,22 @@
       </div>
     </div>
 
-    <div class="col-sm-6 col-lg-4">
-      <div class="card">
+    <div class="col-6 col-md-4 col-lg-2">
+      <div class="card h-100">
         <div class="card-body">
           <div class="subheader">Series</div>
-          <div class="d-flex gap-3 mt-1">
+          <div class="h1 mb-0">{{ stats.series_count_by_origin_type.values() | sum }}</div>
+          <div class="d-flex gap-2 mt-1 flex-wrap">
             {% for origin_type, count in stats.series_count_by_origin_type.items() %}
-            <div>
-              <div class="h3 mb-0">{{ count }}</div>
-              <div class="text-muted small">{{ origin_type }}</div>
-            </div>
+            <span class="text-muted" style="font-size:0.72rem;">{{ count }} {{ origin_type }}</span>
             {% endfor %}
           </div>
         </div>
       </div>
     </div>
 
-    <div class="col-sm-6 col-lg-2">
-      <div class="card">
+    <div class="col-6 col-md-4 col-lg-2">
+      <div class="card h-100">
         <div class="card-body">
           <div class="subheader">Observations</div>
           <div class="h1 mb-0">{{ stats.observation_count }}</div>
@@ -70,8 +68,8 @@
       </div>
     </div>
 
-    <div class="col-sm-6 col-lg-1">
-      <div class="card">
+    <div class="col-6 col-md-4 col-lg-2">
+      <div class="card h-100">
         <div class="card-body">
           <div class="subheader">Providers</div>
           <div class="h1 mb-0">{{ stats.provider_count }}</div>
@@ -79,8 +77,8 @@
       </div>
     </div>
 
-    <div class="col-sm-6 col-lg-1">
-      <div class="card">
+    <div class="col-6 col-md-4 col-lg-2">
+      <div class="card h-100">
         <div class="card-body">
           <div class="subheader">Ingestion Feeds</div>
           <div class="h1 mb-0">{{ stats.ingestion_feed_count }}</div>
