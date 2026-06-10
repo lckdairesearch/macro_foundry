@@ -76,14 +76,42 @@ ambiguity remains unresolved.
 
 ### Proposal drafter
 
-The proposal drafter consumes research findings and produces a `DraftProposal`
-covering candidate concept, family, series, source, feed, member, and hierarchy
-edge rows. It is read-only with respect to the database; its output is a
-proposal in graph state, not a write.
+The proposal drafter consumes research findings, the `reference_metadata`
+state field populated by `gather_reference_metadata`, and the
+`extraction_mode` state field populated by `classify_extraction_mode`, and
+produces a `DraftProposal` covering candidate concept, family, series,
+source, feed, member, and hierarchy edge rows. It is read-only with
+respect to the database; its output is a proposal in graph state, not a
+write.
 
-The drafter populates the `extraction_mode` field: `config_only` when an
-existing `selector_type` covers the provider, or `custom_python` when a new
-selector extension is required.
+When writing prose fields (`description`, `name`, `variant`) the drafter
+must anchor on `reference_metadata` per
+[skill-metadata-standardisation](skills/skill-metadata-standardisation.md).
+The drafter never writes prose blind.
+
+The drafter may emit a harmonisation side-output: a list of proposed
+updates to prose fields on **existing** series, when the new prose under
+draft reveals that an existing sibling or cohort entry fires one of the
+four closed harmonisation triggers (`factual_incompleteness`,
+`factual_error`, `family_outlier`, `house_voice_outlier`). These items
+ride along on the same Gate 1 proposal as the new series and are
+governed by the metadata-standardisation skill; the default is to emit
+nothing.
+
+For propose-only fields (`concept.name`, `series_family.name`, all
+`*.code` values), the drafter emits items with
+`action = suggest_human_apply`. The executor skips these at apply
+time; they remain in `change_proposals` as `pending_human_apply` until
+the operator marks them applied in SQLAdmin.
+
+For structural enum-backed fields the drafter does **not** emit
+`suggest_human_apply`. Instead, when a candidate series' methodology
+cannot be represented by any existing value of an allowlisted
+series-methodology enum, the drafter emits one or more
+`EnumGapProposal` items on its `enum_gap_proposals` output and
+blocks. The graph routes to `enum_gap_wait` for an operator pause /
+apply / resume cycle. See `Enum-gap escalation` below and
+[ADR 0014](adr/0014-enum-gap-escalation.md).
 
 ### Script drafter
 
@@ -167,6 +195,16 @@ The proposal should summarize:
 - what assumptions were made
 - whether derived series are suggested
 - the expected first-ingestion behavior
+- companion harmonisation items, if any (updates to prose fields on
+  existing series, separated visually from the new-series items)
+- propose-only items, if any (`suggest_human_apply` rows the executor
+  will not touch, listed separately so the operator sees what they are
+  expected to apply later via SQLAdmin)
+
+The approval picker covers the whole bundle. To accept the new series
+but drop the harmonisation items (or vice versa), use the
+`Request changes` path; item-level approval checkboxes are not part of
+the picker.
 
 ### Gate 2: dangerous correction approval
 
@@ -220,6 +258,134 @@ choice:
 Structural edits (changes to series methodology, hierarchy edges, selector
 configuration, etc.) route back through the full drafter and reviewer cycle,
 not the small-edit subflow.
+
+## Metadata standardisation
+
+The drafter is responsible for keeping prose fields (`description`,
+`name`, `variant`) consistent across related series without producing
+cosmetic churn on existing prose. The discipline lives in
+[skill-metadata-standardisation](skills/skill-metadata-standardisation.md);
+the architectural rationale lives in
+[ADR 0013](adr/0013-metadata-standardisation.md).
+
+The mechanism has two graph-level components.
+
+**`gather_reference_metadata`** runs after `research` and before
+`draft_proposal`. It is deterministic. It calls three MCP cohort lookups
+and writes a `reference_metadata` state field carrying three cohorts:
+
+- **Cohort A** — sibling series in the same `series_family`
+- **Cohort B** — series for the same `concept` across all geographies
+- **Cohort C** — series for the same `provider` and same `concept`,
+  joined through `series_sources`
+
+Empty cohorts are recorded explicitly. When cohort A is empty, the state
+flag `is_first_in_family` is set true; the governance reviewer and the
+metadata skill both load extra content in response (`Seed exemplars`
+inside the skill; first-in-family scrutiny in the reviewer).
+
+**`classify_extraction_mode`** runs in parallel with
+`gather_reference_metadata`. It is also deterministic. It calls
+`list_selector_types` and `get_selector_schema`, compares the provider
+shape from `research`, and writes the `extraction_mode` state field
+(`config_only` or `custom_python`). The conditional edge into
+`draft_script` reads this field; the drafter no longer needs to populate
+it inside its generated proposal.
+
+The drafter writes new prose anchored on cohort A → B → C in that
+priority order. The drafter may emit harmonisation items proposing
+updates to existing prose, but only under the four closed triggers in
+the skill, and the default is to emit nothing.
+
+For prose-adjacent fields that the agent cannot mutate directly
+(`concept.name`, `series_family.name`, all `*.code` values), the
+drafter emits items with `action = suggest_human_apply`. The
+executor leaves these items as `pending_human_apply` rows; the
+operator applies them via SQLAdmin and flips them to
+`applied_by_operator`. This keeps every high-stakes suggestion
+auditable through `change_proposals` rather than living in free-text
+remarks.
+
+Structural enum-backed fields are handled separately by the
+enum-gap escalation flow (see below); they do not ride on
+`suggest_human_apply`.
+
+## Enum-gap escalation
+
+When the drafter is about to populate a structural enum-backed
+column (`series.frequency`, `series.seasonal_adjustment`,
+`series.measure`, `series.measure_horizon`, `series.unit_kind`,
+`series.unit_scale`, `series.price_basis`, `series.reference_kind`,
+`series.temporal_stock_flow`) and discovers that the candidate
+series' real-world methodology cannot be faithfully represented by
+any existing value of the relevant enum, the drafter must not
+coerce silently. It emits an `EnumGapProposal` on its
+`enum_gap_proposals` output and returns without a draft.
+
+The discipline for emitting a gap (the three conditions —
+no-existing-value-fits, catalog-impact, provider-evidence — plus the
+anti-pattern list and the drop-on-missing-evidence rule) lives in
+[skill-enum-gap-escalation](skills/skill-enum-gap-escalation.md).
+The architectural rationale lives in
+[ADR 0014](adr/0014-enum-gap-escalation.md).
+
+A non-empty `enum_gap_proposals` field routes the graph to a new
+human-interrupt node `enum_gap_wait`, distinct from Gate 1. The
+node renders the proposed enum value(s), the rationale, the cited
+provider evidence, and an inline operator-instruction block: a
+fully-rendered Python enum edit, a copy-pasteable Alembic migration
+template populated from the ADR 0005 idiom, and the exact resume
+command. The picker is structured: `Apply later (pause)`,
+`Decline and coerce`, `Abort`.
+
+On `Apply later`, the session checkpoints and the CLI exits cleanly.
+The operator does the code+migration work in a separate terminal,
+applies the migration as `macrodb_owner` against the session's
+target database (`macrodb_staging` by default), and resumes with
+`macrodb onboard --resume <session-id>`.
+
+On resume, `enum_gap_wait` walks each pending proposal and verifies
+the proposed value is present in **both** the Python enum class
+(via fresh import) and the DB CHECK constraint (via a new MCP tool
+`list_enum_values(table, column)` that reads `pg_constraint`).
+Both must pass before the gap is recorded as `applied`. If a value
+was added under a different name than proposed (e.g. operator added
+`both_sa` instead of the proposed `BSA`), a reconciliation prompt
+asks whether the renamed value satisfies the proposal; on
+confirmation the resolution is recorded as `applied_renamed`.
+
+On `Decline and coerce`, the operator types a rationale and names
+the existing value to use; the drafter re-runs with `coerce_hints`
+and `coerce_rationales` state fields populated and produces a
+proposal that uses the operator's chosen value. No automatic
+prose note is added to the affected series; the audit row
+preserves the original judgment.
+
+On `Abort`, the session terminates via the existing `abort` node
+with reason `enum_gap_declined`.
+
+Each `EnumGapProposal` produces its own `change_proposals` row,
+created at the point the operator picks `Apply later (pause)`. The
+row is linked to the session via `source_agent_session_id` but its
+lifecycle is **independent** of the session's main onboarding
+proposal: the enum widening, once committed, is real code in the
+repo regardless of whether the session ultimately succeeds, and
+the audit row reflects that.
+
+Schema additions ADR 0014 introduces on the governance enums:
+
+- `Action`: new value `suggest_enum_addition`
+- `TargetType`: new value `ENUM_VALUE`
+- `ValidationStatus`: new value `declined_by_operator`
+
+These are CHECK-constraint widenings under ADR 0005, applied via
+standard Alembic migrations.
+
+Structural gaps that are not enum-value gaps — a methodological
+distinction macrodb has not modelled at all, requiring a new
+column — are out of scope. The drafter aborts with reason
+`schema_deficiency` and the gap is addressed in a separate
+operator-led design pass.
 
 ## Skill loading
 
@@ -431,7 +597,31 @@ Node inventory (v1):
 
 - `research` — folds intake; reads provider docs, runs web search and probe
   fetches, populates `source_summary` and `existing_catalog_hits`
-- `draft_proposal` — produces catalog and feed-member draft
+- `gather_reference_metadata` — deterministic; calls three MCP cohort
+  lookups (siblings, cross-geography same-concept, same-provider
+  same-concept); writes `reference_metadata` and `is_first_in_family` to
+  state; records empty cohorts explicitly
+- `classify_extraction_mode` — deterministic; calls `list_selector_types`
+  and `get_selector_schema`; writes `extraction_mode` (`config_only` or
+  `custom_python`) to state; runs in parallel with
+  `gather_reference_metadata`
+- `draft_proposal` — produces catalog and feed-member draft; reads
+  `reference_metadata` to anchor prose; may emit harmonisation
+  side-output for existing prose under the four closed triggers; emits
+  propose-only prose-adjacent fields with
+  `action = suggest_human_apply`; may emit
+  `enum_gap_proposals` and return without a draft when a structural
+  enum-backed field cannot be populated faithfully
+- `enum_gap_wait` — human-interrupt; reached only when
+  `enum_gap_proposals` is non-empty. Renders proposed enum value(s),
+  rationale, cited evidence, and inline operator instructions
+  (Python diff + Alembic migration template + resume command).
+  Picker: `Apply later (pause)` | `Decline and coerce` | `Abort`.
+  On resume, verifies each gap via Python introspection + DB CHECK
+  constraint check (via `list_enum_values` MCP tool); handles
+  reconciliation of renamed values; records resolutions in
+  `enum_gap_resolutions` and one `change_proposals` row per gap.
+  See [ADR 0014](adr/0014-enum-gap-escalation.md).
 - `draft_script` — only when `extraction_mode == "custom_python"`, writes to
   sandbox
 - `validate_script` — executes the selector against a probe payload

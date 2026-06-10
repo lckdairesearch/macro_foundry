@@ -48,6 +48,131 @@ initialize and inspect that redesigned stack.
 
 ## Log
 
+### [2026-06-10] Enum-gap escalation design ratified as ADR 0014
+
+Closed a `/grill-with-docs` session on how the gated onboarding agent
+handles structural fields whose vocabulary cannot represent a
+candidate series. Picked up directly from the parked-thread handoff
+left by the metadata-standardisation session.
+
+Decisions captured:
+
+- **Scope:** enum-value gaps only on a closed allowlist of
+  series-methodology enums in `src/macro_foundry/enums/series.py`
+  minus `OriginType` — `Frequency`, `SeasonalAdjustment`, `Measure`,
+  `MeasureHorizon`, `UnitKind`, `UnitScale`, `PriceBasis`,
+  `ReferenceKind`, `TemporalStockFlow`. Column-shaped gaps abort
+  with reason `schema_deficiency` and are deferred to a separate
+  ADR-shaped decision.
+- **Detection site:** inside `draft_proposal` as a structured output
+  field (`enum_gap_proposals: list[EnumGapProposal]`), no new
+  detection node. Router after the drafter reads a typed state
+  field; the principle that routing must not parse generative
+  output is preserved without adding a sibling deterministic node.
+- **Human interrupt:** new node `enum_gap_wait`, distinct from
+  Gate 1. Renders proposed value(s), rationale, cited evidence, and
+  an inline operator-instruction block (Python diff + Alembic
+  migration template + resume command). Picker:
+  `Apply later (pause)` | `Decline and coerce` | `Abort`.
+- **Pause / resume verification:** both the Python enum class
+  (fresh import) and the DB CHECK constraint (via a new MCP tool
+  `list_enum_values(table, column)`) must agree before a gap is
+  recorded as `applied`. Reconciliation prompt handles the
+  operator-renamed-the-value case.
+- **Multi-gap detection** in one pass with an all-or-nothing pause
+  picker; per-gap resume walk; one audit row per gap.
+- **Audit trail:** schema deltas on the governance enums —
+  `Action.suggest_enum_addition`, `TargetType.ENUM_VALUE`,
+  `ValidationStatus.declined_by_operator`. Each gap produces its
+  own `change_proposals` row with independent lifecycle (an enum
+  widening, once committed, is real code regardless of the
+  session's outcome).
+- **Anti-laziness discipline:** three required conditions
+  (no-existing-value-fits, catalog-impact, provider-evidence) plus
+  per-proposal evidence structure plus an anti-pattern list plus
+  drop-on-missing-evidence. Drafter does the same work either way;
+  only the output differs between "real gap" and "documented
+  coercion".
+- **Decline-and-coerce:** audit row only, no automatic prose note
+  in `series.name` or `series.description`. The coercion is the
+  operator's curatorial decision; the catalog row reflects it and
+  the audit row preserves the original judgment.
+- **Operator UX:** template rendered inline at the wait node, no
+  sandbox, no migration code generation. The ADR 0005 idiom is
+  short and stable enough that inline templating beats a sandbox
+  path.
+
+Documentation updated:
+
+- new ADR `docs/adr/0014-enum-gap-escalation.md`
+- new skill `docs/skills/skill-enum-gap-escalation.md` at `draft`
+- `CONTEXT.md` — new glossary entry for **Enum gap**
+- `docs/series_onboarding_workflow.md` — new section
+  `Enum-gap escalation`; `enum_gap_wait` added to node inventory;
+  proposal-drafter role updated to remove structural enum fields
+  from `suggest_human_apply` and route them through the gap flow
+- inventory updates in `docs/adr/README.md` and
+  `docs/skills/README.md`
+
+No deferrals from this session; the parked thread is closed. A
+follow-on column-gap escalation may surface eventually as its own
+ADR-shaped discussion, but no such design is queued.
+
+### [2026-06-10] Metadata standardisation design ratified as ADR 0013
+
+Closed a `/grill-with-docs` session on how the gated onboarding agent's
+proposal drafter handles prose fields (`description`, `name`, `variant`)
+so the catalog gains consistent language across related series without
+cosmetic churn on existing prose.
+
+Decisions captured:
+
+- new graph node `gather_reference_metadata` between `research` and
+  `draft_proposal` retrieves three cohorts (sibling, cross-geography
+  same-concept, same-provider same-concept via `series_sources`); empty
+  cohorts are recorded explicitly; `is_first_in_family` is set when
+  cohort A is empty
+- new graph node `classify_extraction_mode` runs in parallel with
+  `gather_reference_metadata` and writes the `extraction_mode` state
+  field deterministically, replacing the drafter's earlier role of
+  classifying inside its generative output
+- per-field mutation matrix: agent mutates `series.name`, all
+  `description` fields, and `variant` after Gate 1; `concept.name`,
+  `series_family.name`, codes, and structural enum fields are
+  propose-only and emitted with a new
+  `change_proposal_item.action = suggest_human_apply`; executor skips
+  these and they remain `pending_human_apply` until the operator marks
+  them `applied_by_operator` in SQLAdmin
+- scenario-2 (harmonisation updates to existing prose) routes through
+  Gate 1 as companion items on the same proposal, not through Gate 2;
+  Gate 2 retains its meaning as identity correction only
+- proposed updates to existing prose require one of four closed
+  triggers (`factual_incompleteness`, `factual_error`, `family_outlier`,
+  `house_voice_outlier`) with asymmetric bars (factual cheap, style
+  expensive); explicit anti-pattern list (synonym swaps, capitalisation,
+  reorder, aesthetic, single-sibling disagreement, retroactive hard
+  rules) blocks the common cosmetic-churn failure modes
+- new skill `skill-metadata-standardisation` codifies the forward
+  direction (anchor new prose on cohort) and the reactive direction
+  (closed-trigger updates to existing prose), with conditional
+  `Seed exemplars` loaded only when cohort A is empty; held at `draft`
+  status until operator review of the seed exemplars
+
+Documentation updated:
+
+- new ADR `docs/adr/0013-metadata-standardisation.md`
+- new skill `docs/skills/skill-metadata-standardisation.md` at `draft`
+- `CONTEXT.md` — new glossary entry for **Prose field**
+- `docs/series_onboarding_workflow.md` — updated proposal-drafter role,
+  Gate 1 summary contents, node inventory; added a Metadata
+  standardisation section
+- inventory updates in `docs/adr/README.md` and `docs/skills/README.md`
+
+Deferred to a separate `/grill-with-docs` session: enum-gap escalation
+(how the agent handles structural fields whose vocabulary is currently
+inexpressible, including the pause / human-edits-code / resume
+mechanism). A handoff document for that session has been prepared.
+
 ### [2026-06-09] Issue 14 — Request-centric debug bootstrap smoke implemented
 
 Rebuilt the developer bootstrap smoke around the request-level ingestion model

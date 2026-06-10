@@ -403,6 +403,53 @@ In macrodb, "code" almost always means the canonical short identifier of an
 entity: `USA` for a geography, `CPI` for a concept, `US_CPI` for a family, etc.
 Always UNIQUE within its table. The user-facing identifier; the UUID is internal.
 
+### Prose field
+
+A field that carries human-readable narrative rather than identity or
+structural meaning. In macrodb the prose fields are `description` on
+`concept`, `series_family`, and `series`; `name` on the same three; and
+`variant` on `series_family_members`. Prose fields are read by humans
+navigating the catalog. They are distinct from identity fields (`code`),
+structural fields (enum-backed methodology columns like `frequency`,
+`seasonal_adjustment`, `unit_code`), and provider-mapping fields
+(`external_code`, `external_name` on `series_sources`).
+
+Prose fields do not carry cross-row dependencies the way identity does,
+so they are not protected by the publication boundary the way `code` is.
+A description can be updated post-publication without endangering other
+rows. The gated onboarding agent treats prose fields with their own
+discipline: the agent may mutate most prose after Gate 1 approval, but
+existing prose is grandfathered by default and only updated when one of
+four narrow factual or outlier triggers fires. See ADR 0013 and
+`docs/skills/skill-metadata-standardisation.md`.
+
+### Enum gap
+
+A condition encountered by the gated onboarding agent where a candidate
+series' real-world methodology cannot be faithfully represented by the
+existing values of one of macrodb's series-methodology enums
+(`Frequency`, `SeasonalAdjustment`, `Measure`, `MeasureHorizon`,
+`UnitKind`, `UnitScale`, `PriceBasis`, `ReferenceKind`,
+`TemporalStockFlow`). The drafter emits an `EnumGapProposal`; the
+session pauses at `enum_gap_wait`; the operator edits the Python
+enum and writes an Alembic migration widening the named CHECK
+constraint, applies it as `macrodb_owner`, and resumes the session.
+On resume the graph verifies the value exists in both the Python
+enum and the DB CHECK constraint before the drafter proceeds.
+
+Enum gaps are distinct from **column gaps** (a methodological
+distinction macrodb has not modelled at all, requiring a new
+column). Column gaps abort the session with reason
+`schema_deficiency` and are addressed in a separate operator-led
+design pass.
+
+The audit row for an enum gap lives in `change_proposals` with
+`Action.suggest_enum_addition` and `TargetType.ENUM_VALUE`; its
+lifecycle is independent of the session's main onboarding
+proposal because the enum value, once committed, is reusable in
+future sessions. See ADR 0014 and
+`docs/skills/skill-enum-gap-escalation.md`.
+
 ### External code
 
 The identifier used by a provider for a series. Lives on `series_sources`. Not

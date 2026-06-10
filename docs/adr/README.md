@@ -23,6 +23,8 @@ references and supersedes the old one — don't edit the old one.
 | [0010](0010-request-level-ingestion-and-series-hierarchy.md) | Request-level ingestion and canonical series hierarchy | Accepted |
 | [0011](0011-gated-onboarding-graph.md) | Gated onboarding graph implemented as a chat-session LangGraph agent | Accepted |
 | [0012](0012-selector-registry-ingestion-runtime.md) | Selector-registry ingestion runtime | Accepted |
+| [0013](0013-metadata-standardisation.md) | Metadata standardisation in the gated onboarding workflow | Accepted |
+| [0014](0014-enum-gap-escalation.md) | Enum-gap escalation in the gated onboarding workflow | Accepted |
 
 ## Format
 
