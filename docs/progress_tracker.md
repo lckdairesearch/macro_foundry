@@ -48,6 +48,32 @@ initialize and inspect that redesigned stack.
 
 ## Log
 
+### [2026-06-10] Issue 38 — Skill registry and state-predicate loader implemented
+
+Added the first runtime skill-loading slice for the gated onboarding agent:
+
+- Markdown skill registry reads `docs/skills/*.md` frontmatter and loads only
+  `status: accepted` skills
+- prompt assembly evaluates node-declared `SkillTrigger` predicates against
+  current graph state and appends skill bodies in trigger order
+- `GOVERNANCE_SKILL_TRIGGERS` includes the ADR 0015 conditional
+  `skill-ingestion-selector-conventions` load for
+  `extraction_mode == "custom_python"`
+- `METADATA_STANDARDISATION_SKILL_TRIGGERS` supports the conditional
+  `Seed exemplars` subsection load when
+  `reference_metadata.cohort_A_empty == true`
+- assembled prompts expose a `loaded_skills` state update carrying skill id,
+  trigger id, node, and optional subsection title
+- onboarding checkpoint state now validates `loaded_skills` as append-only
+- existing `docs/skills/skill-*.md` files now include status frontmatter while
+  retaining their human-readable status sections
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_skill_loader.py tests/macrodb/test_onboarding_state.py -q`
+- `uv run pytest -q`
+- `uv run ruff check .`
+
 ### [2026-06-10] Issue 36 — Second-wave ingestion selectors implemented
 
 Implemented the ADR 0012 second-wave selector roster:

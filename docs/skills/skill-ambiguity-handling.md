@@ -1,3 +1,6 @@
+---
+status: stub
+---
 # skill-ambiguity-handling
 
 **Status:** stub

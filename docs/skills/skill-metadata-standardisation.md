@@ -1,3 +1,6 @@
+---
+status: draft
+---
 # skill-metadata-standardisation
 
 **Status:** draft

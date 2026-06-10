@@ -1,3 +1,6 @@
+---
+status: stub
+---
 # skill-dangerous-correction
 
 **Status:** stub

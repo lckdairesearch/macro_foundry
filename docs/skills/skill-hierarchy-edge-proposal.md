@@ -1,3 +1,6 @@
+---
+status: stub
+---
 # skill-hierarchy-edge-proposal
 
 **Status:** stub

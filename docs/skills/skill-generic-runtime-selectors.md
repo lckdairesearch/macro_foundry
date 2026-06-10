@@ -1,3 +1,6 @@
+---
+status: stub
+---
 # skill-generic-runtime-selectors
 
 **Status:** stub

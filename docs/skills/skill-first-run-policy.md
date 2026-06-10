@@ -1,3 +1,6 @@
+---
+status: stub
+---
 # skill-first-run-policy
 
 **Status:** stub

@@ -1,3 +1,6 @@
+---
+status: stub
+---
 # skill-provider-locator-quality
 
 **Status:** stub

@@ -1,3 +1,6 @@
+---
+status: draft
+---
 # skill-enum-gap-escalation
 
 **Status:** draft

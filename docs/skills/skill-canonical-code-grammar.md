@@ -1,3 +1,6 @@
+---
+status: stub
+---
 # skill-canonical-code-grammar
 
 **Status:** stub
