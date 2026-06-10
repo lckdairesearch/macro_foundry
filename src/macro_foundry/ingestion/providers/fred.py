@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from calendar import monthrange
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol
 
 import httpx
 
 from macro_foundry.enums import Frequency
+from macro_foundry.ingestion.runtime.calendar import period_bounds
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,39 +149,7 @@ def fred_period_bounds(
 ) -> tuple[date, date]:
     """Map a FRED period anchor to macrodb period bounds."""
 
-    if frequency is Frequency.DAILY:
-        return period_anchor, period_anchor
-    if frequency is Frequency.WEEKLY:
-        return period_anchor, period_anchor + timedelta(days=6)
-    if frequency is Frequency.MONTHLY:
-        period_start = period_anchor.replace(day=1)
-        return period_start, date(
-            period_start.year,
-            period_start.month,
-            monthrange(period_start.year, period_start.month)[1],
-        )
-    if frequency is Frequency.QUARTERLY:
-        quarter_start_month = ((period_anchor.month - 1) // 3) * 3 + 1
-        period_start = date(period_anchor.year, quarter_start_month, 1)
-        period_end_month = quarter_start_month + 2
-        return period_start, date(
-            period_start.year,
-            period_end_month,
-            monthrange(period_start.year, period_end_month)[1],
-        )
-    if frequency is Frequency.SEMI_ANNUAL:
-        period_start_month = 1 if period_anchor.month <= 6 else 7
-        period_start = date(period_anchor.year, period_start_month, 1)
-        period_end_month = 6 if period_start_month == 1 else 12
-        return period_start, date(
-            period_start.year,
-            period_end_month,
-            monthrange(period_start.year, period_end_month)[1],
-        )
-    if frequency is Frequency.ANNUAL:
-        period_start = date(period_anchor.year, 1, 1)
-        return period_start, date(period_anchor.year, 12, 31)
-    raise ValueError(f"Unsupported FRED frequency {frequency.value!r}")
+    return period_bounds(period_anchor, frequency)
 
 
 def _parse_frequency(row: dict[str, Any]) -> Frequency:

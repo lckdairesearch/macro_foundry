@@ -48,6 +48,24 @@ initialize and inspect that redesigned stack.
 
 ## Log
 
+### [2026-06-10] Issue 33 — Generic ingestion runtime and json_path selector implemented
+
+Implemented the first ADR 0012 runtime slice:
+
+- added `src/macro_foundry/ingestion/runtime/runner.py` as the generic feed
+  executor that reads active `ingestion_feed_members`, dispatches by
+  `selector_type`, and writes feed-level plus member-level run logs
+- added the selector contract types and registry under
+  `src/macro_foundry/ingestion/runtime/`
+- added the `json_path` selector with config validation, FRED-shaped payload
+  extraction, empty-data handling, and defensive parsing for provider error
+  wrappers returned as successful HTTP payloads
+- extracted provider-agnostic period bounds into
+  `src/macro_foundry/ingestion/runtime/calendar.py` and made the existing FRED
+  provider helper delegate to it
+- covered the work with selector, calendar, one-member runner, and multi-member
+  runner tests
+
 ### [2026-06-10] Reviewer role consolidation (ADR 0015) and credential-gap escalation (ADR 0016) closed
 
 Closed two design threads in one `/grill-with-docs` pass, both arising
