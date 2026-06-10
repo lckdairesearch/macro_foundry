@@ -7,6 +7,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, ValidationInfo, model_validator
 
 from macro_foundry.agent.proposal import DraftProposal
+from macro_foundry.agent.review import ReviewBundle
 
 
 class SessionMetadata(BaseModel):
@@ -121,6 +122,11 @@ class OnboardingCheckpointState(BaseModel):
     errors: tuple[NodeError, ...] = ()
     proposal: DraftProposal | None = None
     enum_gap_proposals: tuple[EnumGapProposal, ...] = ()
+    # Reviewer fan-out (issue 44)
+    extraction_mode: str | None = None
+    review_cycle: int = 0
+    governance_review: ReviewBundle | None = None
+    data_correctness_review: ReviewBundle | None = None
 
     @property
     def session_cost_usd(self) -> float:

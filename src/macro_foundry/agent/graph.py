@@ -13,9 +13,21 @@ from macro_foundry.agent.onboarding_state import LLMCallRecord, NodeTransition, 
 from macro_foundry.agent.roles import AgentRole, RoleConfig
 from macro_foundry.agent.skills import SkillRegistry
 
+from macro_foundry.agent.review import ReviewBundle
+
 # Type alias for a single-call LLM callable used by research and draft nodes.
 # Receives the assembled messages list; returns a dict with content + usage metadata.
 LLMCallable = Callable[[list[dict[str, str]]], Awaitable[dict[str, Any]]]
+
+# Reviewer callable accepts an optional task_hint for within-role model tiering.
+ReviewerLLMCallable = Callable[..., Awaitable[dict[str, Any]]]
+
+# Write tools that must never appear in a reviewer's bound_tools set.
+_WRITE_TOOL_NAMES: frozenset[str] = frozenset({
+    "macrodb_write",
+    "macrodb_write_proposals",
+    "selector_sandbox",
+})
 
 
 class OnboardingGraphState(TypedDict, total=False):
@@ -35,6 +47,11 @@ class OnboardingGraphState(TypedDict, total=False):
     # Proposal outputs
     proposal: dict[str, Any] | None
     enum_gap_proposals: list[dict[str, Any]]
+    # Reviewer fan-out outputs (issue 44)
+    extraction_mode: str | None
+    review_cycle: int
+    governance_review: dict[str, Any] | None
+    data_correctness_review: dict[str, Any] | None
 
 
 def _hello_world_node(state: OnboardingGraphState) -> OnboardingGraphState:
@@ -199,6 +216,145 @@ def make_draft_proposal_node(
     return _draft_proposal_node
 
 
+def make_governance_review_node(
+    llm: ReviewerLLMCallable,
+    role_config: RoleConfig,
+    registry: SkillRegistry,
+) -> Callable[[OnboardingGraphState], Awaitable[dict[str, Any]]]:
+    """Return a governance_review node bound to read-only tools only."""
+
+    bound_tools: frozenset[str] = frozenset(role_config.tools) - _WRITE_TOOL_NAMES
+    _ = registry  # skill loading wired in a later slice
+
+    async def _governance_review_node(state: OnboardingGraphState) -> dict[str, Any]:
+        proposal = state.get("proposal") or {}
+        extraction_mode = state.get("extraction_mode") or "config_only"
+        cycle = (state.get("review_cycle") or 0) + 1
+
+        task_hint: str | None = None
+        if extraction_mode == "custom_python":
+            task_hint = "selector_code_review"
+
+        messages = [{"role": "user", "content": f"proposal: {proposal}"}]
+        result = await llm(messages, task_hint=task_hint)
+
+        now = datetime.now(timezone.utc)
+        llm_record = LLMCallRecord(
+            role=role_config.role.value,
+            task_hint=task_hint,
+            provider=role_config.provider.value,
+            model=role_config.default_model,
+            prompt_tokens=result["prompt_tokens"],
+            completion_tokens=result["completion_tokens"],
+            total_tokens=result["total_tokens"],
+            cost_estimate_usd=result["cost_estimate_usd"],
+            latency_ms=result["latency_ms"],
+            created_at=now,
+        )
+
+        bundle = ReviewBundle(
+            specialty="governance",
+            findings=result.get("findings", []),
+            review_cycle=cycle,
+            bounce_to_drafter=result.get("bounce_to_drafter", False),
+        )
+
+        return {
+            "governance_review": bundle.model_dump(mode="json"),
+            "review_cycle": cycle,
+            "llm_calls": [llm_record.model_dump(mode="json")],
+            "loaded_skills": [],
+            "node_transitions": [
+                NodeTransition(node="governance_review", event="completed", created_at=now).model_dump(mode="json"),
+            ],
+        }
+
+    _governance_review_node.bound_tools = bound_tools  # type: ignore[attr-defined]
+    return _governance_review_node
+
+
+def make_data_correctness_review_node(
+    llm: ReviewerLLMCallable,
+    role_config: RoleConfig,
+    registry: SkillRegistry,
+) -> Callable[[OnboardingGraphState], Awaitable[dict[str, Any]]]:
+    """Return a data_correctness_review node bound to read-only tools only."""
+
+    bound_tools: frozenset[str] = frozenset(role_config.tools) - _WRITE_TOOL_NAMES
+    _ = registry
+
+    async def _data_correctness_review_node(state: OnboardingGraphState) -> dict[str, Any]:
+        proposal = state.get("proposal") or {}
+        cycle = (state.get("review_cycle") or 0) + 1
+
+        messages = [{"role": "user", "content": f"proposal: {proposal}"}]
+        result = await llm(messages, task_hint=None)
+
+        now = datetime.now(timezone.utc)
+        llm_record = LLMCallRecord(
+            role=role_config.role.value,
+            provider=role_config.provider.value,
+            model=role_config.default_model,
+            prompt_tokens=result["prompt_tokens"],
+            completion_tokens=result["completion_tokens"],
+            total_tokens=result["total_tokens"],
+            cost_estimate_usd=result["cost_estimate_usd"],
+            latency_ms=result["latency_ms"],
+            created_at=now,
+        )
+
+        bundle = ReviewBundle(
+            specialty="data_correctness",
+            findings=result.get("findings", []),
+            review_cycle=cycle,
+            bounce_to_drafter=result.get("bounce_to_drafter", False),
+        )
+
+        return {
+            "data_correctness_review": bundle.model_dump(mode="json"),
+            "llm_calls": [llm_record.model_dump(mode="json")],
+            "loaded_skills": [],
+            "node_transitions": [
+                NodeTransition(node="data_correctness_review", event="completed", created_at=now).model_dump(mode="json"),
+            ],
+        }
+
+    _data_correctness_review_node.bound_tools = bound_tools  # type: ignore[attr-defined]
+    return _data_correctness_review_node
+
+
+def build_reviewer_fanout_graph(
+    *,
+    checkpointer: Any,
+    governance_llm: ReviewerLLMCallable,
+    data_correctness_llm: ReviewerLLMCallable,
+    role_configs: dict[AgentRole, RoleConfig],
+    registry: SkillRegistry,
+) -> Any:
+    """Compile the two-reviewer fan-out graph per ADR 0015.
+
+    Both reviewers run in parallel after draft_proposal; their outputs are
+    written to separate state keys and merged into the review bundle under
+    specialty headings by the caller.
+    """
+
+    gov_node = make_governance_review_node(
+        governance_llm, role_configs[AgentRole.GOVERNANCE_REVIEWER], registry
+    )
+    dc_node = make_data_correctness_review_node(
+        data_correctness_llm, role_configs[AgentRole.DATA_CORRECTNESS_REVIEWER], registry
+    )
+
+    graph = StateGraph(OnboardingGraphState)
+    graph.add_node("governance_review", gov_node)
+    graph.add_node("data_correctness_review", dc_node)
+    graph.add_edge(START, "governance_review")
+    graph.add_edge(START, "data_correctness_review")
+    graph.add_edge("governance_review", END)
+    graph.add_edge("data_correctness_review", END)
+    return graph.compile(checkpointer=checkpointer)
+
+
 def build_research_draft_graph(
     *,
     checkpointer: Any,
@@ -224,11 +380,15 @@ def build_research_draft_graph(
 __all__ = [
     "LLMCallable",
     "OnboardingGraphState",
+    "ReviewerLLMCallable",
     "build_hello_world_graph",
     "build_research_draft_graph",
+    "build_reviewer_fanout_graph",
     "initial_graph_update",
     "llm_call_graph_update",
+    "make_data_correctness_review_node",
     "make_draft_proposal_node",
+    "make_governance_review_node",
     "make_research_node",
     "user_input_graph_update",
 ]
