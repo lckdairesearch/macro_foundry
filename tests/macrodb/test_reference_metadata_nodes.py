@@ -8,6 +8,96 @@ import pytest
 from pydantic import ValidationError
 
 
+class _NoopChannel:
+    async def emit(self, event: Any) -> None:
+        pass
+
+    async def prompt(self, prompt: Any) -> Any:
+        raise AssertionError("prompt should not be called")
+
+
+class _NoopWriteTools:
+    async def propose_create_series(self, args: Any) -> dict[str, Any]:
+        return {
+            "proposal_id": "aaaaaaaa-0000-0000-0000-000000000001",
+            "item_id": "aaaaaaaa-0000-0000-0000-000000000002",
+            "series_id": "aaaaaaaa-0000-0000-0000-000000000003",
+            "family_id": "aaaaaaaa-0000-0000-0000-000000000004",
+            "concept_id": "aaaaaaaa-0000-0000-0000-000000000005",
+            "feed_id": "aaaaaaaa-0000-0000-0000-000000000006",
+        }
+
+    async def record_suggest_human_apply(self, args: Any) -> dict[str, Any]:
+        return {"proposal_id": "proposal-id", "item_ids": []}
+
+    async def apply_credential_gap_resolutions(self, args: Any) -> dict[str, Any]:
+        return {"applied": True}
+
+    async def trigger_feed_execution(self, args: Any) -> dict[str, Any]:
+        return {
+            "feed_id": "aaaaaaaa-0000-0000-0000-000000000006",
+            "run_log_id": "aaaaaaaa-0000-0000-0000-000000000007",
+            "status": "success",
+        }
+
+
+class _NoopRunLogs:
+    async def get_ingestion_run_log(self, run_log_id: str) -> dict[str, Any]:
+        return {
+            "run_log_id": run_log_id,
+            "status": "success",
+            "rows_fetched": 1,
+            "rows_inserted": 1,
+            "rows_skipped": 0,
+            "diagnostics": {},
+            "warnings": [],
+        }
+
+
+class _NoopPackageStore:
+    async def save_onboarding_package(self, package: dict[str, Any]) -> dict[str, Any]:
+        return {"package_id": "package-id"}
+
+
+async def _approve_picker(options: list[str], *_args: Any) -> str:
+    assert "approve" in options
+    return "approve"
+
+
+async def _approval_llm(_state: dict[str, Any]) -> dict[str, Any]:
+    return {}
+
+
+async def _reviewer_llm(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+    return {
+        "findings": [],
+        "bounce_to_drafter": False,
+        "prompt_tokens": 1,
+        "completion_tokens": 1,
+        "total_tokens": 2,
+        "cost_estimate_usd": 0.0,
+        "latency_ms": 1,
+    }
+
+
+async def _test_reviewer(_review_input: dict[str, Any]) -> dict[str, Any]:
+    return {"summary": "ok"}
+
+
+def _noop_canonical_graph_kwargs() -> dict[str, Any]:
+    return {
+        "governance_llm": _reviewer_llm,
+        "data_correctness_llm": _reviewer_llm,
+        "approval_llm": _approval_llm,
+        "gate_1_picker": _approve_picker,
+        "channel": _NoopChannel(),
+        "write_tools": _NoopWriteTools(),
+        "run_logs": _NoopRunLogs(),
+        "test_reviewer": _test_reviewer,
+        "package_store": _NoopPackageStore(),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Slice 1 — ReferenceMetadata model
 # ---------------------------------------------------------------------------
@@ -532,7 +622,7 @@ async def test_draft_proposal_node_drops_harmonisation_item_missing_cohort_membe
 
 @pytest.mark.no_db
 @pytest.mark.asyncio
-async def test_draft_proposal_node_forwards_suggest_human_apply_items() -> None:
+async def test_draft_proposal_node_forwards_suggest_human_apply() -> None:
     from macro_foundry.agent.graph import make_draft_proposal_node
     from macro_foundry.agent.roles import AgentRole, default_role_configs
     from macro_foundry.agent.skills import SkillRegistry
@@ -582,15 +672,15 @@ async def test_draft_proposal_node_forwards_suggest_human_apply_items() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Slice 9 — Graph integration: new nodes in build_reference_metadata_graph
+# Slice 9 — Graph integration: new nodes in build_onboarding_graph
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.no_db
 @pytest.mark.asyncio
-async def test_build_reference_metadata_graph_runs_all_nodes() -> None:
+async def test_build_onboarding_graph_runs_all_nodes() -> None:
     """Full graph: research → gather + classify (parallel) → draft_proposal."""
-    from macro_foundry.agent.graph import build_reference_metadata_graph
+    from macro_foundry.agent.graph import build_onboarding_graph
     from macro_foundry.agent.roles import default_role_configs
     from macro_foundry.agent.skills import SkillRegistry
     from macro_foundry.agent.proposal import DraftProposal
@@ -652,7 +742,7 @@ async def test_build_reference_metadata_graph_runs_all_nodes() -> None:
         }
 
     checkpointer = MemorySaver()
-    graph = build_reference_metadata_graph(
+    graph = build_onboarding_graph(
         checkpointer=checkpointer,
         research_llm=fake_research_llm,
         cohort_lookup=fake_cohort_lookup,
@@ -660,6 +750,7 @@ async def test_build_reference_metadata_graph_runs_all_nodes() -> None:
         draft_llm=fake_draft_llm,
         role_configs=role_configs,
         registry=registry,
+        **_noop_canonical_graph_kwargs(),
     )
     config = {"configurable": {"thread_id": "test-session-43"}}
 
@@ -691,18 +782,18 @@ async def test_build_reference_metadata_graph_runs_all_nodes() -> None:
     assert "classify_extraction_mode" in node_names
     assert "draft_proposal" in node_names
 
-    # LLM calls: research (1) + draft (1) = 2
-    assert len(final_state["llm_calls"]) == 2
+    # LLM calls: research + draft + two reviewers in the canonical graph
+    assert len(final_state["llm_calls"]) == 4
 
 
 @pytest.mark.no_db
 @pytest.mark.asyncio
-async def test_build_reference_metadata_graph_draft_anchors_on_cohort_a_and_emits_harmonisation() -> None:
+async def test_build_onboarding_graph_draft_anchors_on_cohort_a_and_emits_harmonisation() -> None:
     """
     Full graph: cohort A has a sibling that omits SA qualifier; draft emits a
     factual_incompleteness harmonisation item citing the sibling with evidence.
     """
-    from macro_foundry.agent.graph import build_reference_metadata_graph
+    from macro_foundry.agent.graph import build_onboarding_graph
     from macro_foundry.agent.roles import default_role_configs
     from macro_foundry.agent.skills import SkillRegistry
     from macro_foundry.agent.proposal import ReferenceMetadata
@@ -781,7 +872,7 @@ async def test_build_reference_metadata_graph_draft_anchors_on_cohort_a_and_emit
         }
 
     checkpointer = MemorySaver()
-    graph = build_reference_metadata_graph(
+    graph = build_onboarding_graph(
         checkpointer=checkpointer,
         research_llm=fake_research_llm,
         cohort_lookup=fake_cohort_lookup,
@@ -789,6 +880,7 @@ async def test_build_reference_metadata_graph_draft_anchors_on_cohort_a_and_emit
         draft_llm=fake_draft_llm,
         role_configs=role_configs,
         registry=registry,
+        **_noop_canonical_graph_kwargs(),
     )
     config = {"configurable": {"thread_id": "test-session-43-harmonisation"}}
 
@@ -817,9 +909,9 @@ async def test_build_reference_metadata_graph_draft_anchors_on_cohort_a_and_emit
 
 @pytest.mark.no_db
 @pytest.mark.asyncio
-async def test_build_reference_metadata_graph_conditional_edge_reads_extraction_mode() -> None:
+async def test_build_onboarding_graph_conditional_edge_reads_extraction_mode() -> None:
     """The conditional edge out of draft_proposal reads extraction_mode, not LLM output."""
-    from macro_foundry.agent.graph import build_reference_metadata_graph, EDGE_NEXT_FROM_DRAFT
+    from macro_foundry.agent.graph import build_onboarding_graph, EDGE_NEXT_FROM_DRAFT
     from macro_foundry.agent.roles import default_role_configs
     from macro_foundry.agent.skills import SkillRegistry
     from langgraph.checkpoint.memory import MemorySaver
@@ -866,7 +958,7 @@ async def test_build_reference_metadata_graph_conditional_edge_reads_extraction_
             "latency_ms": 10,
         }
 
-    graph = build_reference_metadata_graph(
+    graph = build_onboarding_graph(
         checkpointer=checkpointer,
         research_llm=fake_research_llm,
         cohort_lookup=fake_cohort_lookup,
@@ -874,6 +966,7 @@ async def test_build_reference_metadata_graph_conditional_edge_reads_extraction_
         draft_llm=fake_draft_llm,
         role_configs=role_configs,
         registry=registry,
+        **_noop_canonical_graph_kwargs(),
     )
     config = {"configurable": {"thread_id": "test-session-43-b"}}
 

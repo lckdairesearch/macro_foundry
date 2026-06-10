@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from typer.testing import CliRunner
 
@@ -9,13 +11,152 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from macro_foundry.agent.channel import ChannelEvent, ChannelPrompt, ChannelResponse
 from macro_foundry.agent.checkpoint import psycopg_langgraph_url
-from macro_foundry.agent.onboarding import OnboardingResult, SessionRuntimeConfig
+from macro_foundry.agent.onboarding import OnboardingGraphDependencies, OnboardingResult, SessionRuntimeConfig
 from macro_foundry.agent.onboarding import run_onboarding_session
 from macro_foundry.agent.roles import AgentRole, RoleOverride
+from macro_foundry.agent.skills import SkillRegistry
 from macro_foundry.cli import app
 from macro_foundry.db import EnvTarget
 
 runner = CliRunner()
+
+
+class _FakeGraphWriteTools:
+    async def propose_create_series(self, args: Any) -> dict[str, Any]:
+        return {
+            "proposal_id": "aaaaaaaa-0000-0000-0000-000000000001",
+            "item_id": "aaaaaaaa-0000-0000-0000-000000000002",
+            "series_id": "aaaaaaaa-0000-0000-0000-000000000003",
+            "family_id": "aaaaaaaa-0000-0000-0000-000000000004",
+            "concept_id": "aaaaaaaa-0000-0000-0000-000000000005",
+            "feed_id": "aaaaaaaa-0000-0000-0000-000000000006",
+        }
+
+    async def record_suggest_human_apply(self, args: Any) -> dict[str, Any]:
+        return {"proposal_id": "aaaaaaaa-0000-0000-0000-000000000001", "item_ids": []}
+
+    async def apply_credential_gap_resolutions(self, args: Any) -> dict[str, Any]:
+        return {"applied": True}
+
+    async def trigger_feed_execution(self, args: Any) -> dict[str, Any]:
+        return {
+            "feed_id": "aaaaaaaa-0000-0000-0000-000000000006",
+            "run_log_id": "aaaaaaaa-0000-0000-0000-000000000007",
+            "status": "success",
+        }
+
+
+class _FakeGraphRunLogs:
+    async def get_ingestion_run_log(self, run_log_id: str) -> dict[str, Any]:
+        return {
+            "run_log_id": run_log_id,
+            "status": "success",
+            "rows_fetched": 1,
+            "rows_inserted": 1,
+            "rows_skipped": 0,
+            "diagnostics": {},
+            "warnings": [],
+        }
+
+
+class _FakeGraphPackageStore:
+    async def save_onboarding_package(self, package: dict[str, Any]) -> dict[str, Any]:
+        return {"package_id": "pkg-test"}
+
+
+def _llm_usage(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **payload,
+        "prompt_tokens": 1,
+        "completion_tokens": 1,
+        "total_tokens": 2,
+        "cost_estimate_usd": 0.0,
+        "latency_ms": 1,
+    }
+
+
+def _fake_graph_dependencies() -> OnboardingGraphDependencies:
+    async def research_llm(_messages: list[dict[str, str]]) -> dict[str, Any]:
+        return _llm_usage(
+            {
+                "source_summary": "FRED provides CPI observations through a JSON API.",
+                "existing_catalog_hits": [],
+                "ambiguity_flags": [],
+                "credential_gap_proposals": [],
+            }
+        )
+
+    async def cohort_lookup(_catalog_hits: list[dict[str, Any]]) -> dict[str, Any]:
+        return {"cohort_a": [], "cohort_b": [], "cohort_c": []}
+
+    async def classify(_source_summary: str) -> str:
+        return "config_only"
+
+    async def draft_llm(_messages: list[dict[str, str]]) -> dict[str, Any]:
+        return _llm_usage(
+            {
+                "proposal": {
+                    "concept": {"action": "new", "code": "CLI_CPI", "name": "CLI CPI"},
+                    "family": {
+                        "action": "new",
+                        "code": "CLI_US_CPI",
+                        "name": "CLI US CPI",
+                        "concept_code": "CLI_CPI",
+                        "geography_code": "USA",
+                    },
+                    "series": {
+                        "action": "new",
+                        "code": "CLI_US_CPI_M",
+                        "name": "CLI US CPI Monthly",
+                        "frequency": "M",
+                        "measure": "level",
+                        "unit_kind": "index",
+                        "temporal_stock_flow": "index",
+                        "unit_scale": "one",
+                        "seasonal_adjustment": "NSA",
+                    },
+                    "source": {"provider_name": "USA FRED", "external_code": "CPIAUCNS"},
+                    "feed": {
+                        "selector_type": "json_path",
+                        "cron_schedule": "0 14 * * 5",
+                        "feed_method": "api",
+                    },
+                    "family_member": {"variant": "Headline NSA"},
+                },
+                "enum_gap_proposals": [],
+                "harmonisation_items": [],
+                "suggest_human_apply": [],
+            }
+        )
+
+    async def reviewer_llm(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        return _llm_usage({"findings": [], "bounce_to_drafter": False})
+
+    async def approval_llm(_state: dict[str, Any]) -> dict[str, Any]:
+        return {}
+
+    async def picker(options: list[str], *_args: Any) -> str:
+        assert "approve" in options
+        return "approve"
+
+    async def test_reviewer(_review_input: dict[str, Any]) -> dict[str, Any]:
+        return {"summary": "ok"}
+
+    return OnboardingGraphDependencies(
+        research_llm=research_llm,
+        cohort_lookup=cohort_lookup,
+        extraction_mode_classifier=classify,
+        draft_llm=draft_llm,
+        governance_llm=reviewer_llm,
+        data_correctness_llm=reviewer_llm,
+        approval_llm=approval_llm,
+        gate_1_picker=picker,
+        write_tools=_FakeGraphWriteTools(),
+        run_logs=_FakeGraphRunLogs(),
+        test_reviewer=test_reviewer,
+        package_store=_FakeGraphPackageStore(),
+        registry=SkillRegistry({}),
+    )
 
 
 @pytest.mark.no_db
@@ -119,7 +260,8 @@ class FakeChannel:
 @pytest.mark.asyncio
 async def test_onboard_session_saves_and_resumes_with_fake_channel() -> None:
     checkpointer = InMemorySaver()
-    first_channel = FakeChannel(["hello", "/save"])
+    first_channel = FakeChannel(["Onboard FRED CPI", "/save"])
+    runtime_config = SessionRuntimeConfig(graph_dependencies=_fake_graph_dependencies())
 
     first_result = await run_onboarding_session(
         target=EnvTarget.DEV,
@@ -127,30 +269,31 @@ async def test_onboard_session_saves_and_resumes_with_fake_channel() -> None:
         channel=first_channel,
         checkpointer=checkpointer,
         session_id_factory=lambda: "friendly-session",
+        runtime_config=runtime_config,
     )
 
     assert first_result == OnboardingResult(session_id="friendly-session", saved=True)
-    assert [event.text for event in first_channel.events] == [
-        "hello-world onboarding session friendly-session",
-        "hello-world: hello",
-        "session friendly-session saved",
-    ]
+    first_events = [event.text for event in first_channel.events]
+    assert first_events[0] == "onboarding session friendly-session"
+    assert "Gate 1 Approval" in first_events[1]
+    assert first_events[2] == "onboarding_package status=test-approved package_id=pkg-test"
+    assert first_events[3] == "session friendly-session saved"
 
-    resumed_channel = FakeChannel(["again", "/save"])
+    resumed_channel = FakeChannel(["Onboard FRED CPI again", "/save"])
     resumed_result = await run_onboarding_session(
         target=EnvTarget.DEV,
         resume_session_id="friendly-session",
         channel=resumed_channel,
         checkpointer=checkpointer,
+        runtime_config=runtime_config,
     )
 
     assert resumed_result == OnboardingResult(session_id="friendly-session", saved=True)
-    assert [event.text for event in resumed_channel.events] == [
-        "hello-world onboarding session friendly-session",
-        "hello-world: hello",
-        "hello-world: again",
-        "session friendly-session saved",
-    ]
+    resumed_events = [event.text for event in resumed_channel.events]
+    assert resumed_events[0] == "onboarding session friendly-session"
+    assert "Gate 1 Approval" in resumed_events[1]
+    assert resumed_events[2] == "onboarding_package status=test-approved package_id=pkg-test"
+    assert resumed_events[3] == "session friendly-session saved"
 
 
 @pytest.mark.no_db

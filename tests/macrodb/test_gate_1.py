@@ -84,14 +84,14 @@ def test_gate_1_summary_contains_three_section_headings() -> None:
     harmonisation_items: list[dict[str, Any]] = [
         {"field": "description", "series_code": "CPI_USA_M", "proposed": "Updated description."},
     ]
-    suggest_human_apply_items: list[dict[str, Any]] = [
+    suggest_human_apply: list[dict[str, Any]] = [
         {"field": "concept.name", "proposed": "Consumer Prices"},
     ]
 
     summary = render_gate_1_summary(
         proposal=proposal,
         harmonisation_items=harmonisation_items,
-        suggest_human_apply_items=suggest_human_apply_items,
+        suggest_human_apply=suggest_human_apply,
     )
 
     assert "New series items" in summary

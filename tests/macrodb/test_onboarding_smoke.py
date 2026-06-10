@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from macro_foundry.agent.channel import ChannelEvent, ChannelPrompt, ChannelResponse
 from macro_foundry.agent.credential_gap import CredentialProbeOutcome, make_credential_gap_wait_node
 from macro_foundry.agent.enum_gap import make_enum_gap_wait_node
-from macro_foundry.agent.graph import build_onboarding_smoke_graph
+from macro_foundry.agent.graph import build_onboarding_graph
 from macro_foundry.agent.roles import default_role_configs
 from macro_foundry.agent.skills import SkillRegistry
 from macro_foundry.enums import (
@@ -221,7 +221,7 @@ async def _run_smoke(
         return _llm_usage(draft_queue.pop(0))
 
     package_store = _PackageStore()
-    graph = build_onboarding_smoke_graph(
+    graph = build_onboarding_graph(
         checkpointer=MemorySaver(),
         research_llm=research_llm,
         cohort_lookup=cohort_lookup,

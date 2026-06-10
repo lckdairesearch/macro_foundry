@@ -57,7 +57,7 @@ def _base_state(**overrides: Any) -> dict[str, Any]:
         "gate_1_applied": False,
         "proposal": proposal.model_dump(mode="json"),
         "harmonisation_items": [],
-        "suggest_human_apply_items": [],
+        "suggest_human_apply": [],
         "session_metadata": {"session_id": "sess-abc"},
     }
     state.update(overrides)
@@ -164,7 +164,7 @@ async def test_apply_catalog_applies_credential_gap_resolutions_after_gate_1() -
 
 @pytest.mark.asyncio
 @pytest.mark.no_db
-async def test_apply_catalog_skips_suggest_human_apply_items() -> None:
+async def test_apply_catalog_skips_suggest_human_apply() -> None:
     write_tools = AsyncMock()
     write_tools.propose_create_series.return_value = {
         "proposal_id": "aaaaaaaa-0000-0000-0000-000000000001",
@@ -184,7 +184,7 @@ async def test_apply_catalog_skips_suggest_human_apply_items() -> None:
     ]
 
     node = make_apply_catalog_node(write_tools=write_tools)
-    result = await node(_base_state(suggest_human_apply_items=sha_items))
+    result = await node(_base_state(suggest_human_apply=sha_items))
 
     # Suggest-human-apply items must be recorded but NOT applied
     write_tools.record_suggest_human_apply.assert_called_once()
@@ -212,7 +212,7 @@ async def test_apply_catalog_skips_suggest_human_apply_without_regular_items() -
     ]
 
     node = make_apply_catalog_node(write_tools=write_tools)
-    result = await node(_base_state(suggest_human_apply_items=sha_items))
+    result = await node(_base_state(suggest_human_apply=sha_items))
 
     assert result.get("gate_1_applied") is True
 

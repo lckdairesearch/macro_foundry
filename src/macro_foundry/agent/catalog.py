@@ -43,7 +43,7 @@ def make_apply_catalog_node(
 
         session_id: str = (state.get("session_metadata") or {}).get("session_id", "")
         proposal_dict: dict[str, Any] = state.get("proposal") or {}
-        sha_items: list[dict[str, Any]] = list(state.get("suggest_human_apply_items") or [])
+        sha_items: list[dict[str, Any]] = list(state.get("suggest_human_apply") or [])
         credential_resolutions: list[dict[str, Any]] = list(
             state.get("credential_gap_resolutions") or []
         )

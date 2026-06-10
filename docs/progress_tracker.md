@@ -12,6 +12,37 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-10] Issue 56 — Production onboarding graph assembled and wired into CLI loop
+
+Promoted the injectable end-to-end onboarding graph to the canonical
+`build_onboarding_graph` and wired `run_onboarding_session` / `macrodb onboard`
+away from the hello-world graph. The session loop now seeds checkpoint metadata
+with `aupdate_state`, invokes the canonical graph on operator input, preserves
+resume behavior, consumes real `role_configs`, and exposes injectable graph
+dependencies for tests and future live LLM/MCP wiring.
+
+Graph assembly and cleanup:
+
+- canonical graph now covers research → credential-gap wait → reference metadata
+  → extraction-mode classification → draft → enum-gap wait → draft script
+  placeholder → governance/data-correctness review → Gate 1 → request-change
+  drafter loop / small-edit loop / reject terminal / approve executor path →
+  apply_catalog → trigger_first_run → monitor_first_run → test_review →
+  emit_package
+- deleted the intermediate graph builders and smoke-specific edge functions from
+  the public agent graph surface
+- collapsed onboarding state to one `suggest_human_apply` key and removed the
+  duplicate `harmonisation_items` TypedDict declaration
+- narrowed evidence-filter validation catches in the graph from bare
+  `Exception` to Pydantic `ValidationError`
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_onboarding_smoke.py -q` exited 0 with
+  `5 passed`
+- `uv run pytest tests/macrodb/ -q -m no_db` exited 0 with
+  `157 passed, 85 deselected`
+
 ### [2026-06-10] ADR 0017 — `macrodb` CLI interface standardisation implemented
 
 Refactored the entire `macrodb` CLI surface per ADR 0017:

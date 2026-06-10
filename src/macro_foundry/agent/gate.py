@@ -51,7 +51,7 @@ def render_gate_1_summary(
     *,
     proposal: DraftProposal,
     harmonisation_items: list[dict[str, Any]],
-    suggest_human_apply_items: list[dict[str, Any]],
+    suggest_human_apply: list[dict[str, Any]],
 ) -> str:
     """Render the Gate 1 proposal summary with three sections per ADR 0013."""
 
@@ -71,8 +71,8 @@ def render_gate_1_summary(
     lines.append("")
 
     lines.append("### Suggest-for-human-apply items\n")
-    if suggest_human_apply_items:
-        for item in suggest_human_apply_items:
+    if suggest_human_apply:
+        for item in suggest_human_apply:
             lines.append(f"  {item.get('field', '')}: {item.get('proposed', '')}")
     else:
         lines.append("  (none)")
@@ -112,7 +112,7 @@ def make_gate_1_wait_node(
             summary = render_gate_1_summary(
                 proposal=proposal,
                 harmonisation_items=state.get("harmonisation_items") or [],
-                suggest_human_apply_items=state.get("suggest_human_apply_items") or [],
+                suggest_human_apply=state.get("suggest_human_apply") or [],
             )
             await channel.emit(ChannelEvent(text=summary))
 

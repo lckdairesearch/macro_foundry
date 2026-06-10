@@ -440,7 +440,7 @@ async def test_apply_catalog_writes_catalog_rows_and_pending_sha_items(
     state = {
         "gate_1_approved": True,
         "proposal": draft.model_dump(mode="json"),
-        "suggest_human_apply_items": [sha_item],
+        "suggest_human_apply": [sha_item],
         "session_metadata": {"session_id": "sess-ac6-001"},
     }
 

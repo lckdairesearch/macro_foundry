@@ -579,11 +579,9 @@ async def test_review_cycle_reaches_soft_cap_3() -> None:
 @pytest.mark.asyncio
 async def test_config_only_session_exercises_2_reviewer_calls() -> None:
     """config_only: governance + data_correctness each called once; no selector skill."""
-    from langgraph.checkpoint.memory import MemorySaver
-
-    from macro_foundry.agent.graph import build_reviewer_fanout_graph
+    from macro_foundry.agent.graph import make_data_correctness_review_node, make_governance_review_node
     from macro_foundry.agent.review import ReviewBundle
-    from macro_foundry.agent.roles import default_role_configs
+    from macro_foundry.agent.roles import AgentRole, default_role_configs
     from macro_foundry.agent.skills import SkillRegistry
 
     registry = SkillRegistry({})
@@ -616,26 +614,33 @@ async def test_config_only_session_exercises_2_reviewer_calls() -> None:
             "latency_ms": 250,
         }
 
-    checkpointer = MemorySaver()
-    graph = build_reviewer_fanout_graph(
-        checkpointer=checkpointer,
-        governance_llm=fake_gov_llm,
-        data_correctness_llm=fake_dc_llm,
-        role_configs=role_configs,
-        registry=registry,
+    gov_node = make_governance_review_node(
+        fake_gov_llm, role_configs[AgentRole.GOVERNANCE_REVIEWER], registry
+    )
+    dc_node = make_data_correctness_review_node(
+        fake_dc_llm, role_configs[AgentRole.DATA_CORRECTNESS_REVIEWER], registry
     )
 
-    final = await graph.ainvoke(
-        {
-            "proposal": {"concept": {"code": "CPI"}},
-            "extraction_mode": "config_only",
-            "review_cycle": 0,
-            "llm_calls": [],
-            "loaded_skills": [],
-            "node_transitions": [],
-        },
-        {"configurable": {"thread_id": "test-config-only"}},
-    )
+    state = {
+        "proposal": {"concept": {"code": "CPI"}},
+        "extraction_mode": "config_only",
+        "review_cycle": 0,
+        "llm_calls": [],
+        "loaded_skills": [],
+        "node_transitions": [],
+    }
+    gov_update = await gov_node(state)
+    final = {
+        **state,
+        **gov_update,
+        "llm_calls": state["llm_calls"] + gov_update["llm_calls"],
+    }
+    dc_update = await dc_node(final)
+    final = {
+        **final,
+        **dc_update,
+        "llm_calls": final["llm_calls"] + dc_update["llm_calls"],
+    }
 
     # Exactly 2 reviewer LLM calls
     assert len(gov_calls) == 1
@@ -659,10 +664,8 @@ async def test_config_only_session_exercises_2_reviewer_calls() -> None:
 @pytest.mark.asyncio
 async def test_custom_python_session_exercises_2_reviewer_calls_with_selector_skill() -> None:
     """custom_python: governance fires with task_hint=selector_code_review; still 2 total calls."""
-    from langgraph.checkpoint.memory import MemorySaver
-
-    from macro_foundry.agent.graph import build_reviewer_fanout_graph
-    from macro_foundry.agent.roles import default_role_configs
+    from macro_foundry.agent.graph import make_data_correctness_review_node, make_governance_review_node
+    from macro_foundry.agent.roles import AgentRole, default_role_configs
     from macro_foundry.agent.skills import SkillRegistry
 
     registry = SkillRegistry({})
@@ -695,26 +698,33 @@ async def test_custom_python_session_exercises_2_reviewer_calls_with_selector_sk
             "latency_ms": 250,
         }
 
-    checkpointer = MemorySaver()
-    graph = build_reviewer_fanout_graph(
-        checkpointer=checkpointer,
-        governance_llm=fake_gov_llm,
-        data_correctness_llm=fake_dc_llm,
-        role_configs=role_configs,
-        registry=registry,
+    gov_node = make_governance_review_node(
+        fake_gov_llm, role_configs[AgentRole.GOVERNANCE_REVIEWER], registry
+    )
+    dc_node = make_data_correctness_review_node(
+        fake_dc_llm, role_configs[AgentRole.DATA_CORRECTNESS_REVIEWER], registry
     )
 
-    final = await graph.ainvoke(
-        {
-            "proposal": {"proposed_scripts": ["import requests"]},
-            "extraction_mode": "custom_python",
-            "review_cycle": 0,
-            "llm_calls": [],
-            "loaded_skills": [],
-            "node_transitions": [],
-        },
-        {"configurable": {"thread_id": "test-custom-python"}},
-    )
+    state = {
+        "proposal": {"proposed_scripts": ["import requests"]},
+        "extraction_mode": "custom_python",
+        "review_cycle": 0,
+        "llm_calls": [],
+        "loaded_skills": [],
+        "node_transitions": [],
+    }
+    gov_update = await gov_node(state)
+    final = {
+        **state,
+        **gov_update,
+        "llm_calls": state["llm_calls"] + gov_update["llm_calls"],
+    }
+    dc_update = await dc_node(final)
+    final = {
+        **final,
+        **dc_update,
+        "llm_calls": final["llm_calls"] + dc_update["llm_calls"],
+    }
 
     # Still exactly 2 LLM calls — not 3
     assert len(gov_calls) == 1

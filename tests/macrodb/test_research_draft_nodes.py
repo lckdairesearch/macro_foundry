@@ -703,10 +703,14 @@ async def test_draft_proposal_node_passes_coerce_hints_and_suppresses_matching_e
 @pytest.mark.asyncio
 async def test_research_then_draft_integration() -> None:
     """Full graph: research → gather + classify (parallel) → draft_proposal."""
-    from macro_foundry.agent.graph import build_reference_metadata_graph
-    from macro_foundry.agent.roles import default_role_configs
+    from macro_foundry.agent.graph import (
+        make_classify_extraction_mode_node,
+        make_draft_proposal_node,
+        make_gather_reference_metadata_node,
+        make_research_node,
+    )
+    from macro_foundry.agent.roles import AgentRole, default_role_configs
     from macro_foundry.agent.skills import SkillRegistry
-    from langgraph.checkpoint.memory import MemorySaver
 
     registry = SkillRegistry({})
     role_configs = default_role_configs()
@@ -764,22 +768,28 @@ async def test_research_then_draft_integration() -> None:
             "latency_ms": 400,
         }
 
-    checkpointer = MemorySaver()
-    graph = build_reference_metadata_graph(
-        checkpointer=checkpointer,
-        research_llm=fake_research_llm,
-        cohort_lookup=fake_cohort_lookup,
-        extraction_mode_classifier=fake_classify,
-        draft_llm=fake_draft_llm,
-        role_configs=role_configs,
-        registry=registry,
+    research_node = make_research_node(fake_research_llm, role_configs[AgentRole.RESEARCHER], registry)
+    gather_node = make_gather_reference_metadata_node(fake_cohort_lookup)
+    classify_node = make_classify_extraction_mode_node(fake_classify)
+    draft_node = make_draft_proposal_node(
+        fake_draft_llm, role_configs[AgentRole.PROPOSAL_DRAFTER], registry
     )
-    config = {"configurable": {"thread_id": "test-session-1"}}
 
-    final_state = await graph.ainvoke(
-        {"pending_input": "Onboard FRED US CPI monthly series"},
-        config,
-    )
+    state: dict[str, Any] = {"pending_input": "Onboard FRED US CPI monthly series"}
+    research_update = await research_node(state)
+    state = {
+        **state,
+        **research_update,
+        "llm_calls": research_update["llm_calls"],
+    }
+    state = {**state, **await gather_node(state)}
+    state = {**state, **await classify_node(state)}
+    draft_update = await draft_node(state)
+    final_state = {
+        **state,
+        **draft_update,
+        "llm_calls": state["llm_calls"] + draft_update["llm_calls"],
+    }
 
     assert final_state["source_summary"] == "FRED provides US CPI data via JSON API."
     assert final_state["existing_catalog_hits"] == []

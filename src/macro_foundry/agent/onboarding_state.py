@@ -175,7 +175,7 @@ class OnboardingCheckpointState(BaseModel):
     data_correctness_review: ReviewBundle | None = None
     # Gate 1 state (issue 45)
     harmonisation_items: tuple[dict[str, object], ...] = ()
-    suggest_human_apply_items: tuple[dict[str, object], ...] = ()
+    suggest_human_apply: tuple[dict[str, object], ...] = ()
     gate_1_outcome: str | None = None
     gate_1_approved: bool = False
     gate_1_applied: bool = False
