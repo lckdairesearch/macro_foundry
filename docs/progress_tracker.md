@@ -48,6 +48,42 @@ initialize and inspect that redesigned stack.
 
 ## Log
 
+### [2026-06-10] Issue 45 — Gate 1 wait node, approval_parse, apply_small_edit, un-approval window
+
+Implemented the Gate 1 interrupt slice per issue 45 / ADR 0011 approval semantics:
+
+- `gate_1_wait` renders a three-section Gate 1 summary (new series /
+  harmonisation companion items / suggest-for-human-apply) per ADR 0013;
+  picker is injected so the node is fully testable without Questionary
+- picker options are `Approve / Reject / Request changes` at cycle 1–2; at
+  cycle 3 `Request changes` is replaced by `Permit further cycle`
+- `approval_parse` path (approval_llm) is called only inside `Request changes`;
+  `Approve` and `Reject` make no LLM call
+- `apply_small_edit` applies a textual edit to the in-memory proposal, runs
+  a uniqueness pre-check via injected `unique_checker`, then:
+  - no collision → clears `gate_1_outcome` so `gate_1_wait` re-issues picker
+  - collision → injected `collision_picker` renders three-way choice:
+    rename / challenge_existing / cancel; challenge_existing sets
+    `gate_2_escalation=True`
+- `make_unapprove_node` rolls `gate_1_approved` back to `False` while
+  `gate_1_applied=False`; after `apply_catalog` writes (`gate_1_applied=True`)
+  sets `unapprove_rejected=True` instead — revocation becomes a correction
+  proposal post-apply
+- `is_structural_edit` classifies instruction text by keyword so structural
+  edits (frequency, methodology, hierarchy, selector config) route back
+  through the full drafter cycle, not the small-edit subflow
+
+State fields added to `OnboardingGraphState` and `OnboardingCheckpointState`:
+`harmonisation_items`, `suggest_human_apply_items`, `gate_1_outcome`,
+`gate_1_approved`, `gate_1_applied`, `small_edit_instructions`,
+`collision_choice`, `collision_detail`, `gate_2_escalation`, `unapprove_rejected`.
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_gate_1.py -q -m no_db` exited 0 with `16 passed`
+- `uv run pytest tests/macrodb/ -q -m no_db` exited 0 with `97 passed`
+- `uv run ruff check src/macro_foundry/agent/gate.py src/macro_foundry/agent/graph.py src/macro_foundry/agent/onboarding_state.py tests/macrodb/test_gate_1.py` exited 0
+
 ### [2026-06-10] Issue 44 — Reviewer fan-out: governance + data_correctness implemented
 
 Implemented the two-reviewer parallel fan-out per ADR 0015:
