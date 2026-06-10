@@ -2,6 +2,7 @@
 .env.local
 .venv/
 .worktree/
+.worktrees/
 .uv-bootstrap/
 .vscode/
 __pycache__/
