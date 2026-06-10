@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>macro_foundry — Onboarding LangGraph</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #161a22;
+    --ink: #e6e9ef;
+    --muted: #97a0b3;
+    --line: #2a3142;
+    --accent: #6ea8ff;
+    --green: #5dd39e;
+    --amber: #f4b860;
+    --red: #ef6f6c;
+    --purple: #b18cf2;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+    padding: 24px;
+  }
+  header {
+    max-width: 1000px;
+    margin: 0 auto 16px;
+  }
+  h1 { margin: 0 0 4px; font-size: 20px; font-weight: 600; }
+  .sub { color: var(--muted); font-size: 12.5px; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; color: #d6dbe6; background: #0c0f15; padding: 1px 5px; border-radius: 4px; }
+  .legend {
+    max-width: 1000px;
+    margin: 12px auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .legend .chip { display: flex; align-items: center; gap: 6px; }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .swatch.line { height: 2px; width: 22px; border-radius: 1px; }
+  .panel {
+    max-width: 1000px;
+    margin: 0 auto;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px;
+  }
+  svg.graph { width: 100%; height: auto; display: block; }
+  .node-label { font: 600 11.5px/1 -apple-system, sans-serif; fill: #0f1115; pointer-events: none; }
+  .node-sub   { font: 500 9.5px/1 -apple-system, sans-serif; fill: #0f1115; opacity: .72; pointer-events: none; }
+  .terminal-label { font: 700 11px/1 -apple-system, sans-serif; fill: #e6e9ef; }
+  .edge { stroke: #5b6477; stroke-width: 1.4; fill: none; }
+  .edge.cond { stroke: var(--amber); stroke-dasharray: 5 3; }
+  .edge.loop { stroke: var(--red); stroke-dasharray: 2 3; }
+  .edge.danger { stroke: #d97e7a; stroke-width: 1.4; fill: none; }
+  .edge-label {
+    font: 500 10px/1 ui-monospace, monospace;
+    fill: var(--muted);
+  }
+  .edge-label.amber { fill: var(--amber); }
+  .edge-label.red { fill: var(--red); }
+  .region-frame { fill: none; stroke: #2a3142; stroke-dasharray: 4 4; }
+  .region-label { font: 600 10.5px/1 -apple-system, sans-serif; fill: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Onboarding LangGraph — canonical <span class="mono">build_onboarding_graph()</span></h1>
+  <div class="sub">21 nodes. Matches <span class="mono">src/macro_foundry/agent/graph.py</span> line 658.</div>
+</header>
+
+<div class="legend">
+  <span class="chip"><span class="swatch" style="background:var(--accent)"></span>agent (LLM)</span>
+  <span class="chip"><span class="swatch" style="background:var(--purple)"></span>reviewer / script (RO)</span>
+  <span class="chip"><span class="swatch" style="background:var(--amber)"></span>human wait / gate</span>
+  <span class="chip"><span class="swatch" style="background:var(--green)"></span>executor (writes)</span>
+  <span class="chip"><span class="swatch" style="background:var(--red)"></span>dangerous correction</span>
+  <span class="chip"><span class="swatch line" style="background:#5b6477"></span>unconditional edge</span>
+  <span class="chip"><span class="swatch line" style="background:var(--amber)"></span>conditional edge</span>
+  <span class="chip"><span class="swatch line" style="background:var(--red)"></span>loop-back / abort</span>
+</div>
+
+<div class="panel">
+  <svg class="graph" viewBox="0 0 920 1180" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#5b6477"/>
+      </marker>
+      <marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#f4b860"/>
+      </marker>
+      <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#ef6f6c"/>
+      </marker>
+      <marker id="arrow-danger" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#d97e7a"/>
+      </marker>
+    </defs>
+
+    <!-- ============ REGION FRAMES ============ -->
+    <rect class="region-frame" x="20"  y="50"  width="880" height="200" rx="8"/>
+    <text class="region-label" x="34" y="68">1 · research &amp; prep</text>
+
+    <rect class="region-frame" x="20"  y="270" width="880" height="180" rx="8"/>
+    <text class="region-label" x="34" y="288">2 · drafting</text>
+
+    <rect class="region-frame" x="20"  y="470" width="880" height="170" rx="8"/>
+    <text class="region-label" x="34" y="488">3 · review</text>
+
+    <rect class="region-frame" x="20"  y="660" width="540" height="120" rx="8"/>
+    <text class="region-label" x="34" y="678">4 · gate 1</text>
+
+    <rect class="region-frame" x="580" y="660" width="320" height="380" rx="8"/>
+    <text class="region-label" x="594" y="678">5 · dangerous correction · gate 2</text>
+
+    <rect class="region-frame" x="20"  y="800" width="540" height="320" rx="8"/>
+    <text class="region-label" x="34" y="818">6 · executor (post-approval)</text>
+
+    <!-- ============ TERMINALS ============ -->
+    <circle cx="290" cy="30" r="14" fill="#3a4256" stroke="#5b6477"/>
+    <text x="290" y="34" text-anchor="middle" class="terminal-label">START</text>
+
+    <circle cx="290" cy="1150" r="14" fill="#3a4256" stroke="#5b6477"/>
+    <text x="290" y="1154" text-anchor="middle" class="terminal-label">END</text>
+
+    <!-- ============ REGION 1 ============ -->
+    <!-- research -->
+    <rect x="210" y="90" width="160" height="40" rx="8" fill="#6ea8ff"/>
+    <text x="290" y="108" text-anchor="middle" class="node-label">research</text>
+    <text x="290" y="122" text-anchor="middle" class="node-sub">researcher agent</text>
+
+    <!-- credential_gap_wait -->
+    <rect x="40" y="155" width="180" height="40" rx="8" fill="#f4b860"/>
+    <text x="130" y="173" text-anchor="middle" class="node-label">credential_gap_wait</text>
+    <text x="130" y="187" text-anchor="middle" class="node-sub">human supplies secret</text>
+
+    <!-- gather_reference_metadata -->
+    <rect x="270" y="155" width="230" height="40" rx="8" fill="#6ea8ff"/>
+    <text x="385" y="173" text-anchor="middle" class="node-label">gather_reference_metadata</text>
+    <text x="385" y="187" text-anchor="middle" class="node-sub">cohort A / B / C</text>
+
+    <!-- classify_extraction_mode -->
+    <rect x="270" y="205" width="230" height="40" rx="8" fill="#6ea8ff"/>
+    <text x="385" y="223" text-anchor="middle" class="node-label">classify_extraction_mode</text>
+    <text x="385" y="237" text-anchor="middle" class="node-sub">config_only | custom_python</text>
+
+    <!-- ============ REGION 2 ============ -->
+    <!-- enum_gap_wait -->
+    <rect x="40" y="305" width="180" height="40" rx="8" fill="#f4b860"/>
+    <text x="130" y="323" text-anchor="middle" class="node-label">enum_gap_wait</text>
+    <text x="130" y="337" text-anchor="middle" class="node-sub">human apply enum</text>
+
+    <!-- draft_proposal -->
+    <rect x="270" y="305" width="230" height="40" rx="8" fill="#6ea8ff"/>
+    <text x="385" y="323" text-anchor="middle" class="node-label">draft_proposal</text>
+    <text x="385" y="337" text-anchor="middle" class="node-sub">proposal drafter</text>
+
+    <!-- draft_script -->
+    <rect x="560" y="305" width="180" height="40" rx="8" fill="#b18cf2"/>
+    <text x="650" y="323" text-anchor="middle" class="node-label">draft_script</text>
+    <text x="650" y="337" text-anchor="middle" class="node-sub">sandbox · custom_python</text>
+
+    <!-- validate_script -->
+    <rect x="560" y="380" width="180" height="40" rx="8" fill="#b18cf2"/>
+    <text x="650" y="398" text-anchor="middle" class="node-label">validate_script</text>
+    <text x="650" y="412" text-anchor="middle" class="node-sub">probe sandboxed selector</text>
+
+    <!-- ============ REGION 3 ============ -->
+    <rect x="270" y="500" width="230" height="40" rx="8" fill="#b18cf2"/>
+    <text x="385" y="518" text-anchor="middle" class="node-label">governance_review</text>
+    <text x="385" y="532" text-anchor="middle" class="node-sub">read-only · findings</text>
+
+    <rect x="270" y="570" width="230" height="40" rx="8" fill="#b18cf2"/>
+    <text x="385" y="588" text-anchor="middle" class="node-label">data_correctness_review</text>
+    <text x="385" y="602" text-anchor="middle" class="node-sub">read-only · findings</text>
+
+    <!-- ============ REGION 4 — GATE 1 ============ -->
+    <rect x="260" y="695" width="250" height="56" rx="10" fill="#f4b860" stroke="#0f1115" stroke-width="2"/>
+    <text x="385" y="718" text-anchor="middle" class="node-label">gate_1_wait</text>
+    <text x="385" y="734" text-anchor="middle" class="node-sub">HUMAN APPROVAL</text>
+
+    <!-- ============ REGION 5 — Dangerous correction ============ -->
+    <rect x="610" y="700" width="260" height="40" rx="8" fill="#ef6f6c"/>
+    <text x="740" y="718" text-anchor="middle" class="node-label">apply_small_edit</text>
+    <text x="740" y="732" text-anchor="middle" class="node-sub">tactical fix-in-place</text>
+
+    <rect x="610" y="780" width="260" height="40" rx="8" fill="#ef6f6c"/>
+    <text x="740" y="798" text-anchor="middle" class="node-label">dangerous_correction_plan</text>
+    <text x="740" y="812" text-anchor="middle" class="node-sub">planner agent</text>
+
+    <rect x="600" y="855" width="280" height="50" rx="10" fill="#f4b860" stroke="#0f1115" stroke-width="2"/>
+    <text x="740" y="876" text-anchor="middle" class="node-label">gate_2_wait</text>
+    <text x="740" y="892" text-anchor="middle" class="node-sub">HUMAN APPROVAL · dangerous</text>
+
+    <rect x="610" y="945" width="260" height="40" rx="8" fill="#ef6f6c"/>
+    <text x="740" y="963" text-anchor="middle" class="node-label">dangerous_correction_executor</text>
+    <text x="740" y="977" text-anchor="middle" class="node-sub">applies repair plan</text>
+
+    <!-- ============ REGION 6 — Executor chain ============ -->
+    <rect x="270" y="830" width="230" height="38" rx="8" fill="#5dd39e"/>
+    <text x="385" y="853" text-anchor="middle" class="node-label">unapproval_window</text>
+
+    <rect x="270" y="880" width="230" height="38" rx="8" fill="#5dd39e"/>
+    <text x="385" y="903" text-anchor="middle" class="node-label">apply_catalog</text>
+
+    <rect x="270" y="930" width="230" height="38" rx="8" fill="#5dd39e"/>
+    <text x="385" y="953" text-anchor="middle" class="node-label">trigger_first_run</text>
+
+    <rect x="270" y="980" width="230" height="38" rx="8" fill="#5dd39e"/>
+    <text x="385" y="1003" text-anchor="middle" class="node-label">monitor_first_run</text>
+
+    <rect x="270" y="1030" width="230" height="38" rx="8" fill="#5dd39e"/>
+    <text x="385" y="1053" text-anchor="middle" class="node-label">test_review</text>
+
+    <rect x="270" y="1080" width="230" height="38" rx="8" fill="#5dd39e"/>
+    <text x="385" y="1103" text-anchor="middle" class="node-label">emit_package</text>
+
+    <!-- ============ EDGES ============ -->
+    <!-- START -> research -->
+    <path class="edge" d="M290,44 L290,90" marker-end="url(#arrow)"/>
+
+    <!-- research -> credential_gap_wait (cond) -->
+    <path class="edge cond" d="M225,130 C190,140 160,148 145,155" marker-end="url(#arrow-amber)"/>
+    <text x="160" y="148" class="edge-label amber">cred gap</text>
+
+    <!-- research -> gather_reference_metadata (cond default) -->
+    <path class="edge cond" d="M330,130 L370,155" marker-end="url(#arrow-amber)"/>
+
+    <!-- credential_gap_wait -> research (loop) -->
+    <path class="edge loop" d="M145,155 C145,110 200,90 240,98" marker-end="url(#arrow-red)"/>
+    <text x="155" y="105" class="edge-label red">resolved</text>
+
+    <!-- credential_gap_wait -> END (abort, stub) -->
+    <path class="edge loop" d="M40,175 L20,175" marker-end="url(#arrow-red)"/>
+    <text x="6" y="190" class="edge-label red">→END</text>
+
+    <!-- gather -> classify -->
+    <path class="edge" d="M385,195 L385,205" marker-end="url(#arrow)"/>
+
+    <!-- classify -> draft_proposal -->
+    <path class="edge" d="M385,245 L385,305" marker-end="url(#arrow)"/>
+
+    <!-- draft_proposal -> enum_gap_wait (cond) -->
+    <path class="edge cond" d="M270,322 L220,322" marker-end="url(#arrow-amber)"/>
+    <text x="223" y="316" class="edge-label amber">enum gap</text>
+
+    <!-- enum_gap_wait -> draft_proposal (loop) -->
+    <path class="edge loop" d="M220,332 C245,348 255,344 270,332" marker-end="url(#arrow-red)"/>
+    <text x="230" y="358" class="edge-label red">resolved</text>
+
+    <!-- enum_gap_wait -> END (abort, stub) -->
+    <path class="edge loop" d="M40,325 L20,325" marker-end="url(#arrow-red)"/>
+    <text x="6" y="340" class="edge-label red">→END</text>
+
+    <!-- draft_proposal -> draft_script (cond, custom_python) -->
+    <path class="edge cond" d="M500,322 L560,322" marker-end="url(#arrow-amber)"/>
+    <text x="505" y="316" class="edge-label amber">custom_python</text>
+
+    <!-- draft_proposal -> governance_review (cond, config_only) -->
+    <path class="edge cond" d="M385,345 L385,500" marker-end="url(#arrow-amber)"/>
+    <text x="392" y="430" class="edge-label amber">config_only</text>
+
+    <!-- draft_script -> validate_script -->
+    <path class="edge" d="M650,345 L650,380" marker-end="url(#arrow)"/>
+
+    <!-- validate_script -> governance_review (cond ok) -->
+    <path class="edge cond" d="M560,405 C460,440 420,470 420,500" marker-end="url(#arrow-amber)"/>
+    <text x="470" y="445" class="edge-label amber">ok</text>
+
+    <!-- validate_script -> draft_script (loop, fail) -->
+    <path class="edge loop" d="M740,400 C790,380 790,340 740,330" marker-end="url(#arrow-red)"/>
+    <text x="785" y="370" class="edge-label red">fail</text>
+
+    <!-- validate_script -> END (abort, stub) -->
+    <path class="edge loop" d="M740,420 L770,440" marker-end="url(#arrow-red)"/>
+    <text x="775" y="455" class="edge-label red">→END</text>
+
+    <!-- governance -> data_correctness -->
+    <path class="edge" d="M385,540 L385,570" marker-end="url(#arrow)"/>
+
+    <!-- data_correctness -> gate_1_wait -->
+    <path class="edge" d="M385,610 L385,695" marker-end="url(#arrow)"/>
+
+    <!-- GATE 1 outcomes -->
+    <!-- gate_1_wait -> unapproval_window (cond, approve) -->
+    <path class="edge cond" d="M385,751 L385,830" marker-end="url(#arrow-amber)"/>
+    <text x="392" y="790" class="edge-label amber">approve</text>
+
+    <!-- gate_1_wait -> apply_small_edit (cond, small edit) -->
+    <path class="edge cond" d="M510,718 L610,718" marker-end="url(#arrow-amber)"/>
+    <text x="520" y="712" class="edge-label amber">small edit</text>
+
+    <!-- gate_1_wait -> draft_proposal (loop, request_changes) -->
+    <path class="edge loop" d="M260,705 C140,650 140,400 270,330" marker-end="url(#arrow-red)"/>
+    <text x="125" y="500" class="edge-label red" transform="rotate(-90 125,500)">request_changes</text>
+
+    <!-- gate_1_wait -> END (cond, reject) -->
+    <path class="edge cond" d="M260,742 C150,830 150,1100 276,1150" marker-end="url(#arrow-amber)"/>
+    <text x="135" y="950" class="edge-label amber" transform="rotate(-90 135,950)">reject</text>
+
+    <!-- apply_small_edit -> gate_1_wait (loop after edit) -->
+    <path class="edge loop" d="M610,710 C560,710 540,720 510,720" marker-end="url(#arrow-red)"/>
+    <text x="540" y="700" class="edge-label red">re-review</text>
+
+    <!-- apply_small_edit -> dangerous_correction_plan (cond, escalate) -->
+    <path class="edge cond" d="M740,740 L740,780" marker-end="url(#arrow-amber)"/>
+    <text x="748" y="765" class="edge-label amber">escalate</text>
+
+    <!-- dangerous_correction_plan -> gate_2_wait -->
+    <path class="edge danger" d="M740,820 L740,855" marker-end="url(#arrow-danger)"/>
+
+    <!-- gate_2_wait -> dangerous_correction_executor (cond, approve) -->
+    <path class="edge cond" d="M740,905 L740,945" marker-end="url(#arrow-amber)"/>
+    <text x="748" y="930" class="edge-label amber">approve</text>
+
+    <!-- gate_2_wait -> dangerous_correction_plan (loop, replan) -->
+    <path class="edge loop" d="M600,880 C570,860 570,810 610,800" marker-end="url(#arrow-red)"/>
+    <text x="540" y="855" class="edge-label red">replan</text>
+
+    <!-- gate_2_wait -> END (cond, reject) -->
+    <path class="edge cond" d="M880,880 C905,1000 700,1140 304,1150" marker-end="url(#arrow-amber)"/>
+    <text x="892" y="970" class="edge-label amber" transform="rotate(-90 892,970)">reject</text>
+
+    <!-- dangerous_correction_executor -> END -->
+    <path class="edge danger" d="M740,985 C740,1090 500,1150 304,1150" marker-end="url(#arrow-danger)"/>
+
+    <!-- EXECUTOR chain -->
+    <path class="edge" d="M385,868 L385,880" marker-end="url(#arrow)"/>
+    <path class="edge" d="M385,918 L385,930" marker-end="url(#arrow)"/>
+    <path class="edge" d="M385,968 L385,980" marker-end="url(#arrow)"/>
+    <path class="edge" d="M385,1018 L385,1030" marker-end="url(#arrow)"/>
+    <path class="edge" d="M385,1068 L385,1080" marker-end="url(#arrow)"/>
+
+    <!-- emit_package -> END -->
+    <path class="edge" d="M385,1118 C385,1135 340,1148 304,1150" marker-end="url(#arrow)"/>
+
+  </svg>
+</div>
+
+<div class="legend" style="margin-top:14px;">
+  <span class="chip"><b>21 nodes</b></span>
+  <span class="chip">3 human waits: <span class="mono">credential_gap_wait</span> · <span class="mono">enum_gap_wait</span> · <span class="mono">gate_1_wait</span></span>
+  <span class="chip">2 approval gates: <span class="mono">gate_1_wait</span> · <span class="mono">gate_2_wait</span></span>
+  <span class="chip">Loop-bounded retries on <span class="mono">validate_script</span>, <span class="mono">enum_gap</span>, <span class="mono">credential_gap</span></span>
+</div>
+
+</body>
+</html>
