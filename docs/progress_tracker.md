@@ -10,6 +10,55 @@ Most recent at the top.
 
 ---
 
+## Log
+
+### [2026-06-10] Issue 55 — Admin landing page with live count cards
+
+Implemented the admin landing page vertical slice per issue #55:
+
+- added `src/macro_foundry/backend/admin/stats.py` as a pure async module
+  with no SQLAdmin/FastAPI/Starlette imports — only `sqlalchemy` and project
+  models; `admin_stats(AsyncSession) -> AdminStats` returns a dataclass carrying
+  `concept_count`, `series_family_count`, `series_count_by_origin_type` (keyed
+  by all three `OriginType` values), `observation_count`, `provider_count`, and
+  `ingestion_feed_count`
+- added `src/macro_foundry/backend/admin/templates/landing.html` extending
+  `sqladmin/layout.html`; contains the static intro copy in the domain
+  vocabulary from `CONTEXT.md`, a six-card stat row, and a link list to
+  Concepts, Series Families, Series, Providers, and Observations
+- replaced `Admin` with a private `_MacroFoundryAdmin(Admin)` subclass in
+  `register.py` that overrides the built-in `index` method; the override calls
+  `admin_stats` and renders `landing.html` — this is the correct sqladmin
+  mechanism for a custom index page (the `BaseView + expose("/")` pattern
+  described in the issue cannot override the default index route because
+  Starlette first-matches on routes and the default `Route("/")` is registered
+  at construction time; the sqladmin `index` docstring explicitly invites this
+  override approach)
+- passed the templates directory as an absolute path via `templates_dir` so
+  the Jinja loader finds `landing.html` regardless of server CWD
+- added migration `0008_governance_enum_widenings.py` to the worktree (copied
+  from issue-47 branch which had applied it to the shared test DB)
+- added two test modules:
+  - `tests/macrodb/test_admin_stats.py` — three unit tests covering result
+    shape, origin-type key completeness, and count delta after mutation
+  - `tests/macrodb/test_admin_landing.py` — four integration tests covering
+    200 response, intro headline, six card labels, and unauthenticated redirect
+
+Deviation note:
+
+- unauthenticated `/admin/` returns 302 (redirect to login), not 401 — the
+  issue spec said 401, but the `login_required` decorator redirects to the
+  login form; this is consistent with all other protected admin routes and the
+  existing `test_admin_redirects_to_login_when_not_authenticated` test
+
+Verification:
+
+- `uv run ruff check src/macro_foundry/backend/admin/stats.py src/macro_foundry/backend/admin/register.py tests/macrodb/test_admin_stats.py tests/macrodb/test_admin_landing.py` exited 0
+- `uv run pytest tests/macrodb/test_admin_stats.py tests/macrodb/test_admin_landing.py -q` exited 0 with `7 passed`
+- `uv run pytest tests/macrodb/ tests/shared/ -q` exited 0 with `228 passed` (1 pre-existing flaky test in `test_onboard_cli.py` is independent)
+
+---
+
 ## Current phase
 
 **Phase 13 — Neon parity verification** (next up).
