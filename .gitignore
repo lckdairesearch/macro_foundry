@@ -8,6 +8,7 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 *.py[cod]
+.worktree/
 
 # Sandbox for agent-proposed selector code; see ADR 0011 / issue #19.
 agent_workspace/
