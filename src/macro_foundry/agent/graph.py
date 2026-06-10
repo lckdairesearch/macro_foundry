@@ -52,6 +52,17 @@ class OnboardingGraphState(TypedDict, total=False):
     review_cycle: int
     governance_review: dict[str, Any] | None
     data_correctness_review: dict[str, Any] | None
+    # Gate 1 state (issue 45)
+    harmonisation_items: list[dict[str, Any]]
+    suggest_human_apply_items: list[dict[str, Any]]
+    gate_1_outcome: str | None
+    gate_1_approved: bool
+    gate_1_applied: bool
+    small_edit_instructions: str | None
+    collision_choice: str | None
+    collision_detail: dict[str, Any] | None
+    gate_2_escalation: bool
+    unapprove_rejected: bool
 
 
 def _hello_world_node(state: OnboardingGraphState) -> OnboardingGraphState:

@@ -127,6 +127,17 @@ class OnboardingCheckpointState(BaseModel):
     review_cycle: int = 0
     governance_review: ReviewBundle | None = None
     data_correctness_review: ReviewBundle | None = None
+    # Gate 1 state (issue 45)
+    harmonisation_items: tuple[dict[str, object], ...] = ()
+    suggest_human_apply_items: tuple[dict[str, object], ...] = ()
+    gate_1_outcome: str | None = None
+    gate_1_approved: bool = False
+    gate_1_applied: bool = False
+    small_edit_instructions: str | None = None
+    collision_choice: str | None = None
+    collision_detail: dict[str, object] | None = None
+    gate_2_escalation: bool = False
+    unapprove_rejected: bool = False
 
     @property
     def session_cost_usd(self) -> float:
