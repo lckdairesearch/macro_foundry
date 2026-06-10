@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -106,6 +105,32 @@ async def test_apply_catalog_calls_propose_create_series() -> None:
     await node(_base_state())
 
     write_tools.propose_create_series.assert_called_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.no_db
+async def test_apply_catalog_exposes_applied_catalog_ids_for_first_run() -> None:
+    write_tools = AsyncMock()
+    write_tools.propose_create_series.return_value = {
+        "proposal_id": "aaaaaaaa-0000-0000-0000-000000000001",
+        "item_id": "aaaaaaaa-0000-0000-0000-000000000002",
+        "series_id": "aaaaaaaa-0000-0000-0000-000000000003",
+        "family_id": "aaaaaaaa-0000-0000-0000-000000000004",
+        "concept_id": "aaaaaaaa-0000-0000-0000-000000000005",
+        "feed_id": "aaaaaaaa-0000-0000-0000-000000000006",
+    }
+
+    node = make_apply_catalog_node(write_tools=write_tools)
+    result = await node(_base_state())
+
+    assert result["applied_catalog"] == {
+        "proposal_id": "aaaaaaaa-0000-0000-0000-000000000001",
+        "item_id": "aaaaaaaa-0000-0000-0000-000000000002",
+        "series_id": "aaaaaaaa-0000-0000-0000-000000000003",
+        "family_id": "aaaaaaaa-0000-0000-0000-000000000004",
+        "concept_id": "aaaaaaaa-0000-0000-0000-000000000005",
+        "feed_id": "aaaaaaaa-0000-0000-0000-000000000006",
+    }
 
 
 @pytest.mark.asyncio

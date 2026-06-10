@@ -6,9 +6,6 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from typing import Any, Protocol
 
-from macro_foundry.agent.proposal import DraftProposal
-
-
 class WriteToolsProtocol(Protocol):
     """Minimal write-tools interface the apply_catalog node depends on."""
 
@@ -67,6 +64,11 @@ def make_apply_catalog_node(
         now = datetime.now(timezone.utc)
         return {
             "gate_1_applied": True,
+            "applied_catalog": {
+                key: proposal_result[key]
+                for key in ("proposal_id", "item_id", "series_id", "family_id", "concept_id", "feed_id")
+                if key in proposal_result
+            },
             "node_transitions": [
                 NodeTransition(
                     node="apply_catalog",

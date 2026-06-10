@@ -12,6 +12,43 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-10] Issue 50 — Post-Gate-1 first-run executor nodes
+
+Implemented the no-DB executor-node vertical slice for issue #50:
+
+- added `src/macro_foundry/agent/executor.py` with node factories for
+  `trigger_first_run`, `monitor_first_run`, `test_review`, and `emit_package`
+- `trigger_first_run` reads the `applied_catalog.feed_id`, calls the write-tool
+  `trigger_feed_execution`, records `first_run.run_log_id`, and is idempotent
+  on resume when `first_run.run_log_id` already exists
+- `monitor_first_run` re-queries the run-log reader by persisted
+  `first_run.run_log_id` and refreshes the first-run summary instead of
+  restarting from transient polling state
+- `test_review` classifies tolerated first-run warnings separately from hard
+  failures using the workflow policy, then calls an injected reviewer seam for
+  the human-readable synthesis
+- `emit_package` builds and persists the test-approved onboarding package shape
+  with proposal summary, staging canonical rows, reviewer findings, first-run
+  summary, tolerated warnings, `thread_id`, and `change_proposal_id`
+- `apply_catalog` now exposes an `applied_catalog` state block carrying the
+  write-tool IDs needed by downstream executor nodes
+- onboarding checkpoint state and graph state now carry `applied_catalog`,
+  `first_run`, `test_review`, and `onboarding_package` so crashes between
+  executor nodes leave recoverable state
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_onboarding_state.py tests/macrodb/test_apply_catalog.py tests/macrodb/test_executor_nodes.py -q -m no_db` exited 0 with `18 passed`
+- `uv run pytest tests/macrodb/ -q -m no_db` exited 0 with `139 passed, 77 deselected`
+- `uv run ruff check src/macro_foundry/agent/executor.py src/macro_foundry/agent/catalog.py src/macro_foundry/agent/graph.py src/macro_foundry/agent/onboarding_state.py tests/macrodb/test_executor_nodes.py tests/macrodb/test_apply_catalog.py tests/macrodb/test_onboarding_state.py` exited 0
+
+Remaining integration boundary:
+
+- this slice uses injected write-tool, run-log reader, reviewer, and package
+  store seams; the full database-backed Gate 1 approval -> FRED first-run ->
+  emit-package integration test still needs the concrete first-run trigger
+  runtime path to provide a real payload/fetch boundary.
+
 ### [2026-06-10] Issue 55 — Admin landing page with live count cards
 
 Implemented the admin landing page vertical slice per issue #55:

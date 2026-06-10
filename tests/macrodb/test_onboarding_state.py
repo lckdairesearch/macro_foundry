@@ -198,6 +198,46 @@ def test_session_cost_usd_is_zero_with_no_calls() -> None:
 
 
 @pytest.mark.no_db
+def test_onboarding_checkpoint_state_carries_first_run_executor_artifacts() -> None:
+    created_at = datetime(2026, 6, 10, tzinfo=timezone.utc)
+    metadata = SessionMetadata(
+        session_id="s-first-run",
+        target_environment="staging",
+        created_at=created_at,
+        created_by="macrodb-cli",
+        cli_version="0.1.0",
+    )
+
+    state = OnboardingCheckpointState(
+        session_metadata=metadata,
+        applied_catalog={
+            "proposal_id": "aaaaaaaa-0000-0000-0000-000000000001",
+            "feed_id": "bbbbbbbb-0000-0000-0000-000000000001",
+        },
+        first_run={
+            "run_log_id": "cccccccc-0000-0000-0000-000000000001",
+            "status": "success",
+            "rows_inserted": 10,
+        },
+        test_review={
+            "status": "passed_with_warnings",
+            "summary": "acceptable",
+            "tolerated_warnings": ["requested start date predates provider coverage"],
+            "hard_failures": [],
+        },
+        onboarding_package={
+            "package_id": "dddddddd-0000-0000-0000-000000000001",
+            "status": "test-approved",
+        },
+    )
+
+    assert state.applied_catalog["feed_id"] == "bbbbbbbb-0000-0000-0000-000000000001"
+    assert state.first_run["run_log_id"] == "cccccccc-0000-0000-0000-000000000001"
+    assert state.test_review["status"] == "passed_with_warnings"
+    assert state.onboarding_package["status"] == "test-approved"
+
+
+@pytest.mark.no_db
 def test_node_error_is_append_only_on_checkpoint_state() -> None:
     created_at = datetime(2026, 6, 10, tzinfo=timezone.utc)
     metadata = SessionMetadata(

@@ -75,6 +75,11 @@ class OnboardingGraphState(TypedDict, total=False):
     collision_detail: dict[str, Any] | None
     gate_2_escalation: bool
     unapprove_rejected: bool
+    # Post-Gate-1 executor state (issue 50)
+    applied_catalog: dict[str, Any]
+    first_run: dict[str, Any]
+    test_review: dict[str, Any]
+    onboarding_package: dict[str, Any]
 
 
 def _hello_world_node(state: OnboardingGraphState) -> OnboardingGraphState:

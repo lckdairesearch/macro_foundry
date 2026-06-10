@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, ValidationInfo, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, model_validator
 
 from macro_foundry.agent.proposal import DraftProposal
 from macro_foundry.agent.review import ReviewBundle
@@ -138,6 +138,11 @@ class OnboardingCheckpointState(BaseModel):
     collision_detail: dict[str, object] | None = None
     gate_2_escalation: bool = False
     unapprove_rejected: bool = False
+    # Post-Gate-1 executor state (issue 50)
+    applied_catalog: dict[str, object] = Field(default_factory=dict)
+    first_run: dict[str, object] = Field(default_factory=dict)
+    test_review: dict[str, object] = Field(default_factory=dict)
+    onboarding_package: dict[str, object] = Field(default_factory=dict)
 
     @property
     def session_cost_usd(self) -> float:
