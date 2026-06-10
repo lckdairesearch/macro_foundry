@@ -11,6 +11,7 @@ from macro_foundry.agent.channel import ChannelEvent, ChannelPrompt, ChannelResp
 from macro_foundry.agent.checkpoint import psycopg_langgraph_url
 from macro_foundry.agent.onboarding import OnboardingResult, OnboardingTarget
 from macro_foundry.agent.onboarding import run_onboarding_session
+from macro_foundry.agent.roles import AgentRole, RoleOverride
 from macro_foundry.cli import app
 
 runner = CliRunner()
@@ -38,6 +39,43 @@ def test_onboard_cli_starts_session_with_allowed_target(
 
     assert result.exit_code == 0
     assert "session_id=onboard-demo saved=true" in result.output
+
+
+@pytest.mark.no_db
+def test_onboard_cli_passes_role_model_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_run_onboarding_session(
+        *,
+        target: OnboardingTarget,
+        resume_session_id: str | None,
+        role_config_overrides: dict[AgentRole, RoleOverride],
+    ) -> OnboardingResult:
+        assert target is OnboardingTarget.STAGING
+        assert resume_session_id is None
+        assert role_config_overrides == {
+            AgentRole.RESEARCHER: RoleOverride(default_model="gpt-fast"),
+            AgentRole.GOVERNANCE_REVIEWER: RoleOverride(deep_model="gpt-code-review"),
+        }
+        return OnboardingResult(session_id="onboard-demo", saved=True)
+
+    monkeypatch.setattr(
+        "macro_foundry.cli.onboard.run_onboarding_session",
+        fake_run_onboarding_session,
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "onboard",
+            "--researcher-model",
+            "gpt-fast",
+            "--governance-reviewer-deep-model",
+            "gpt-code-review",
+        ],
+    )
+
+    assert result.exit_code == 0
 
 
 @pytest.mark.no_db

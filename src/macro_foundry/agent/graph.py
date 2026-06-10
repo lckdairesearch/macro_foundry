@@ -8,7 +8,7 @@ from typing import Annotated, Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from macro_foundry.agent.onboarding_state import NodeTransition, RawMessage, TranscriptEntry
+from macro_foundry.agent.onboarding_state import LLMCallRecord, NodeTransition, RawMessage, TranscriptEntry
 
 
 class OnboardingGraphState(TypedDict, total=False):
@@ -18,6 +18,7 @@ class OnboardingGraphState(TypedDict, total=False):
     raw_messages: Annotated[list[dict[str, Any]], add]
     transcript: Annotated[list[dict[str, Any]], add]
     node_transitions: Annotated[list[dict[str, Any]], add]
+    llm_calls: Annotated[list[dict[str, Any]], add]
     pending_input: str | None
 
 
@@ -90,9 +91,16 @@ def user_input_graph_update(text: str) -> OnboardingGraphState:
     }
 
 
+def llm_call_graph_update(record: LLMCallRecord) -> OnboardingGraphState:
+    """Build a checkpoint payload for one LLM observability record."""
+
+    return {"llm_calls": [record.model_dump(mode="json")]}
+
+
 __all__ = [
     "OnboardingGraphState",
     "build_hello_world_graph",
     "initial_graph_update",
+    "llm_call_graph_update",
     "user_input_graph_update",
 ]

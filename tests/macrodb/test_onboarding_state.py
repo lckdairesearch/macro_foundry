@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from macro_foundry.agent.onboarding import OnboardingTarget
 from macro_foundry.agent.onboarding_state import (
+    LLMCallRecord,
     NodeTransition,
     OnboardingCheckpointState,
     RawMessage,
@@ -77,3 +78,37 @@ def test_onboarding_checkpoint_state_enforces_append_only_fields() -> None:
             },
             context={"previous_state": base},
         )
+
+
+@pytest.mark.no_db
+def test_onboarding_checkpoint_state_records_llm_calls() -> None:
+    created_at = datetime(2026, 6, 10, tzinfo=timezone.utc)
+    metadata = SessionMetadata(
+        session_id="friendly-session",
+        target_environment=OnboardingTarget.DEV.value,
+        created_at=created_at,
+        created_by="macrodb-cli",
+        cli_version="0.1.0",
+    )
+
+    state = OnboardingCheckpointState(
+        session_metadata=metadata,
+        llm_calls=(
+            LLMCallRecord(
+                role="researcher",
+                task_hint="provider_scan",
+                provider="openai",
+                model="gpt-5.1",
+                prompt_tokens=120,
+                completion_tokens=32,
+                total_tokens=152,
+                cost_estimate_usd=0.0042,
+                latency_ms=875,
+                tool_calls=({"name": "lookup_concept", "arguments": {"code": "CPI"}},),
+                created_at=created_at,
+            ),
+        ),
+    )
+
+    assert state.llm_calls[0].model == "gpt-5.1"
+    assert state.llm_calls[0].tool_calls == ({"name": "lookup_concept", "arguments": {"code": "CPI"}},)

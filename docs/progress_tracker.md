@@ -48,6 +48,27 @@ initialize and inspect that redesigned stack.
 
 ## Log
 
+### [2026-06-10] Issue 37 — Role configs and LLM call telemetry initialized
+
+Added the v1 typed onboarding-agent role configuration slice:
+
+- `RoleConfig` / `RoleOverride` definitions with OpenAI-bound defaults for
+  researcher, proposal drafter, script drafter, validator, governance reviewer,
+  data correctness reviewer, approval parser, test reviewer, and dangerous
+  correction planner
+- no standalone `selector_reviewer`; governance has a
+  `selector_code_review` task entry for ADR 0015 routing
+- within-role model resolution through `task_hint`
+- session-local CLI model overrides through `--<role>-model` and
+  `--<role>-deep-model`
+- append-only `llm_calls` checkpoint state records for model, tokens, cost
+  estimate, latency, and tool calls
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_agent_roles.py tests/macrodb/test_onboard_cli.py tests/macrodb/test_onboarding_state.py -q`
+- `uv run ruff check src/macro_foundry/agent src/macro_foundry/cli/onboard.py tests/macrodb/test_agent_roles.py tests/macrodb/test_onboard_cli.py tests/macrodb/test_onboarding_state.py`
+
 ### [2026-06-10] Issue 36 — Second-wave ingestion selectors implemented
 
 Implemented the ADR 0012 second-wave selector roster:
