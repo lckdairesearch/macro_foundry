@@ -6,6 +6,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, ValidationInfo, model_validator
 
+from macro_foundry.agent.proposal import DraftProposal
+
 
 class SessionMetadata(BaseModel):
     """Immutable metadata locked when an onboarding session is created."""
@@ -79,6 +81,27 @@ class LoadedSkill(BaseModel):
     section_title: str | None = None
 
 
+class NodeError(BaseModel):
+    """Append-only record of a recoverable node-level error."""
+
+    model_config = ConfigDict(frozen=True)
+
+    node: str
+    kind: str
+    message: str
+    created_at: datetime
+
+
+class EnumGapProposal(BaseModel):
+    """Placeholder for slice 14 enum-gap escalation proposal."""
+
+    model_config = ConfigDict(frozen=True)
+
+    column: str
+    proposed_value: str
+    rationale: str
+
+
 class OnboardingCheckpointState(BaseModel):
     """Validated onboarding checkpoint state.
 
@@ -95,9 +118,19 @@ class OnboardingCheckpointState(BaseModel):
     node_transitions: tuple[NodeTransition, ...] = ()
     llm_calls: tuple[LLMCallRecord, ...] = ()
     loaded_skills: tuple[LoadedSkill, ...] = ()
+    errors: tuple[NodeError, ...] = ()
+    proposal: DraftProposal | None = None
+    enum_gap_proposals: tuple[EnumGapProposal, ...] = ()
+
+    @property
+    def session_cost_usd(self) -> float:
+        return sum(call.cost_estimate_usd for call in self.llm_calls)
 
     @model_validator(mode="after")
     def enforce_checkpoint_invariants(self, info: ValidationInfo) -> "OnboardingCheckpointState":
+        if self.proposal is not None and self.enum_gap_proposals:
+            raise ValueError("proposal cannot be set while enum_gap_proposals is non-empty")
+
         previous = None
         if isinstance(info.context, dict):
             previous = info.context.get("previous_state")
@@ -112,6 +145,7 @@ class OnboardingCheckpointState(BaseModel):
         self._assert_append_only("node_transitions", previous.node_transitions, self.node_transitions)
         self._assert_append_only("llm_calls", previous.llm_calls, self.llm_calls)
         self._assert_append_only("loaded_skills", previous.loaded_skills, self.loaded_skills)
+        self._assert_append_only("errors", previous.errors, self.errors)
         return self
 
     @staticmethod
@@ -125,7 +159,9 @@ class OnboardingCheckpointState(BaseModel):
 
 
 __all__ = [
+    "EnumGapProposal",
     "LLMCallRecord",
+    "NodeError",
     "NodeTransition",
     "LoadedSkill",
     "OnboardingCheckpointState",
