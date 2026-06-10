@@ -11,6 +11,14 @@ class ProviderType(str, Enum):
     OTHER = "other"
 
 
+class AuthScheme(str, Enum):
+    BEARER_HEADER = "bearer_header"
+    QUERY_PARAM = "query_param"
+    HEADER_CUSTOM = "header_custom"
+    BASIC_AUTH = "basic_auth"
+    NONE = "none"
+
+
 class ProviderRole(str, Enum):
     PRIMARY_SOURCE = "primary_source"
     REDISTRIBUTOR = "redistributor"
@@ -26,4 +34,4 @@ class FeedMethod(str, Enum):
     SCRAPE = "scrape"
 
 
-__all__ = ["FeedMethod", "ProviderRole", "ProviderType"]
+__all__ = ["AuthScheme", "FeedMethod", "ProviderRole", "ProviderType"]

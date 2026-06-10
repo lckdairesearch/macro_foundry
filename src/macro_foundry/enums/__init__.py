@@ -16,7 +16,7 @@ from macro_foundry.enums.governance import (
     TargetType,
     ValidationStatus,
 )
-from macro_foundry.enums.provider import FeedMethod, ProviderRole, ProviderType
+from macro_foundry.enums.provider import AuthScheme, FeedMethod, ProviderRole, ProviderType
 from macro_foundry.enums.run import (
     ComputationRunStatus,
     ComputationTriggeredBy,
@@ -38,6 +38,7 @@ from macro_foundry.enums.series import (
 
 __all__ = [
     "Action",
+    "AuthScheme",
     "CodeStandard",
     "ComputationRunStatus",
     "ComputationTriggeredBy",

@@ -9,6 +9,8 @@ import pytest
 from pydantic import ValidationError
 
 from macro_foundry.enums import (
+    Action,
+    AuthScheme,
     CodeStandard,
     Frequency,
     GeographyType,
@@ -16,11 +18,20 @@ from macro_foundry.enums import (
     MeasureHorizon,
     OriginType,
     SeasonalAdjustment,
+    TargetType,
     TemporalStockFlow,
     UnitKind,
     UnitScale,
 )
-from macro_foundry.schemas import GeographyCreate, GeographyUpdate, ObservationCreate, ObservationUpdate, SeriesCreate, SeriesUpdate
+from macro_foundry.schemas import (
+    GeographyCreate,
+    GeographyUpdate,
+    ObservationCreate,
+    ObservationUpdate,
+    ProviderCreate,
+    SeriesCreate,
+    SeriesUpdate,
+)
 
 
 def test_geography_create_requires_parent_for_subnational_types() -> None:
@@ -97,3 +108,19 @@ def test_observation_update_allows_single_bound_patch() -> None:
     payload = ObservationUpdate(period_end=date(2026, 1, 31))
 
     assert payload.period_end == date(2026, 1, 31)
+
+
+def test_provider_schema_exposes_credential_access_metadata() -> None:
+    payload = ProviderCreate(
+        name="Example Provider",
+        type="official",
+        auth_scheme=AuthScheme.BEARER_HEADER,
+        rate_limit_config={"requests_per_minute": 60, "tier_label": "free"},
+        credentials_ref="EXAMPLE_API_KEY",
+        is_active=True,
+    )
+
+    assert payload.auth_scheme is AuthScheme.BEARER_HEADER
+    assert payload.rate_limit_config == {"requests_per_minute": 60, "tier_label": "free"}
+    assert Action.SUGGEST_CREDENTIAL_PROVISIONING.value == "suggest_credential_provisioning"
+    assert TargetType.CREDENTIAL_REF.value == "credential_ref"

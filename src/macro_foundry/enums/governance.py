@@ -60,6 +60,7 @@ class TargetType(str, Enum):
     TAGS = "tags"
     SERIES_FAMILY_MEMBERS = "series_family_members"
     GEOGRAPHY_MEMBERSHIPS = "geography_memberships"
+    CREDENTIAL_REF = "credential_ref"
 
 
 class Action(str, Enum):
@@ -71,6 +72,7 @@ class Action(str, Enum):
     RUN_TEST = "run_test"
     VALIDATE = "validate"
     SUGGEST_HUMAN_APPLY = "suggest_human_apply"
+    SUGGEST_CREDENTIAL_PROVISIONING = "suggest_credential_provisioning"
 
 
 class ValidationStatus(str, Enum):
@@ -81,6 +83,7 @@ class ValidationStatus(str, Enum):
     NOT_REQUIRED = "not_required"
     PENDING_HUMAN_APPLY = "pending_human_apply"
     APPLIED_BY_OPERATOR = "applied_by_operator"
+    DECLINED_BY_OPERATOR = "declined_by_operator"
 
 
 __all__ = [

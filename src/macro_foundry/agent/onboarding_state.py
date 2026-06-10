@@ -6,7 +6,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, ValidationInfo, model_validator
 
-from macro_foundry.agent.proposal import DraftProposal
+from macro_foundry.agent.proposal import CredentialGapProposal, CredentialGapResolution, DraftProposal
 from macro_foundry.agent.review import ReviewBundle
 
 
@@ -122,6 +122,8 @@ class OnboardingCheckpointState(BaseModel):
     errors: tuple[NodeError, ...] = ()
     proposal: DraftProposal | None = None
     enum_gap_proposals: tuple[EnumGapProposal, ...] = ()
+    credential_gap_proposals: tuple[CredentialGapProposal, ...] = ()
+    credential_gap_resolutions: tuple[CredentialGapResolution, ...] = ()
     # Reviewer fan-out (issue 44)
     extraction_mode: str | None = None
     review_cycle: int = 0
@@ -147,6 +149,8 @@ class OnboardingCheckpointState(BaseModel):
     def enforce_checkpoint_invariants(self, info: ValidationInfo) -> "OnboardingCheckpointState":
         if self.proposal is not None and self.enum_gap_proposals:
             raise ValueError("proposal cannot be set while enum_gap_proposals is non-empty")
+        if self.proposal is not None and self.credential_gap_proposals:
+            raise ValueError("proposal cannot be set while credential_gap_proposals is non-empty")
 
         previous = None
         if isinstance(info.context, dict):
@@ -176,6 +180,8 @@ class OnboardingCheckpointState(BaseModel):
 
 
 __all__ = [
+    "CredentialGapProposal",
+    "CredentialGapResolution",
     "EnumGapProposal",
     "LLMCallRecord",
     "LoadedSkill",

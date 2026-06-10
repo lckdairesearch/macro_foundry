@@ -8,7 +8,7 @@ from uuid import UUID
 
 from pydantic import Field
 
-from macro_foundry.enums import ProviderRole, ProviderType
+from macro_foundry.enums import AuthScheme, ProviderRole, ProviderType
 from macro_foundry.schemas._base import SchemaModel, TimestampedReadSchema
 
 
@@ -22,6 +22,8 @@ class ProviderBase(SchemaModel):
     doc_url: str | None = None
     base_url: str | None = None
     credentials_ref: str | None = None
+    auth_scheme: AuthScheme | None = None
+    rate_limit_config: dict[str, Any] | None = None
     notes: str | None = None
     is_active: bool
 
@@ -40,6 +42,8 @@ class ProviderUpdate(SchemaModel):
     doc_url: str | None = None
     base_url: str | None = None
     credentials_ref: str | None = None
+    auth_scheme: AuthScheme | None = None
+    rate_limit_config: dict[str, Any] | None = None
     notes: str | None = None
     is_active: bool | None = None
 

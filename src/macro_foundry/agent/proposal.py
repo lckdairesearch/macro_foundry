@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, ValidationInfo, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class DraftConcept(BaseModel):
@@ -162,6 +163,62 @@ class SuggestHumanApplyItem(BaseModel):
     rationale: str
 
 
+class ProviderIdentity(BaseModel):
+    """Credential-gap target provider identity."""
+
+    model_config = ConfigDict(frozen=True)
+
+    kind: Literal["existing", "new"]
+    existing_provider_id: str | None = None
+    proposed_provider_name: str | None = None
+    proposed_provider_homepage_url: str | None = None
+    proposed_provider_doc_url: str | None = None
+
+    @model_validator(mode="after")
+    def _require_identity_fields(self) -> "ProviderIdentity":
+        if self.kind == "existing" and not self.existing_provider_id:
+            raise ValueError("existing_provider_id is required for existing provider identity")
+        if self.kind == "new" and not self.proposed_provider_name:
+            raise ValueError("proposed_provider_name is required for new provider identity")
+        return self
+
+
+class CredentialGapProposal(BaseModel):
+    """Evidence-bearing request for operator credential provisioning."""
+
+    model_config = ConfigDict(frozen=True)
+
+    provider_identity: ProviderIdentity
+    proposed_env_var_name: str
+    proposed_auth_scheme: str
+    inferred_rate_limit: dict[str, Any] | None = None
+    evidence_url: str
+    evidence_snippet: str
+    rationale: str
+
+    @model_validator(mode="after")
+    def _require_evidence(self) -> "CredentialGapProposal":
+        if not self.evidence_url.strip():
+            raise ValueError("evidence_url is required")
+        if not self.evidence_snippet.strip():
+            raise ValueError("evidence_snippet is required")
+        return self
+
+
+class CredentialGapResolution(BaseModel):
+    """Resolved credential-gap operator action."""
+
+    model_config = ConfigDict(frozen=True)
+
+    outcome: Literal["provisioned", "provisioned_renamed", "declined", "aborted"]
+    provider_identity: ProviderIdentity | None = None
+    applied_env_var_name: str | None = None
+    applied_auth_scheme: str | None = None
+    applied_rate_limit_config: dict[str, Any] | None = None
+    operator_rationale: str | None = None
+    resolved_at: datetime
+
+
 __all__ = [
     "DraftConcept",
     "DraftFamily",
@@ -171,7 +228,10 @@ __all__ = [
     "DraftProposal",
     "DraftSeries",
     "DraftSeriesSource",
+    "CredentialGapProposal",
+    "CredentialGapResolution",
     "HarmonisationItem",
+    "ProviderIdentity",
     "ReferenceMetadata",
     "SuggestHumanApplyItem",
 ]

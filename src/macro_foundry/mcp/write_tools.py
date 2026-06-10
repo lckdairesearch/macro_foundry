@@ -8,12 +8,12 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from macro_foundry.enums import (
     Action,
+    AuthScheme,
     FeedMethod,
     Frequency,
     ItemType,
@@ -24,6 +24,7 @@ from macro_foundry.enums import (
     ProposalStatus,
     ProposalType,
     ProviderRole,
+    ProviderType,
     ReferenceKind,
     RequestedBy,
     RiskLevel,
@@ -70,6 +71,12 @@ class TriggerFeedExecutionArgs(SchemaModel):
     """Arguments for trigger_feed_execution."""
 
     feed_id: UUID
+
+
+class ApplyCredentialGapResolutionsArgs(SchemaModel):
+    """Arguments for applying resolved credential-gap metadata at Gate 1."""
+
+    resolutions: list[dict[str, Any]]
 
 
 class RecordSuggestHumanApplyArgs(SchemaModel):
@@ -326,6 +333,59 @@ class MacrodbWriteTools:
         # Slice 17 integration point — stub for now.
         return {"feed_id": str(args.feed_id), "triggered": True}
 
+    async def apply_credential_gap_resolutions(
+        self,
+        args: ApplyCredentialGapResolutionsArgs,
+    ) -> dict[str, Any]:
+        updated_provider_ids: list[str] = []
+        for resolution in args.resolutions:
+            if resolution.get("outcome") not in {"provisioned", "provisioned_renamed"}:
+                continue
+            provider_identity = resolution.get("provider_identity") or {}
+            provider = await self._provider_for_credential_identity(provider_identity)
+            provider.credentials_ref = resolution.get("applied_env_var_name")
+            auth_scheme = resolution.get("applied_auth_scheme")
+            provider.auth_scheme = AuthScheme(auth_scheme) if auth_scheme else None
+            provider.rate_limit_config = resolution.get("applied_rate_limit_config")
+            await self._session.flush()
+            updated_provider_ids.append(str(provider.id))
+        return {"provider_ids": updated_provider_ids}
+
+    async def _provider_for_credential_identity(self, provider_identity: dict[str, Any]) -> Provider:
+        if provider_identity.get("kind") == "existing":
+            provider_id = provider_identity.get("existing_provider_id")
+            provider = await self._session.get(Provider, uuid.UUID(provider_id))
+            if provider is None:
+                raise ValueError(f"Provider {provider_id!r} not found")
+            return provider
+
+        provider_name = provider_identity.get("proposed_provider_name")
+        if not provider_name:
+            raise ValueError("proposed_provider_name is required for new provider identity")
+        provider = (
+            await self._session.execute(
+                select(Provider).where(Provider.name == provider_name)
+            )
+        ).scalar_one_or_none()
+        if provider is not None:
+            return provider
+        provider = Provider(
+            name=provider_name,
+            alt_name=None,
+            type=ProviderType.OTHER,
+            homepage_url=provider_identity.get("proposed_provider_homepage_url"),
+            doc_url=provider_identity.get("proposed_provider_doc_url"),
+            base_url=None,
+            credentials_ref=None,
+            auth_scheme=None,
+            rate_limit_config=None,
+            notes=None,
+            is_active=True,
+        )
+        self._session.add(provider)
+        await self._session.flush()
+        return provider
+
     async def record_suggest_human_apply(
         self, args: RecordSuggestHumanApplyArgs
     ) -> dict[str, Any]:
@@ -406,10 +466,10 @@ class MacrodbWriteTools:
         item = ChangeProposalItem(
             proposal_id=proposal.id,
             item_type=ItemType.DB_ROW,
-            target_type=TargetType.PROVIDERS,
-            action=Action.UPDATE,
+            target_type=TargetType.CREDENTIAL_REF,
+            action=Action.SUGGEST_CREDENTIAL_PROVISIONING,
             proposed_data=args.gap,
-            validation_status=ValidationStatus.PENDING,
+            validation_status=ValidationStatus.PENDING_HUMAN_APPLY,
         )
         self._session.add(item)
         await self._session.flush()
@@ -440,6 +500,7 @@ class MacrodbWriteTools:
 
 __all__ = [
     "ApplyApprovedProposalArgs",
+    "ApplyCredentialGapResolutionsArgs",
     "MacrodbWriteTools",
     "MarkProposalOutcomeArgs",
     "ProposeCreateSeriesArgs",

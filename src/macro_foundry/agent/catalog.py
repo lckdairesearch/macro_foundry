@@ -6,8 +6,6 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from typing import Any, Protocol
 
-from macro_foundry.agent.proposal import DraftProposal
-
 
 class WriteToolsProtocol(Protocol):
     """Minimal write-tools interface the apply_catalog node depends on."""
@@ -15,6 +13,8 @@ class WriteToolsProtocol(Protocol):
     async def propose_create_series(self, args: Any) -> dict[str, Any]: ...
 
     async def record_suggest_human_apply(self, args: Any) -> dict[str, Any]: ...
+
+    async def apply_credential_gap_resolutions(self, args: Any) -> dict[str, Any]: ...
 
 
 def make_apply_catalog_node(
@@ -32,6 +32,7 @@ def make_apply_catalog_node(
     async def _apply_catalog_node(state: dict[str, Any]) -> dict[str, Any]:
         from macro_foundry.agent.onboarding_state import NodeTransition
         from macro_foundry.mcp.write_tools import (
+            ApplyCredentialGapResolutionsArgs,
             ProposeCreateSeriesArgs,
             RecordSuggestHumanApplyArgs,
         )
@@ -45,6 +46,9 @@ def make_apply_catalog_node(
         session_id: str = (state.get("session_metadata") or {}).get("session_id", "")
         proposal_dict: dict[str, Any] = state.get("proposal") or {}
         sha_items: list[dict[str, Any]] = list(state.get("suggest_human_apply_items") or [])
+        credential_resolutions: list[dict[str, Any]] = list(
+            state.get("credential_gap_resolutions") or []
+        )
 
         proposal_result = await write_tools.propose_create_series(
             ProposeCreateSeriesArgs(
@@ -62,6 +66,11 @@ def make_apply_catalog_node(
                     session_id=session_id,
                     proposal_id=proposal_id,
                 )
+            )
+
+        if credential_resolutions:
+            await write_tools.apply_credential_gap_resolutions(
+                ApplyCredentialGapResolutionsArgs(resolutions=credential_resolutions)
             )
 
         now = datetime.now(timezone.utc)
