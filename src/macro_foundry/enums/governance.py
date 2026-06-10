@@ -70,6 +70,7 @@ class Action(str, Enum):
     MODIFY_FILE = "modify_file"
     RUN_TEST = "run_test"
     VALIDATE = "validate"
+    SUGGEST_HUMAN_APPLY = "suggest_human_apply"
 
 
 class ValidationStatus(str, Enum):
@@ -78,6 +79,8 @@ class ValidationStatus(str, Enum):
     FAILED = "failed"
     WARNING = "warning"
     NOT_REQUIRED = "not_required"
+    PENDING_HUMAN_APPLY = "pending_human_apply"
+    APPLIED_BY_OPERATOR = "applied_by_operator"
 
 
 __all__ = [

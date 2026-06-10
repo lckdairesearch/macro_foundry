@@ -336,6 +336,8 @@ async def test_draft_proposal_node_writes_proposal() -> None:
                 "hierarchy_edges": [],
             },
             "enum_gap_proposals": [],
+            "harmonisation_items": [],
+            "suggest_human_apply": [],
             "prompt_tokens": 200,
             "completion_tokens": 150,
             "total_tokens": 350,
@@ -350,6 +352,7 @@ async def test_draft_proposal_node_writes_proposal() -> None:
         "source_summary": "FRED CPI data.",
         "existing_catalog_hits": [],
         "ambiguity_flags": [],
+        "reference_metadata": {"cohort_a": [], "cohort_b": [], "cohort_c": [], "is_first_in_family": True},
         "llm_calls": [],
         "loaded_skills": [],
         "node_transitions": [],
@@ -383,6 +386,8 @@ async def test_draft_proposal_node_records_llm_call() -> None:
                 "family_member": {"variant": "SA"},
             },
             "enum_gap_proposals": [],
+            "harmonisation_items": [],
+            "suggest_human_apply": [],
             "prompt_tokens": 200,
             "completion_tokens": 100,
             "total_tokens": 300,
@@ -393,7 +398,15 @@ async def test_draft_proposal_node_records_llm_call() -> None:
     role_config = default_role_configs()[AgentRole.PROPOSAL_DRAFTER]
     node = make_draft_proposal_node(fake_llm, role_config, registry)
 
-    result = await node({"source_summary": "FRED CPI.", "existing_catalog_hits": [], "ambiguity_flags": [], "llm_calls": [], "loaded_skills": [], "node_transitions": []})
+    result = await node({
+        "source_summary": "FRED CPI.",
+        "existing_catalog_hits": [],
+        "ambiguity_flags": [],
+        "reference_metadata": {"cohort_a": [], "cohort_b": [], "cohort_c": [], "is_first_in_family": True},
+        "llm_calls": [],
+        "loaded_skills": [],
+        "node_transitions": [],
+    })
 
     assert len(result["llm_calls"]) == 1
     call = result["llm_calls"][0]
@@ -409,10 +422,11 @@ async def test_draft_proposal_node_records_llm_call() -> None:
 @pytest.mark.no_db
 @pytest.mark.asyncio
 async def test_research_then_draft_integration() -> None:
-    """Full graph with fake LLM drives research → draft_proposal, asserts proposal shape."""
-    from macro_foundry.agent.graph import build_research_draft_graph
+    """Full graph: research → gather + classify (parallel) → draft_proposal."""
+    from macro_foundry.agent.graph import build_reference_metadata_graph
     from macro_foundry.agent.roles import AgentRole, default_role_configs
     from macro_foundry.agent.skills import SkillRegistry
+    from typing import Any
     from langgraph.checkpoint.memory import MemorySaver
 
     registry = SkillRegistry({})
@@ -434,6 +448,12 @@ async def test_research_then_draft_integration() -> None:
             "latency_ms": 200,
         }
 
+    async def fake_cohort_lookup(catalog_hits: list[dict[str, Any]]) -> dict[str, Any]:
+        return {"cohort_a": [], "cohort_b": [], "cohort_c": []}
+
+    async def fake_classify(source_summary: str) -> str:
+        return "config_only"
+
     async def fake_draft_llm(messages: list[dict[str, str]]) -> dict[str, Any]:
         draft_calls.append(messages)
         return {
@@ -453,6 +473,8 @@ async def test_research_then_draft_integration() -> None:
                 "family_member": {"variant": "SA"},
             },
             "enum_gap_proposals": [],
+            "harmonisation_items": [],
+            "suggest_human_apply": [],
             "prompt_tokens": 200,
             "completion_tokens": 150,
             "total_tokens": 350,
@@ -461,9 +483,11 @@ async def test_research_then_draft_integration() -> None:
         }
 
     checkpointer = MemorySaver()
-    graph = build_research_draft_graph(
+    graph = build_reference_metadata_graph(
         checkpointer=checkpointer,
         research_llm=fake_research_llm,
+        cohort_lookup=fake_cohort_lookup,
+        extraction_mode_classifier=fake_classify,
         draft_llm=fake_draft_llm,
         role_configs=role_configs,
         registry=registry,
@@ -485,7 +509,7 @@ async def test_research_then_draft_integration() -> None:
     assert proposal.series.frequency == "monthly"
     assert proposal.source.external_code == "CPIAUCSL"
 
-    # Both nodes record LLM calls
+    # research + draft nodes record LLM calls
     assert len(final_state["llm_calls"]) == 2
     roles = [c["role"] for c in final_state["llm_calls"]]
     assert "researcher" in roles
