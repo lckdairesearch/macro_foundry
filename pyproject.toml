@@ -32,6 +32,7 @@ dependencies = [
 [project.scripts]
 macrodb = "macro_foundry.cli:app"
 macrodb-mcp = "macro_foundry.mcp.server:main"
+macrodb-mcp-write = "macro_foundry.mcp.server:write_enabled"
 
 [dependency-groups]
 dev = [

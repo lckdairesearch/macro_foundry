@@ -97,6 +97,55 @@ initialize and inspect that redesigned stack.
 
 ## Log
 
+### [2026-06-10] Issue 47 — Write-enabled MCP server, apply_catalog node, suggest_human_apply executor skip, SQLAdmin mark-applied action
+
+Implemented the post-Gate-1 write path and operator tooling per issue 47:
+
+- `MacrodbWriteTools` service class with 7 async methods:
+  `propose_create_series`, `record_suggest_human_apply`, `mark_proposal_outcome`,
+  `apply_approved_proposal`, `trigger_feed_execution` (stub, slice 17),
+  `record_enum_gap_proposal` (stub, slice 14), `record_credential_gap_proposal` (stub, slice 15)
+- `build_write_enabled_server()` wires all 7 tools and commits after each write; `build_read_only_server()` unchanged
+- `macrodb-mcp-write` console script added as a dedicated entry point for the write-enabled server
+- `make_apply_catalog_node()` reads gate-1-approved state, calls `propose_create_series`, and records
+  `suggest_human_apply` items as `PENDING_HUMAN_APPLY` — never auto-applies them; guards on `gate_1_approved=True`
+- `ChangeProposalItemAdmin.mark_applied` SQLAdmin action: flips `PENDING_HUMAN_APPLY` items to
+  `APPLIED_BY_OPERATOR` and stamps `proposal.applied_at`; returns `RedirectResponse` (303)
+- `ChangeProposal` model gains `applied_by` and `source_agent_session_id` columns
+- Migration 0008 widens `action` and `validation_status` VARCHAR columns on `change_proposal_items`
+  to 19 chars (raw SQL — `op.alter_column` silently failed to widen on psycopg3), drops and re-creates
+  named CHECK constraints to include `suggest_human_apply` / `pending_human_apply` / `applied_by_operator`
+
+Enums added:
+- `Action.SUGGEST_HUMAN_APPLY`
+- `ValidationStatus.PENDING_HUMAN_APPLY`, `ValidationStatus.APPLIED_BY_OPERATOR`
+
+`DraftProposal` schema extended so `propose_create_series` can write actual catalog rows:
+
+- `DraftSeries` gains three required fields (`temporal_stock_flow`, `unit_scale`,
+  `seasonal_adjustment`) and optional fields mirroring the full `series` column set;
+  `annualized`, `origin_type` (`"ingested"`), `is_active` have sensible defaults
+- `DraftSeriesSource.provider_code` renamed to `provider_name` — maps to `Provider.name`
+  (no `code` column exists on `providers`); adds `provider_role` and `priority` with defaults
+- `DraftIngestionFeed` gains required `feed_method` and `is_active` (default True)
+- `DraftFamilyMember` gains `is_primary` (default True)
+
+`propose_create_series` now performs the full transactional catalog write:
+Geography lookup → get-or-create Concept → get-or-create SeriesFamily → Series →
+SeriesFamilyMember → Provider/ProviderCatalog lookup → SeriesSource → IngestionFeed →
+IngestionFeedMember → optional hierarchy edges → audit ChangeProposal with
+`status=APPLIED` and `applied_at` stamped (Gate 1 approval already happened in state).
+
+Tests: 13 new passing total (integration test AC #6 added, 2 existing write-tool DB
+tests updated to use full `DraftProposal` payloads and assert `status=APPLIED`).
+Pre-existing cross-test pollution (`test_observations_routes` → `test_concurrency_advisory`) confirmed
+on base branch — not introduced by this issue.
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_write_mcp.py tests/macrodb/test_apply_catalog.py -q` exited 0 with `13 passed`
+- `uv run pytest tests/macrodb/ -q` exited 0 with `201 passed, 1 pre-existing failure`
+
 ### [2026-06-10] Issue 45 — Gate 1 wait node, approval_parse, apply_small_edit, un-approval window
 
 Implemented the Gate 1 interrupt slice per issue 45 / ADR 0011 approval semantics:

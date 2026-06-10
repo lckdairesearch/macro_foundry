@@ -61,6 +61,8 @@ class ChangeProposal(TimestampedBase):
     approved_by: Mapped[str | None] = mapped_column(String(), nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    applied_by: Mapped[str | None] = mapped_column(String(), nullable=True)
+    source_agent_session_id: Mapped[str | None] = mapped_column(String(), nullable=True)
     superseded_by_proposal_id: Mapped[uuid.UUID | None] = fk_uuid(
         "change_proposals.id",
         ondelete="RESTRICT",
