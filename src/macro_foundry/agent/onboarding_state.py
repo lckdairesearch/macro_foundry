@@ -190,6 +190,11 @@ class OnboardingCheckpointState(BaseModel):
     gate_2_replan_instructions: str | None = None
     dangerous_correction_plan: dict[str, object] | None = None
     dangerous_correction_repair: dict[str, object] | None = None
+    # Script drafter + sandbox (issue 46)
+    proposed_selector_path: str | None = None
+    proposed_selector_name: str | None = None
+    validation_result: str | None = None
+    validation_error: str | None = None
     # Post-Gate-1 executor state (issue 50)
     applied_catalog: dict[str, object] = Field(default_factory=dict)
     first_run: dict[str, object] = Field(default_factory=dict)

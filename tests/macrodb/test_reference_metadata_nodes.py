@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -958,12 +959,28 @@ async def test_build_onboarding_graph_conditional_edge_reads_extraction_mode() -
             "latency_ms": 10,
         }
 
+    import tempfile, os
+    tmp_sandbox = tempfile.mkdtemp()
+
+    async def fake_script_drafter_llm(messages: list[dict[str, str]], **_: Any) -> dict[str, Any]:
+        return {
+            "selector_name": "custom_gdp",
+            "selector_code": "class CustomGdpSelector:\n    name = 'custom_gdp'\n",
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+            "cost_estimate_usd": 0.0,
+            "latency_ms": 10,
+        }
+
     graph = build_onboarding_graph(
         checkpointer=checkpointer,
         research_llm=fake_research_llm,
         cohort_lookup=fake_cohort_lookup,
         extraction_mode_classifier=fake_classify,
         draft_llm=fake_draft_llm,
+        script_drafter_llm=fake_script_drafter_llm,
+        script_sandbox_base=Path(tmp_sandbox),
         role_configs=role_configs,
         registry=registry,
         **_noop_canonical_graph_kwargs(),

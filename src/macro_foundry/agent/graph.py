@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from operator import add
+from pathlib import Path
 from typing import Annotated, Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -108,6 +109,11 @@ class OnboardingGraphState(TypedDict, total=False):
     coerce_rationales: dict[str, str]
     harmonisation_items: list[dict[str, Any]]
     suggest_human_apply: list[dict[str, Any]]
+    # Script drafter + sandbox (issue 46)
+    proposed_selector_path: str | None
+    proposed_selector_name: str | None
+    validation_result: str | None
+    validation_error: str | None
     # Reviewer fan-out outputs (issue 44)
     review_cycle: int
     governance_review: dict[str, Any] | None
@@ -455,6 +461,21 @@ def EDGE_NEXT_FROM_DRAFT_FOR_REVIEW(state: OnboardingGraphState) -> str:
     return "governance_review"
 
 
+def EDGE_NEXT_FROM_VALIDATE_SCRIPT(state: OnboardingGraphState) -> str:
+    """Conditional edge out of validate_script.
+
+    ok  → governance_review (normal path)
+    failed, cycle < 3 → draft_script (retry)
+    failed, cycle >= 3 → END (cap exhausted, operator must intervene)
+    """
+    if state.get("validation_result") == "ok":
+        return "governance_review"
+    cycle = state.get("review_cycle") or 0
+    if cycle < 3:
+        return "draft_script"
+    return END
+
+
 def EDGE_NEXT_FROM_GATE_1_WAIT(state: OnboardingGraphState) -> str:
     """Conditional edge out of Gate 1."""
     outcome = state.get("gate_1_outcome")
@@ -521,18 +542,23 @@ def make_governance_review_node(
         )
 
         task_hint: str | None = None
+        sandbox_content: str | None = None
         if extraction_mode == "custom_python":
             task_hint = "selector_code_review"
+            selector_path: str | None = state.get("proposed_selector_path")
+            if selector_path:
+                try:
+                    sandbox_content = Path(selector_path).read_text(encoding="utf-8")
+                except OSError:
+                    sandbox_content = None
 
+        content = f"proposal: {proposal}\nenum_gap_proposals: {enum_gap_proposals}"
+        if sandbox_content is not None:
+            content += f"\nproposed_selector_code:\n{sandbox_content}"
         messages: list[dict[str, str]] = []
         if assembled.text:
             messages.append({"role": "system", "content": assembled.text})
-        messages.append(
-            {
-                "role": "user",
-                "content": f"proposal: {proposal}\nenum_gap_proposals: {enum_gap_proposals}",
-            }
-        )
+        messages.append({"role": "user", "content": content})
         result = await llm(messages, task_hint=task_hint)
 
         now = datetime.now(timezone.utc)
@@ -654,6 +680,11 @@ def build_onboarding_graph(
     gate_2_picker: PickerCallable | None = None,
     planner_llm: PlannerLLMCallable | None = None,
     repair_fn: RepairCallable | None = None,
+    script_drafter_llm: LLMCallable | None = None,
+    script_sandbox_base: Path | None = None,
+    script_probe: Any | None = None,
+    selectors_runtime_dir: Path | None = None,
+    run_selector_tests: Any | None = None,
 ) -> Any:
     """Compile the canonical end-to-end onboarding graph.
 
@@ -691,7 +722,21 @@ def build_onboarding_graph(
     dangerous_exec_node = make_dangerous_correction_executor_node(
         repair_fn=repair_fn or _no_op_repair_fn,
     )
-    apply_node = make_apply_catalog_node(write_tools=write_tools)  # type: ignore[arg-type]
+    from macro_foundry.agent.script_drafter import make_draft_script_node, make_validate_script_node
+
+    _sandbox_base = script_sandbox_base or Path("agent_workspace") / "proposed_selectors"
+    _script_llm = script_drafter_llm or draft_llm
+    draft_script_node = make_draft_script_node(
+        _script_llm, role_configs[AgentRole.PROPOSAL_DRAFTER], sandbox_base=_sandbox_base
+    )
+    validate_script_node = make_validate_script_node(
+        probe_callable=script_probe or _no_probe,
+    )
+    apply_node = make_apply_catalog_node(  # type: ignore[arg-type]
+        write_tools=write_tools,
+        selectors_runtime_dir=selectors_runtime_dir,
+        run_selector_tests=run_selector_tests,
+    )
     trigger_node = make_trigger_first_run_node(write_tools=write_tools)  # type: ignore[arg-type]
     monitor_node = make_monitor_first_run_node(run_logs=run_logs)
     test_review_node = make_test_review_node(reviewer=test_reviewer)
@@ -703,18 +748,6 @@ def build_onboarding_graph(
         probe=lambda _name, _value: "ok",  # type: ignore[return-value]
     )
 
-    async def _draft_script_placeholder(state: OnboardingGraphState) -> dict[str, Any]:
-        now = datetime.now(timezone.utc)
-        return {
-            "node_transitions": [
-                NodeTransition(
-                    node="draft_script",
-                    event="skipped_config_only" if state.get("extraction_mode") == "config_only" else "completed",
-                    created_at=now,
-                ).model_dump(mode="json")
-            ],
-        }
-
     graph = StateGraph(OnboardingGraphState)
     graph.add_node("research", research_node)
     graph.add_node("credential_gap_wait", credential_wait)
@@ -722,7 +755,8 @@ def build_onboarding_graph(
     graph.add_node("classify_extraction_mode", classify_node)
     graph.add_node("draft_proposal", draft_node)
     graph.add_node("enum_gap_wait", enum_wait)
-    graph.add_node("draft_script", _draft_script_placeholder)
+    graph.add_node("draft_script", draft_script_node)
+    graph.add_node("validate_script", validate_script_node)
     graph.add_node("governance_review", gov_node)
     graph.add_node("data_correctness_review", data_node)
     graph.add_node("gate_1_wait", gate_node)
@@ -756,7 +790,12 @@ def build_onboarding_graph(
         ["enum_gap_wait", "draft_script", "governance_review"],
     )
     graph.add_conditional_edges("enum_gap_wait", EDGE_NEXT_FROM_ENUM_GAP_WAIT, ["draft_proposal", END])
-    graph.add_edge("draft_script", "governance_review")
+    graph.add_edge("draft_script", "validate_script")
+    graph.add_conditional_edges(
+        "validate_script",
+        EDGE_NEXT_FROM_VALIDATE_SCRIPT,
+        ["governance_review", "draft_script", END],
+    )
     graph.add_edge("governance_review", "data_correctness_review")
     graph.add_edge("data_correctness_review", "gate_1_wait")
     graph.add_conditional_edges(
@@ -804,6 +843,11 @@ async def _no_op_repair_fn(_plan: Any, **_kwargs: Any) -> dict[str, Any]:
     return {}
 
 
+async def _no_probe(_selector_path: str, _probe_payload: Any) -> dict[str, Any]:
+    """Default no-op probe used when no script_probe is injected."""
+    return {"ok": True}
+
+
 __all__ = [
     "CohortLookupCallable",
     "EDGE_NEXT_FROM_APPLY_SMALL_EDIT",
@@ -813,6 +857,7 @@ __all__ = [
     "EDGE_NEXT_FROM_ENUM_GAP_WAIT",
     "EDGE_NEXT_FROM_GATE_1_WAIT",
     "EDGE_NEXT_FROM_GATE_2_WAIT",
+    "EDGE_NEXT_FROM_VALIDATE_SCRIPT",
     "EDGE_NEXT_FROM_RESEARCH",
     "ExtractionModeCallable",
     "LLMCallable",
