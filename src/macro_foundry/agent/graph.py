@@ -42,7 +42,12 @@ from macro_foundry.agent.onboarding_state import (
 from macro_foundry.agent.proposal import CredentialGapProposal, HarmonisationItem, ReferenceMetadata
 from macro_foundry.agent.review import ReviewBundle
 from macro_foundry.agent.roles import AgentRole, RoleConfig
-from macro_foundry.agent.skills import SkillRegistry
+from macro_foundry.agent.skills import (
+    GOVERNANCE_SKILL_TRIGGERS,
+    METADATA_STANDARDISATION_SKILL_TRIGGERS,
+    SkillRegistry,
+    assemble_prompt,
+)
 
 # Type alias for a single-call LLM callable used by research and draft nodes.
 # Receives the assembled messages list; returns a dict with content + usage metadata.
@@ -169,11 +174,19 @@ def make_research_node(
 ) -> Callable[[OnboardingGraphState], Awaitable[dict[str, Any]]]:
     """Return a research node function that uses the given LLM callable."""
 
-    _ = registry  # skill loading is wired in future slices
-
     async def _research_node(state: OnboardingGraphState) -> dict[str, Any]:
+        assembled = assemble_prompt(
+            base_role_prompt="",
+            node="research",
+            state=dict(state),
+            registry=registry,
+            skill_triggers=[],
+        )
         intent = state.get("pending_input") or ""
-        messages = [{"role": "user", "content": intent}]
+        messages: list[dict[str, str]] = []
+        if assembled.text:
+            messages.append({"role": "system", "content": assembled.text})
+        messages.append({"role": "user", "content": intent})
         result = await llm(messages)
 
         now = datetime.now(timezone.utc)
@@ -197,7 +210,7 @@ def make_research_node(
                 result.get("credential_gap_proposals", [])
             ),
             "llm_calls": [llm_record.model_dump(mode="json")],
-            "loaded_skills": [],
+            **assembled.state_update(),
             "node_transitions": [
                 NodeTransition(node="research", event="completed", created_at=now).model_dump(mode="json"),
             ],
@@ -317,8 +330,6 @@ def make_draft_proposal_node(
     cannot produce well-anchored prose without cohort context.
     """
 
-    _ = registry  # skill loading is wired in future slices
-
     async def _draft_proposal_node(state: OnboardingGraphState) -> dict[str, Any]:
         reference_metadata = state.get("reference_metadata")
         if reference_metadata is None:
@@ -327,11 +338,21 @@ def make_draft_proposal_node(
                 "gather_reference_metadata must run first"
             )
 
+        assembled = assemble_prompt(
+            base_role_prompt="",
+            node="draft_proposal",
+            state=dict(state),
+            registry=registry,
+            skill_triggers=METADATA_STANDARDISATION_SKILL_TRIGGERS,
+        )
         source_summary = state.get("source_summary") or ""
         catalog_hits = state.get("existing_catalog_hits") or []
         coerce_hints = state.get("coerce_hints") or {}
         coerce_rationales = state.get("coerce_rationales") or {}
-        messages = [
+        messages: list[dict[str, str]] = []
+        if assembled.text:
+            messages.append({"role": "system", "content": assembled.text})
+        messages.append(
             {
                 "role": "user",
                 "content": (
@@ -342,7 +363,7 @@ def make_draft_proposal_node(
                     f"coerce_rationales: {coerce_rationales}"
                 ),
             }
-        ]
+        )
         result = await llm(messages)
 
         now = datetime.now(timezone.utc)
@@ -371,7 +392,7 @@ def make_draft_proposal_node(
             "harmonisation_items": filtered_harmonisation,
             "suggest_human_apply": result.get("suggest_human_apply", []),
             "llm_calls": [llm_record.model_dump(mode="json")],
-            "loaded_skills": [],
+            **assembled.state_update(),
             "node_transitions": [
                 NodeTransition(node="draft_proposal", event="completed", created_at=now).model_dump(mode="json"),
             ],
@@ -461,7 +482,6 @@ def make_governance_review_node(
     """Return a governance_review node bound to read-only tools only."""
 
     bound_tools: frozenset[str] = frozenset(role_config.tools) - _WRITE_TOOL_NAMES
-    _ = registry  # skill loading wired in a later slice
 
     async def _governance_review_node(state: OnboardingGraphState) -> dict[str, Any]:
         proposal = state.get("proposal") or {}
@@ -469,16 +489,27 @@ def make_governance_review_node(
         extraction_mode = state.get("extraction_mode") or "config_only"
         cycle = (state.get("review_cycle") or 0) + 1
 
+        assembled = assemble_prompt(
+            base_role_prompt="",
+            node="governance_review",
+            state=dict(state),
+            registry=registry,
+            skill_triggers=GOVERNANCE_SKILL_TRIGGERS,
+        )
+
         task_hint: str | None = None
         if extraction_mode == "custom_python":
             task_hint = "selector_code_review"
 
-        messages = [
+        messages: list[dict[str, str]] = []
+        if assembled.text:
+            messages.append({"role": "system", "content": assembled.text})
+        messages.append(
             {
                 "role": "user",
                 "content": f"proposal: {proposal}\nenum_gap_proposals: {enum_gap_proposals}",
             }
-        ]
+        )
         result = await llm(messages, task_hint=task_hint)
 
         now = datetime.now(timezone.utc)
@@ -506,7 +537,7 @@ def make_governance_review_node(
             "governance_review": bundle.model_dump(mode="json"),
             "review_cycle": cycle,
             "llm_calls": [llm_record.model_dump(mode="json")],
-            "loaded_skills": [],
+            **assembled.state_update(),
             "node_transitions": [
                 NodeTransition(node="governance_review", event="completed", created_at=now).model_dump(mode="json"),
             ],
@@ -524,13 +555,22 @@ def make_data_correctness_review_node(
     """Return a data_correctness_review node bound to read-only tools only."""
 
     bound_tools: frozenset[str] = frozenset(role_config.tools) - _WRITE_TOOL_NAMES
-    _ = registry
 
     async def _data_correctness_review_node(state: OnboardingGraphState) -> dict[str, Any]:
         proposal = state.get("proposal") or {}
         cycle = (state.get("review_cycle") or 0) + 1
 
-        messages = [{"role": "user", "content": f"proposal: {proposal}"}]
+        assembled = assemble_prompt(
+            base_role_prompt="",
+            node="data_correctness_review",
+            state=dict(state),
+            registry=registry,
+            skill_triggers=[],
+        )
+        messages: list[dict[str, str]] = []
+        if assembled.text:
+            messages.append({"role": "system", "content": assembled.text})
+        messages.append({"role": "user", "content": f"proposal: {proposal}"})
         result = await llm(messages, task_hint=None)
 
         now = datetime.now(timezone.utc)
@@ -556,7 +596,7 @@ def make_data_correctness_review_node(
         return {
             "data_correctness_review": bundle.model_dump(mode="json"),
             "llm_calls": [llm_record.model_dump(mode="json")],
-            "loaded_skills": [],
+            **assembled.state_update(),
             "node_transitions": [
                 NodeTransition(node="data_correctness_review", event="completed", created_at=now).model_dump(mode="json"),
             ],

@@ -150,7 +150,7 @@ def assemble_prompt(
                 section_title=trigger.section_title,
             ),
         )
-    return AssembledPrompt(text="\n\n".join(bodies), loaded_skills=tuple(events))
+    return AssembledPrompt(text="\n\n".join(b for b in bodies if b), loaded_skills=tuple(events))
 
 
 GOVERNANCE_SKILL_TRIGGERS = [
