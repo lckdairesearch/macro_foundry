@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from pydantic import SecretStr
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -115,6 +117,37 @@ def test_build_production_dependencies_returns_correct_type() -> None:
     deps = build_production_dependencies(role_configs, session=session, client=client)
 
     assert isinstance(deps, OnboardingGraphDependencies)
+
+
+@pytest.mark.no_db
+def test_build_production_dependencies_uses_settings_openai_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The production CLI path reads .env.local through settings, not os.environ."""
+    from macro_foundry.agent import production_deps
+    from macro_foundry.agent.roles import default_role_configs
+
+    captured: dict[str, str | None] = {}
+
+    def _fake_async_openai(*, api_key: str | None = None) -> MagicMock:
+        captured["api_key"] = api_key
+        return MagicMock()
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(production_deps.openai, "AsyncOpenAI", _fake_async_openai)
+    monkeypatch.setattr(
+        production_deps,
+        "settings",
+        SimpleNamespace(llm=SimpleNamespace(openai_api_key=SecretStr("settings-key"))),
+    )
+
+    deps = production_deps.build_production_dependencies(
+        default_role_configs(),
+        session=_make_mock_session(),
+    )
+
+    assert captured["api_key"] == "settings-key"
+    assert deps.research_llm is not None
 
 
 @pytest.mark.no_db

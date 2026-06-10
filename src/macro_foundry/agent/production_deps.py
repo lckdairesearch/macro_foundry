@@ -30,6 +30,7 @@ from macro_foundry.agent.llm_schemas import (
 from macro_foundry.agent.onboarding import OnboardingGraphDependencies
 from macro_foundry.agent.roles import AgentRole, RoleConfig
 from macro_foundry.agent.skills import SkillRegistry
+from macro_foundry.config import settings
 from macro_foundry.mcp.read_tools import (
     FindSiblingSeriesArgs,
     ListProviderSeriesForConceptArgs,
@@ -43,6 +44,13 @@ _SKILLS_DIR = Path(__file__).resolve().parents[3] / "docs" / "skills"
 _CUSTOM_PYTHON_KEYWORDS: frozenset[str] = frozenset(
     {"python", "script", "custom", "sdk", "client", "parse", "scrape"}
 )
+
+
+def _openai_client_from_settings() -> openai.AsyncOpenAI:
+    api_key = settings.llm.openai_api_key
+    return openai.AsyncOpenAI(
+        api_key=api_key.get_secret_value() if api_key is not None else None,
+    )
 
 
 async def _questionary_picker(options: list[str], *_args: Any) -> str:
@@ -355,7 +363,7 @@ def build_production_dependencies(
     """
     from macro_foundry.mcp.write_tools import MacrodbWriteTools
 
-    effective_client = client or openai.AsyncOpenAI()
+    effective_client = client or _openai_client_from_settings()
 
     research_llm = make_openai_llm_callable(
         role_configs[AgentRole.RESEARCHER], ResearchOutput, client=effective_client
