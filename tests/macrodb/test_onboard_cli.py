@@ -9,7 +9,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from macro_foundry.agent.channel import ChannelEvent, ChannelPrompt, ChannelResponse
 from macro_foundry.agent.checkpoint import psycopg_langgraph_url
-from macro_foundry.agent.onboarding import OnboardingResult, OnboardingTarget
+from macro_foundry.agent.onboarding import OnboardingResult, OnboardingTarget, SessionRuntimeConfig
 from macro_foundry.agent.onboarding import run_onboarding_session
 from macro_foundry.agent.roles import AgentRole, RoleOverride
 from macro_foundry.cli import app
@@ -25,6 +25,7 @@ def test_onboard_cli_starts_session_with_allowed_target(
         *,
         target: OnboardingTarget,
         resume_session_id: str | None,
+        **_: object,
     ) -> OnboardingResult:
         assert target is OnboardingTarget.DEV
         assert resume_session_id is None
@@ -50,6 +51,7 @@ def test_onboard_cli_passes_role_model_overrides(
         target: OnboardingTarget,
         resume_session_id: str | None,
         role_config_overrides: dict[AgentRole, RoleOverride],
+        **_: object,
     ) -> OnboardingResult:
         assert target is OnboardingTarget.STAGING
         assert resume_session_id is None
@@ -149,3 +151,121 @@ async def test_onboard_session_saves_and_resumes_with_fake_channel() -> None:
         "hello-world: again",
         "session friendly-session saved",
     ]
+
+
+@pytest.mark.no_db
+def test_onboard_cli_accepts_max_session_cost_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_run_onboarding_session(
+        *,
+        target: OnboardingTarget,
+        resume_session_id: str | None,
+        runtime_config: SessionRuntimeConfig | None = None,
+        **_: object,
+    ) -> OnboardingResult:
+        captured["runtime_config"] = runtime_config
+        return OnboardingResult(session_id="onboard-cost-test", saved=True)
+
+    monkeypatch.setattr(
+        "macro_foundry.cli.onboard.run_onboarding_session",
+        fake_run_onboarding_session,
+    )
+
+    result = runner.invoke(app, ["onboard", "--max-session-cost-usd", "2.50"])
+
+    assert result.exit_code == 0
+    assert captured["runtime_config"] == SessionRuntimeConfig(max_session_cost_usd=2.50)
+
+
+@pytest.mark.no_db
+@pytest.mark.asyncio
+async def test_cost_cap_aborts_session_when_exceeded() -> None:
+    checkpointer = InMemorySaver()
+    channel = FakeChannel(["/save"])
+
+    result = await run_onboarding_session(
+        target=OnboardingTarget.DEV,
+        resume_session_id=None,
+        channel=channel,
+        checkpointer=checkpointer,
+        session_id_factory=lambda: "cost-cap-session",
+        runtime_config=SessionRuntimeConfig(max_session_cost_usd=0.0),
+    )
+
+    assert result.aborted is True
+    assert result.abort_reason == "cost_cap_exceeded"
+
+
+@pytest.mark.no_db
+@pytest.mark.asyncio
+async def test_concurrency_advisory_warns_when_another_session_exists(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    import logging
+
+    checkpointer = InMemorySaver()
+
+    first_channel = FakeChannel(["/save"])
+    await run_onboarding_session(
+        target=OnboardingTarget.DEV,
+        resume_session_id=None,
+        channel=first_channel,
+        checkpointer=checkpointer,
+        session_id_factory=lambda: "session-alpha",
+    )
+
+    second_channel = FakeChannel(["/save"])
+    with caplog.at_level(logging.WARNING, logger="macro_foundry.agent.onboarding"):
+        await run_onboarding_session(
+            target=OnboardingTarget.DEV,
+            resume_session_id=None,
+            channel=second_channel,
+            checkpointer=checkpointer,
+            session_id_factory=lambda: "session-beta",
+        )
+
+    assert any("concurrent" in record.message.lower() for record in caplog.records)
+
+
+@pytest.mark.no_db
+@pytest.mark.asyncio
+async def test_concurrency_advisory_not_triggered_for_first_session(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    import logging
+
+    checkpointer = InMemorySaver()
+    channel = FakeChannel(["/save"])
+
+    with caplog.at_level(logging.WARNING, logger="macro_foundry.agent.onboarding"):
+        await run_onboarding_session(
+            target=OnboardingTarget.DEV,
+            resume_session_id=None,
+            channel=channel,
+            checkpointer=checkpointer,
+            session_id_factory=lambda: "only-session",
+        )
+
+    assert not any("concurrent" in record.message.lower() for record in caplog.records)
+
+
+@pytest.mark.no_db
+@pytest.mark.asyncio
+async def test_cost_cap_not_triggered_when_cost_below_cap() -> None:
+    checkpointer = InMemorySaver()
+    channel = FakeChannel(["/save"])
+
+    result = await run_onboarding_session(
+        target=OnboardingTarget.DEV,
+        resume_session_id=None,
+        channel=channel,
+        checkpointer=checkpointer,
+        session_id_factory=lambda: "cost-ok-session",
+        runtime_config=SessionRuntimeConfig(max_session_cost_usd=100.0),
+    )
+
+    assert result.aborted is False
+    assert result.session_id == "cost-ok-session"

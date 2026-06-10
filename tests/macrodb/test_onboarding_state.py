@@ -11,6 +11,7 @@ from macro_foundry.agent.onboarding import OnboardingTarget
 from macro_foundry.agent.onboarding_state import (
     LLMCallRecord,
     LoadedSkill,
+    NodeError,
     NodeTransition,
     OnboardingCheckpointState,
     RawMessage,
@@ -148,3 +149,83 @@ def test_onboarding_checkpoint_state_records_llm_calls() -> None:
 
     assert state.llm_calls[0].model == "gpt-5.1"
     assert state.llm_calls[0].tool_calls == ({"name": "lookup_concept", "arguments": {"code": "CPI"}},)
+
+
+@pytest.mark.no_db
+def test_session_cost_usd_sums_llm_call_estimates() -> None:
+    created_at = datetime(2026, 6, 10, tzinfo=timezone.utc)
+    metadata = SessionMetadata(
+        session_id="s1",
+        target_environment="dev",
+        created_at=created_at,
+        created_by="macrodb-cli",
+        cli_version="0.1.0",
+    )
+
+    def _call(cost: float) -> LLMCallRecord:
+        return LLMCallRecord(
+            role="researcher",
+            provider="openai",
+            model="gpt-5.1",
+            prompt_tokens=10,
+            completion_tokens=5,
+            total_tokens=15,
+            cost_estimate_usd=cost,
+            latency_ms=100,
+            created_at=created_at,
+        )
+
+    state = OnboardingCheckpointState(
+        session_metadata=metadata,
+        llm_calls=(_call(0.01), _call(0.02), _call(0.03)),
+    )
+
+    assert state.session_cost_usd == pytest.approx(0.06)
+
+
+@pytest.mark.no_db
+def test_session_cost_usd_is_zero_with_no_calls() -> None:
+    created_at = datetime(2026, 6, 10, tzinfo=timezone.utc)
+    metadata = SessionMetadata(
+        session_id="s2",
+        target_environment="dev",
+        created_at=created_at,
+        created_by="macrodb-cli",
+        cli_version="0.1.0",
+    )
+    state = OnboardingCheckpointState(session_metadata=metadata)
+    assert state.session_cost_usd == 0.0
+
+
+@pytest.mark.no_db
+def test_node_error_is_append_only_on_checkpoint_state() -> None:
+    created_at = datetime(2026, 6, 10, tzinfo=timezone.utc)
+    metadata = SessionMetadata(
+        session_id="s3",
+        target_environment="dev",
+        created_at=created_at,
+        created_by="macrodb-cli",
+        cli_version="0.1.0",
+    )
+    base = OnboardingCheckpointState(
+        session_metadata=metadata,
+        errors=(NodeError(node="research", kind="probe_timeout", message="30s exceeded", created_at=created_at),),
+    )
+
+    appended = OnboardingCheckpointState.model_validate(
+        {
+            "session_metadata": metadata.model_dump(),
+            "errors": [
+                NodeError(node="research", kind="probe_timeout", message="30s exceeded", created_at=created_at).model_dump(),
+                NodeError(node="research", kind="retry_exhausted", message="3 retries failed", created_at=created_at).model_dump(),
+            ],
+        },
+        context={"previous_state": base},
+    )
+    assert len(appended.errors) == 2
+
+    with pytest.raises(ValidationError, match="errors is append-only"):
+        OnboardingCheckpointState.model_validate(
+            {"session_metadata": metadata.model_dump(), "errors": []},
+            context={"previous_state": base},
+        )

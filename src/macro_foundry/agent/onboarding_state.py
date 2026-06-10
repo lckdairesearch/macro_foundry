@@ -79,6 +79,17 @@ class LoadedSkill(BaseModel):
     section_title: str | None = None
 
 
+class NodeError(BaseModel):
+    """Append-only record of a node-level error (retry exhaustion, probe timeout, etc.)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    node: str
+    kind: str
+    message: str
+    created_at: datetime
+
+
 class OnboardingCheckpointState(BaseModel):
     """Validated onboarding checkpoint state.
 
@@ -95,6 +106,11 @@ class OnboardingCheckpointState(BaseModel):
     node_transitions: tuple[NodeTransition, ...] = ()
     llm_calls: tuple[LLMCallRecord, ...] = ()
     loaded_skills: tuple[LoadedSkill, ...] = ()
+    errors: tuple[NodeError, ...] = ()
+
+    @property
+    def session_cost_usd(self) -> float:
+        return sum(r.cost_estimate_usd for r in self.llm_calls)
 
     @model_validator(mode="after")
     def enforce_checkpoint_invariants(self, info: ValidationInfo) -> "OnboardingCheckpointState":
@@ -112,6 +128,7 @@ class OnboardingCheckpointState(BaseModel):
         self._assert_append_only("node_transitions", previous.node_transitions, self.node_transitions)
         self._assert_append_only("llm_calls", previous.llm_calls, self.llm_calls)
         self._assert_append_only("loaded_skills", previous.loaded_skills, self.loaded_skills)
+        self._assert_append_only("errors", previous.errors, self.errors)
         return self
 
     @staticmethod
@@ -126,8 +143,9 @@ class OnboardingCheckpointState(BaseModel):
 
 __all__ = [
     "LLMCallRecord",
-    "NodeTransition",
     "LoadedSkill",
+    "NodeError",
+    "NodeTransition",
     "OnboardingCheckpointState",
     "RawMessage",
     "SessionMetadata",

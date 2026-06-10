@@ -7,7 +7,7 @@ from typing import Annotated
 
 import typer
 
-from macro_foundry.agent.onboarding import OnboardingResult, OnboardingTarget, run_onboarding_session
+from macro_foundry.agent.onboarding import OnboardingResult, OnboardingTarget, SessionRuntimeConfig, run_onboarding_session
 from macro_foundry.agent.roles import AgentRole, RoleOverride
 
 from ._app import app
@@ -63,14 +63,21 @@ def onboard(
         str | None,
         typer.Option("--dangerous-correction-planner-deep-model"),
     ] = None,
+    max_session_cost_usd: Annotated[
+        float | None,
+        typer.Option("--max-session-cost-usd", help="Hard cost cap in USD. Aborts if exceeded."),
+    ] = None,
 ) -> None:
     """Open the gated onboarding chat shell."""
+
+    runtime_config = SessionRuntimeConfig(max_session_cost_usd=max_session_cost_usd)
 
     try:
         result: OnboardingResult = asyncio.run(
             run_onboarding_session(
                 target=target,
                 resume_session_id=resume_session_id,
+                runtime_config=runtime_config,
                 **_role_override_kwargs(
                     {
                         AgentRole.RESEARCHER: RoleOverride(researcher_model, researcher_deep_model),
