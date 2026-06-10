@@ -10,7 +10,7 @@ from typing import Annotated, Any, TypedDict
 from langgraph.graph import END, START, StateGraph
 
 from macro_foundry.agent.onboarding_state import LLMCallRecord, NodeTransition, RawMessage, TranscriptEntry
-from macro_foundry.agent.proposal import HarmonisationItem, ReferenceMetadata
+from macro_foundry.agent.proposal import CredentialGapProposal, HarmonisationItem, ReferenceMetadata
 from macro_foundry.agent.review import ReviewBundle
 from macro_foundry.agent.roles import AgentRole, RoleConfig
 from macro_foundry.agent.skills import SkillRegistry
@@ -50,6 +50,7 @@ class OnboardingGraphState(TypedDict, total=False):
     source_summary: str | None
     existing_catalog_hits: list[dict[str, Any]]
     ambiguity_flags: list[str]
+    credential_gap_proposals: list[dict[str, Any]]
     # Reference metadata (gather_reference_metadata node)
     reference_metadata: dict[str, Any] | None
     is_first_in_family: bool | None
@@ -188,6 +189,9 @@ def make_research_node(
             "source_summary": result["source_summary"],
             "existing_catalog_hits": result["existing_catalog_hits"],
             "ambiguity_flags": result["ambiguity_flags"],
+            "credential_gap_proposals": _filter_credential_gap_proposals(
+                result.get("credential_gap_proposals", [])
+            ),
             "llm_calls": [llm_record.model_dump(mode="json")],
             "loaded_skills": [],
             "node_transitions": [
@@ -196,6 +200,18 @@ def make_research_node(
         }
 
     return _research_node
+
+
+def _filter_credential_gap_proposals(raw_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop credential-gap proposals missing ADR 0016 evidence fields."""
+    valid = []
+    for item in raw_items:
+        try:
+            proposal = CredentialGapProposal.model_validate(item)
+            valid.append(proposal.model_dump(mode="json"))
+        except Exception:
+            pass
+    return valid
 
 
 def make_gather_reference_metadata_node(

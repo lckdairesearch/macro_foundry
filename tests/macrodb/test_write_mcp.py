@@ -21,11 +21,13 @@ from macro_foundry.agent.proposal import (
 from macro_foundry.backend.main import admin, app
 from macro_foundry.config import settings
 from macro_foundry.enums import Action, ItemType, ProposalStatus, ProposalType, RequestedBy, RiskLevel, TargetType, ValidationStatus
-from macro_foundry.models import ChangeProposal, ChangeProposalItem, IngestionFeedMember, Series, SeriesSource
+from macro_foundry.models import ChangeProposal, ChangeProposalItem, IngestionFeedMember, Provider, Series, SeriesSource
 from macro_foundry.mcp.write_tools import (
+    ApplyCredentialGapResolutionsArgs,
     MacrodbWriteTools,
     MarkProposalOutcomeArgs,
     ProposeCreateSeriesArgs,
+    RecordCredentialGapProposalArgs,
     RecordSuggestHumanApplyArgs,
 )
 
@@ -130,6 +132,86 @@ async def test_record_suggest_human_apply_writes_pending_items(
     assert len(items) == 2
     for item in items:
         assert item.validation_status == ValidationStatus.PENDING_HUMAN_APPLY
+
+
+@pytest.mark.asyncio
+async def test_record_credential_gap_proposal_writes_credential_ref_audit_item(
+    session: AsyncSession,
+) -> None:
+    tools = MacrodbWriteTools(session)
+    result = await tools.record_credential_gap_proposal(
+        RecordCredentialGapProposalArgs(
+            session_id="sess-credential-001",
+            gap={
+                "provider_identity": {
+                    "kind": "new",
+                    "proposed_provider_name": "Example Provider",
+                    "proposed_provider_homepage_url": "https://example.test",
+                    "proposed_provider_doc_url": "https://example.test/docs",
+                },
+                "proposed_env_var_name": "EXAMPLE_API_KEY",
+                "proposed_auth_scheme": "bearer_header",
+                "inferred_rate_limit": {"requests_per_minute": 60},
+                "evidence_url": "https://example.test/docs/auth",
+                "evidence_snippet": "Use an API key.",
+                "rationale": "Provider docs require an API key.",
+            },
+        )
+    )
+
+    item = (
+        await session.execute(
+            select(ChangeProposalItem).where(
+                ChangeProposalItem.id == result["item_id"]
+            )
+        )
+    ).scalar_one()
+    assert item.target_type == TargetType.CREDENTIAL_REF
+    assert item.action == Action.SUGGEST_CREDENTIAL_PROVISIONING
+    assert item.validation_status == ValidationStatus.PENDING_HUMAN_APPLY
+    assert item.proposed_data["proposed_env_var_name"] == "EXAMPLE_API_KEY"
+
+    proposal = await session.get(ChangeProposal, item.proposal_id)
+    assert proposal is not None
+    assert proposal.proposal_type == ProposalType.MIXED
+    assert proposal.status == ProposalStatus.PROPOSED
+    assert proposal.source_agent_session_id == "sess-credential-001"
+
+
+@pytest.mark.asyncio
+async def test_apply_credential_gap_resolutions_updates_existing_provider_access_metadata(
+    session: AsyncSession,
+) -> None:
+    provider = (
+        await session.execute(
+            select(Provider).where(Provider.name == "HKG Census and Statistics Department")
+        )
+    ).scalar_one()
+    tools = MacrodbWriteTools(session)
+
+    result = await tools.apply_credential_gap_resolutions(
+        ApplyCredentialGapResolutionsArgs(
+            resolutions=[
+                {
+                    "outcome": "provisioned",
+                    "provider_identity": {
+                        "kind": "existing",
+                        "existing_provider_id": str(provider.id),
+                    },
+                    "applied_env_var_name": "HKG_CENSTATD_API_KEY",
+                    "applied_auth_scheme": "bearer_header",
+                    "applied_rate_limit_config": {"requests_per_minute": 60},
+                }
+            ]
+        )
+    )
+
+    assert result["provider_ids"] == [str(provider.id)]
+    refreshed = await session.get(Provider, provider.id)
+    assert refreshed is not None
+    assert refreshed.credentials_ref == "HKG_CENSTATD_API_KEY"
+    assert refreshed.auth_scheme.value == "bearer_header"
+    assert refreshed.rate_limit_config == {"requests_per_minute": 60}
 
 
 @pytest.mark.asyncio

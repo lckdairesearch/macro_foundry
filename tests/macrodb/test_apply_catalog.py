@@ -135,6 +135,35 @@ async def test_apply_catalog_exposes_applied_catalog_ids_for_first_run() -> None
 
 @pytest.mark.asyncio
 @pytest.mark.no_db
+async def test_apply_catalog_applies_credential_gap_resolutions_after_gate_1() -> None:
+    write_tools = AsyncMock()
+    write_tools.propose_create_series.return_value = {
+        "proposal_id": "aaaaaaaa-0000-0000-0000-000000000001",
+        "item_id": "aaaaaaaa-0000-0000-0000-000000000002",
+    }
+    credential_resolutions = [
+        {
+            "outcome": "provisioned",
+            "provider_identity": {
+                "kind": "new",
+                "proposed_provider_name": "Example Provider",
+            },
+            "applied_env_var_name": "EXAMPLE_API_KEY",
+            "applied_auth_scheme": "bearer_header",
+            "applied_rate_limit_config": {"requests_per_minute": 60},
+        }
+    ]
+
+    node = make_apply_catalog_node(write_tools=write_tools)
+    await node(_base_state(credential_gap_resolutions=credential_resolutions))
+
+    write_tools.apply_credential_gap_resolutions.assert_called_once()
+    args = write_tools.apply_credential_gap_resolutions.call_args.args[0]
+    assert args.resolutions == credential_resolutions
+
+
+@pytest.mark.asyncio
+@pytest.mark.no_db
 async def test_apply_catalog_skips_suggest_human_apply_items() -> None:
     write_tools = AsyncMock()
     write_tools.propose_create_series.return_value = {

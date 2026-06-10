@@ -74,6 +74,8 @@ providers [icon: building, color: blue] {
   doc_url string                  // nullable; technical documentation page
   base_url string                 // nullable; API root domain e.g. https://api.worldbank.org/v2/
   credentials_ref string           // nullable
+  auth_scheme string              // nullable; ENUM: bearer_header | query_param | header_custom | basic_auth | none
+  rate_limit_config jsonb         // nullable; provider-level request caps/tier metadata
   notes string                    // nullable
   is_active boolean
   created_at timestamp

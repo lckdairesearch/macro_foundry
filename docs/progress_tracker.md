@@ -12,6 +12,37 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-10] Issue 49 — Credential-gap escalation partial implementation
+
+Implemented the deterministic credential-gap slice per ADR 0016:
+
+- added `AuthScheme` plus provider access metadata columns
+  (`providers.auth_scheme`, `providers.rate_limit_config`) in models,
+  schemas, canonical ER source, and migration `0009`
+- widened governance enums for credential-gap audit rows:
+  `Action.SUGGEST_CREDENTIAL_PROVISIONING`,
+  `TargetType.CREDENTIAL_REF`, and
+  `ValidationStatus.DECLINED_BY_OPERATOR`
+- added typed credential-gap proposal/resolution models and a pure
+  `CredentialPrecheck` helper covering existing-provider credential refs,
+  env-var checks, probe outcomes, and session-local cache behavior
+- added `credential_gap_wait` deterministic node factory with only
+  Apply later / Abort picker options; successful resume probe records a
+  resolution without ever returning the credential value
+- updated research node output filtering so credential-gap proposals missing
+  evidence are dropped before reaching state
+- updated write tools so credential-gap audit rows use the credential-specific
+  action/target/status, and so Gate 1 can write resolved provider access
+  metadata after approval
+- updated `apply_catalog` to apply credential-gap resolutions after the main
+  catalog write
+
+Verification:
+
+- `uv run ruff check ...` over touched source and test files exited 0
+- `uv run pytest tests/macrodb/test_credential_gap.py tests/macrodb/test_apply_catalog.py tests/macrodb/test_research_draft_nodes.py -q -m no_db` exited 0 with `24 passed`
+- `uv run pytest tests/shared/test_schemas.py tests/macrodb/test_write_mcp.py::test_record_credential_gap_proposal_writes_credential_ref_audit_item tests/macrodb/test_write_mcp.py::test_apply_credential_gap_resolutions_updates_existing_provider_access_metadata -q` exited 0 with `10 passed`
+
 ### [2026-06-10] Issue 50 — Post-Gate-1 first-run executor nodes
 
 Implemented the no-DB executor-node vertical slice for issue #50:

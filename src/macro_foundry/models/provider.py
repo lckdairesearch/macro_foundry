@@ -11,7 +11,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from macro_foundry.db.base import TimestampedBase
-from macro_foundry.enums import ProviderRole, ProviderType
+from macro_foundry.enums import AuthScheme, ProviderRole, ProviderType
 from macro_foundry.models._schema_policy import enum_column, fk_uuid
 
 if TYPE_CHECKING:
@@ -37,6 +37,13 @@ class Provider(TimestampedBase):
     doc_url: Mapped[str | None] = mapped_column(String(), nullable=True)
     base_url: Mapped[str | None] = mapped_column(String(), nullable=True)
     credentials_ref: Mapped[str | None] = mapped_column(String(), nullable=True)
+    auth_scheme: Mapped[AuthScheme | None] = enum_column(
+        "providers",
+        "auth_scheme",
+        AuthScheme,
+        nullable=True,
+    )
+    rate_limit_config: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     notes: Mapped[str | None] = mapped_column(String(), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False)
 
