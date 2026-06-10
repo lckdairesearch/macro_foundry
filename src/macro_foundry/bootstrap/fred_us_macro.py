@@ -216,7 +216,7 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
     RawSeriesSpec(
         concept_code="GDP",
         concept_name="Gross Domestic Product",
-        concept_description="Geography-neutral gross domestic product concept.",
+        concept_description="The total monetary value of all final goods and services produced within a country's borders during a specified period.",
         family_code="US_GDP",
         family_name="United States Gross Domestic Product",
         family_description="Curated United States GDP variants.",
@@ -248,7 +248,7 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
     RawSeriesSpec(
         concept_code="GDP",
         concept_name="Gross Domestic Product",
-        concept_description="Geography-neutral gross domestic product concept.",
+        concept_description="The total monetary value of all final goods and services produced within a country's borders during a specified period.",
         family_code="US_GDP",
         family_name="United States Gross Domestic Product",
         family_description="Curated United States GDP variants.",
@@ -280,7 +280,7 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
     RawSeriesSpec(
         concept_code="CPI",
         concept_name="Consumer Price Index",
-        concept_description="Geography-neutral consumer price index concept.",
+        concept_description="A measure of the average change over time in the prices paid by consumers for a representative basket of goods and services. Used as the primary indicator of consumer price inflation.",
         family_code="US_CPI",
         family_name="United States Consumer Price Index",
         family_description="Curated United States CPI variants.",
@@ -312,7 +312,7 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
     RawSeriesSpec(
         concept_code="CPI",
         concept_name="Consumer Price Index",
-        concept_description="Geography-neutral consumer price index concept.",
+        concept_description="A measure of the average change over time in the prices paid by consumers for a representative basket of goods and services. Used as the primary indicator of consumer price inflation.",
         family_code="US_CPI",
         family_name="United States Consumer Price Index",
         family_description="Curated United States CPI variants.",
