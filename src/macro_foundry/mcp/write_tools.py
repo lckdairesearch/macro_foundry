@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import uuid
 from datetime import date as date_type
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -379,8 +377,8 @@ class MacrodbWriteTools:
         item = ChangeProposalItem(
             proposal_id=proposal.id,
             item_type=ItemType.CODE_CHANGE,
-            target_type=TargetType.FILE,
-            action=Action.MODIFY_FILE,
+            target_type=TargetType.ENUM_VALUE,
+            action=Action.SUGGEST_ENUM_ADDITION,
             proposed_data=args.gap,
             validation_status=ValidationStatus.PENDING,
         )

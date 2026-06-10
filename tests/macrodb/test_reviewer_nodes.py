@@ -285,6 +285,52 @@ async def test_governance_review_does_not_set_task_hint_when_config_only() -> No
 
 @pytest.mark.no_db
 @pytest.mark.asyncio
+async def test_governance_review_prompt_includes_enum_gap_proposals() -> None:
+    from macro_foundry.agent.graph import make_governance_review_node
+    from macro_foundry.agent.roles import AgentRole, default_role_configs
+    from macro_foundry.agent.skills import SkillRegistry
+
+    registry = SkillRegistry({})
+    captured_messages: list[list[dict[str, str]]] = []
+
+    async def fake_llm(messages: list[dict[str, str]], *, task_hint: str | None = None) -> dict[str, Any]:
+        captured_messages.append(messages)
+        return {
+            "findings": ["warning: weak enum gap"],
+            "bounce_to_drafter": False,
+            "prompt_tokens": 100,
+            "completion_tokens": 50,
+            "total_tokens": 150,
+            "cost_estimate_usd": 0.001,
+            "latency_ms": 200,
+        }
+
+    role_config = default_role_configs()[AgentRole.GOVERNANCE_REVIEWER]
+    node = make_governance_review_node(fake_llm, role_config, registry)
+
+    result = await node({
+        "proposal": None,
+        "enum_gap_proposals": [
+            {
+                "enum_path": "macro_foundry.enums.series.SeasonalAdjustment",
+                "proposed_value": "TCA",
+                "rationale": "Provider publishes trend-cycle adjusted data.",
+            }
+        ],
+        "extraction_mode": "config_only",
+        "review_cycle": 0,
+        "llm_calls": [],
+        "loaded_skills": [],
+        "node_transitions": [],
+    })
+
+    assert "enum_gap_proposals" in captured_messages[0][0]["content"]
+    assert "TCA" in captured_messages[0][0]["content"]
+    assert result["governance_review"]["findings"][0] == "warning: weak enum gap"
+
+
+@pytest.mark.no_db
+@pytest.mark.asyncio
 async def test_governance_review_llm_call_records_task_hint_when_custom_python() -> None:
     from macro_foundry.agent.graph import make_governance_review_node
     from macro_foundry.agent.roles import AgentRole, default_role_configs

@@ -12,6 +12,51 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-10] Issue 48 — Enum-gap escalation vertical slice
+
+Implemented the ADR 0014 enum-gap escalation path:
+
+- replaced the placeholder `EnumGapProposal` with the evidence-bearing,
+  allowlisted series-methodology enum shape; non-allowlisted enum paths are
+  rejected by Pydantic
+- `draft_proposal` now drops invalid/evidence-incomplete enum gaps before state,
+  clears `proposal` when valid gaps remain, passes `coerce_hints` /
+  `coerce_rationales` on rerun, and suppresses gaps for coerced enum paths
+- added `enum_gap_wait` helpers that render Python enum diff, ADR 0005-style
+  Alembic CHECK migration template, exact resume command, three-option picker,
+  Python+DB resume verification, renamed-value reconciliation, and
+  decline-and-coerce state updates
+- routed drafter output with gaps to `enum_gap_wait` before script drafting;
+  pause/abort stop the graph, resolved/coerced gaps rerun the drafter
+- governance reviewer prompts now include `enum_gap_proposals` so the
+  enum-gap skill's three conditions and anti-pattern list can become reviewer
+  findings
+- added governance enum values `Action.SUGGEST_ENUM_ADDITION`,
+  `TargetType.ENUM_VALUE`, and `ValidationStatus.DECLINED_BY_OPERATOR`, plus
+  migration `0009_enum_gap_governance_values.py`
+- `record_enum_gap_proposal` now writes one independent schema-change audit row
+  with `target_type=ENUM_VALUE` and `action=SUGGEST_ENUM_ADDITION`
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_research_draft_nodes.py tests/macrodb/test_enum_gap_wait.py tests/macrodb/test_reference_metadata_nodes.py::test_draft_proposal_conditional_edge_prioritizes_enum_gap_wait tests/macrodb/test_reviewer_nodes.py::test_governance_review_prompt_includes_enum_gap_proposals tests/macrodb/test_write_mcp.py::test_record_enum_gap_proposal_writes_independent_enum_value_audit_row -q`
+  exited 0 with `25 passed`
+- `uv run pytest tests/macrodb/test_research_draft_nodes.py tests/macrodb/test_enum_gap_wait.py tests/macrodb/test_reference_metadata_nodes.py tests/macrodb/test_reviewer_nodes.py tests/macrodb/test_onboarding_state.py tests/macrodb/test_escalation_helpers.py -q -m no_db`
+  exited 0 with `77 passed`
+- after local test-DB constraint drift was patched, `uv run pytest tests/macrodb/test_write_mcp.py::test_record_enum_gap_proposal_writes_independent_enum_value_audit_row -q`
+  exited 0 with `1 passed`
+- `uv run ruff check src/macro_foundry/agent/enum_gap.py src/macro_foundry/agent/graph.py src/macro_foundry/agent/onboarding_state.py src/macro_foundry/enums/governance.py src/macro_foundry/mcp/write_tools.py tests/macrodb/test_enum_gap_wait.py tests/macrodb/test_research_draft_nodes.py tests/macrodb/test_reference_metadata_nodes.py tests/macrodb/test_reviewer_nodes.py tests/macrodb/test_write_mcp.py alembic/versions/0009_enum_gap_governance_values.py`
+  exited 0
+
+Local verification note:
+
+- this host's shared `macrodb_test` was already stamped at revision `0009` from
+  another worktree's credential-gap enum widening, so Alembic did not rerun this
+  worktree's `0009`; for local verification only, the test DB CHECK
+  constraints were patched to include both the stale credential-gap values and
+  the enum-gap values. A fresh database from this worktree applies the committed
+  `0009` normally.
+
 ### [2026-06-10] Issue 55 — Admin landing page with live count cards
 
 Implemented the admin landing page vertical slice per issue #55:
