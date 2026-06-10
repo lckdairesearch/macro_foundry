@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Architecture review - macro_foundry</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+    </script>
+    <style>
+      body { letter-spacing: 0; }
+      .badge-strong { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+      .badge-worth { background: #fffbeb; color: #b45309; border-color: #fde68a; }
+      .badge-spec { background: #f8fafc; color: #475569; border-color: #cbd5e1; }
+      .diagram-box { min-height: 320px; }
+      .module { border: 1px solid #cbd5e1; background: #fff; border-radius: 8px; padding: 10px 12px; }
+      .deep { background: linear-gradient(135deg, #0f172a, #1e293b); color: #fff; border-radius: 8px; padding: 14px; }
+      .thin { height: 22px; border-radius: 6px; border: 1px solid #cbd5e1; background: #f8fafc; }
+      .leak { color: #dc2626; border-color: #fecaca; background: #fef2f2; }
+      .seam-line { border-top: 2px dashed #64748b; }
+      .label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: #64748b; }
+      .dark-label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: #cbd5e1; }
+      .arrow { color: #64748b; font-weight: 700; }
+      .red-arrow { color: #dc2626; font-weight: 700; }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900 font-sans">
+    <main class="max-w-6xl mx-auto px-6 py-10 space-y-10">
+      <header class="space-y-5">
+        <div>
+          <p class="text-xs uppercase tracking-wider text-slate-500">Architecture review</p>
+          <h1 class="text-4xl font-semibold text-slate-950">macro_foundry</h1>
+          <p class="text-sm text-slate-600 mt-1">2026-06-11 - deepening candidates for the onboarding, ingestion, and MCP modules.</p>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+          <div class="module"><span class="label">Solid box</span><br />module</div>
+          <div class="module"><div class="seam-line my-2"></div><span class="label">Dashed line</span><br />seam</div>
+          <div class="module leak"><span class="label">Red</span><br />leakage across a seam</div>
+          <div class="deep"><span class="dark-label">Dark box</span><br />deep module</div>
+        </div>
+      </header>
+
+      <section id="candidates" class="space-y-10">
+        <article id="feed-execution" class="rounded-xl border border-slate-200 bg-white shadow-sm p-6 space-y-5">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="text-2xl font-semibold mr-auto">Deepen feed execution around the ingestion feed</h2>
+            <span class="px-3 py-1 rounded-full border text-xs font-semibold badge-strong">Strong</span>
+            <span class="px-3 py-1 rounded-full border border-slate-200 bg-slate-50 text-xs">ports & adapters</span>
+          </div>
+          <div>
+            <p class="label mb-1">Files</p>
+            <p class="font-mono text-sm text-slate-700">src/macro_foundry/ingestion/runtime/runner.py:32 - src/macro_foundry/mcp/write_tools.py:353 - src/macro_foundry/mcp/server.py:219 - src/macro_foundry/agent/executor.py:34</p>
+          </div>
+          <div class="grid md:grid-cols-2 gap-5">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4 diagram-box">
+              <p class="label mb-3">Before</p>
+              <pre class="mermaid">
+flowchart LR
+  A[onboarding state] --> B[MCP trigger_feed_execution]
+  B -. feed_id only .-> C[WriteTools]
+  A -. first_run_payload .-> C
+  C --> D[execute_feed]
+  D --> E[selector dispatch]
+  D --> F[run logs]
+  classDef leak stroke:#dc2626,stroke-width:2px,color:#dc2626;
+  class A,C leak;
+              </pre>
+              <p class="text-xs text-red-600 mt-2">Payload ownership leaks into onboarding state; the MCP adapter exposes less than the implementation requires.</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4 diagram-box">
+              <p class="label mb-3">After</p>
+              <div class="space-y-3">
+                <div class="module text-center">MCP adapter: trigger by ingestion_feed</div>
+                <div class="arrow text-center">down</div>
+                <div class="deep">
+                  <p class="dark-label">Deep module</p>
+                  <p class="font-semibold">Feed execution</p>
+                  <div class="grid grid-cols-2 gap-2 mt-3 text-sm">
+                    <div class="bg-slate-800 rounded p-2">load feed config</div>
+                    <div class="bg-slate-800 rounded p-2">obtain provider payload</div>
+                    <div class="bg-slate-800 rounded p-2">dispatch selectors</div>
+                    <div class="bg-slate-800 rounded p-2">write member logs</div>
+                  </div>
+                </div>
+                <div class="module text-center">observations + ingestion run log members</div>
+              </div>
+            </div>
+          </div>
+          <div class="grid md:grid-cols-3 gap-5 text-sm">
+            <div><p class="label">Problem</p><p>The ingestion feed module is shallow: callers must know how payloads arrive before the runtime can do useful work.</p></div>
+            <div><p class="label">Solution</p><p>Put request execution, provider payload acquisition, selector dispatch, and member-level provenance behind one feed execution implementation.</p></div>
+            <div><p class="label">Wins</p><ul class="list-disc ml-5"><li>locality: feed bugs concentrate</li><li>leverage: one trigger path</li><li>tests hit one interface</li><li>MCP surface becomes honest</li></ul></div>
+          </div>
+          <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">ADR conflict: ADR 0012 says the runner interprets feed and member configuration at execution time; out-of-band payload injection keeps that complexity outside the module.</div>
+        </article>
+
+        <article id="review-stage" class="rounded-xl border border-slate-200 bg-white shadow-sm p-6 space-y-5">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="text-2xl font-semibold mr-auto">Make review fan-out a real stage</h2>
+            <span class="px-3 py-1 rounded-full border text-xs font-semibold badge-strong">Strong</span>
+            <span class="px-3 py-1 rounded-full border border-slate-200 bg-slate-50 text-xs">in-process</span>
+          </div>
+          <div>
+            <p class="label mb-1">Files</p>
+            <p class="font-mono text-sm text-slate-700">src/macro_foundry/agent/graph.py:521 - src/macro_foundry/agent/graph.py:599 - src/macro_foundry/agent/graph.py:785 - tests/macrodb/test_reviewer_nodes.py:578</p>
+          </div>
+          <div class="grid md:grid-cols-2 gap-5">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4 diagram-box">
+              <p class="label mb-3">Before</p>
+              <pre class="mermaid">
+flowchart TB
+  A[draft_proposal] --> B[governance_review]
+  B --> C[data_correctness_review]
+  C --> D[gate_1_wait]
+  B -. bounce_to_drafter unused .-> D
+  C -. cycle cap leaks .-> D
+  classDef leak stroke:#dc2626,stroke-width:2px,color:#dc2626;
+  class B,C,D leak;
+              </pre>
+              <p class="text-xs text-red-600 mt-2">The interface says fan-out, but graph assembly knows each reviewer and Gate 1 sees findings before bounce routing.</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4 diagram-box">
+              <p class="label mb-3">After</p>
+              <div class="space-y-3">
+                <div class="module text-center">draft_proposal</div>
+                <div class="arrow text-center">down</div>
+                <div class="deep">
+                  <p class="dark-label">Deep module</p>
+                  <p class="font-semibold">Review stage</p>
+                  <div class="grid grid-cols-3 gap-2 mt-3 text-sm">
+                    <div class="bg-slate-800 rounded p-2">fan-out</div>
+                    <div class="bg-slate-800 rounded p-2">merge</div>
+                    <div class="bg-slate-800 rounded p-2">cycle cap</div>
+                  </div>
+                  <div class="mt-3 text-sm bg-slate-800 rounded p-2">bounce routing stays inside</div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="module text-center">gate_1_wait</div>
+                  <div class="module text-center">draft_proposal retry</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="grid md:grid-cols-3 gap-5 text-sm">
+            <div><p class="label">Problem</p><p>Reviewer details leak into graph assembly, and `bounce_to_drafter` is produced by review modules but not consumed before Gate 1.</p></div>
+            <div><p class="label">Solution</p><p>Deepen the review stage so fan-out, merge, bounce routing, and cycle policy live behind one review-stage implementation.</p></div>
+            <div><p class="label">Wins</p><ul class="list-disc ml-5"><li>locality: review policy central</li><li>leverage: one stage test</li><li>cycle cap stops leaking</li><li>Gate 1 receives settled review</li></ul></div>
+          </div>
+          <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">ADR conflict: ADR 0013 and ADR 0015 describe prerequisite and reviewer fan-out; the current graph is sequential and does not yet own merge routing as a stage.</div>
+        </article>
+
+        <article id="skill-selection" class="rounded-xl border border-slate-200 bg-white shadow-sm p-6 space-y-5">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="text-2xl font-semibold mr-auto">Deepen skill selection against real graph state</h2>
+            <span class="px-3 py-1 rounded-full border text-xs font-semibold badge-worth">Worth exploring</span>
+            <span class="px-3 py-1 rounded-full border border-slate-200 bg-slate-50 text-xs">local-substitutable</span>
+          </div>
+          <div>
+            <p class="label mb-1">Files</p>
+            <p class="font-mono text-sm text-slate-700">src/macro_foundry/agent/skills.py:164 - src/macro_foundry/agent/graph.py:360 - src/macro_foundry/agent/proposal.py:105 - tests/macrodb/test_skill_wiring.py:197</p>
+          </div>
+          <div class="grid md:grid-cols-2 gap-5">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4 diagram-box">
+              <p class="label mb-3">Before</p>
+              <div class="grid grid-cols-2 gap-3 items-stretch">
+                <div class="module">
+                  <p class="label">Triggers</p>
+                  <p class="font-mono text-xs mt-2">proposal.touches_prose</p>
+                  <p class="font-mono text-xs">reference_metadata.cohort_A_empty</p>
+                </div>
+                <div class="module leak">
+                  <p class="label">Real state</p>
+                  <p class="font-mono text-xs mt-2">proposal unset before draft</p>
+                  <p class="font-mono text-xs">is_first_in_family</p>
+                </div>
+              </div>
+              <div class="red-arrow text-center my-5">mismatched state names</div>
+              <div class="thin"></div>
+              <p class="text-xs text-red-600 mt-3">The module interface is raw dotted paths, so state vocabulary changes silently disable skills.</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4 diagram-box">
+              <p class="label mb-3">After</p>
+              <div class="module text-center">node + role + graph state</div>
+              <div class="arrow text-center my-3">down</div>
+              <div class="deep">
+                <p class="dark-label">Deep module</p>
+                <p class="font-semibold">Skill selection</p>
+                <div class="grid grid-cols-2 gap-2 mt-3 text-sm">
+                  <div class="bg-slate-800 rounded p-2">understands state model</div>
+                  <div class="bg-slate-800 rounded p-2">maps role knowledge</div>
+                  <div class="bg-slate-800 rounded p-2">loads accepted bodies</div>
+                  <div class="bg-slate-800 rounded p-2">records events</div>
+                </div>
+              </div>
+              <div class="arrow text-center my-3">down</div>
+              <div class="module text-center">prompt text + loaded skill events</div>
+            </div>
+          </div>
+          <div class="grid md:grid-cols-3 gap-5 text-sm">
+            <div><p class="label">Problem</p><p>The skill module is shallow: callers must know fragile state paths and role-specific trigger lists.</p></div>
+            <div><p class="label">Solution</p><p>Concentrate skill-selection knowledge in one module that understands role, node, and the real onboarding state vocabulary.</p></div>
+            <div><p class="label">Wins</p><ul class="list-disc ml-5"><li>locality: trigger fixes central</li><li>leverage: role-aware loading</li><li>state rename tests improve</li><li>skills stop silently dropping</li></ul></div>
+          </div>
+          <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">ADR risk: ADR 0013 and ADR 0016 rely on conditional skill loading for first-in-family and credential-gap discipline.</div>
+        </article>
+
+        <article id="credential-gap" class="rounded-xl border border-slate-200 bg-white shadow-sm p-6 space-y-5">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="text-2xl font-semibold mr-auto">Complete the credential-gap lifecycle module</h2>
+            <span class="px-3 py-1 rounded-full border text-xs font-semibold badge-strong">Strong</span>
+            <span class="px-3 py-1 rounded-full border border-slate-200 bg-slate-50 text-xs">ports & adapters</span>
+          </div>
+          <div>
+            <p class="label mb-1">Files</p>
+            <p class="font-mono text-sm text-slate-700">src/macro_foundry/agent/credential_gap.py:53 - src/macro_foundry/agent/graph.py:745 - src/macro_foundry/agent/production_deps.py:299 - src/macro_foundry/agent/escalation/lifecycle.py:55</p>
+          </div>
+          <div class="grid md:grid-cols-2 gap-5">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4 diagram-box">
+              <p class="label mb-3">Before</p>
+              <pre class="mermaid">
+flowchart TB
+  A[research LLM] --> B[credential_gap_proposals]
+  C[CredentialPrecheck] -. unused .-> B
+  B --> D[credential_gap_wait]
+  D -. default fake probe .-> E[graph.py]
+  D --> F[Gate 1 handoff]
+  D -. audit varies by branch .-> G[change_proposals]
+  classDef leak stroke:#dc2626,stroke-width:2px,color:#dc2626;
+  class C,E,G leak;
+              </pre>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4 diagram-box">
+              <p class="label mb-3">After</p>
+              <div class="deep">
+                <p class="dark-label">Deep module</p>
+                <p class="font-semibold">Credential-gap lifecycle</p>
+                <div class="grid grid-cols-2 gap-2 mt-3 text-sm">
+                  <div class="bg-slate-800 rounded p-2">provider lookup</div>
+                  <div class="bg-slate-800 rounded p-2">env probe</div>
+                  <div class="bg-slate-800 rounded p-2">wait + resume</div>
+                  <div class="bg-slate-800 rounded p-2">audit rows</div>
+                  <div class="bg-slate-800 rounded p-2">redaction</div>
+                  <div class="bg-slate-800 rounded p-2">Gate 1 handoff</div>
+                </div>
+              </div>
+              <div class="grid grid-cols-3 gap-3 mt-4">
+                <div class="module text-center">research</div>
+                <div class="module text-center">operator</div>
+                <div class="module text-center">provider</div>
+              </div>
+            </div>
+          </div>
+          <div class="grid md:grid-cols-3 gap-5 text-sm">
+            <div><p class="label">Problem</p><p>Credential-gap pieces exist, but the production path does not own precheck, real probes, resume verification, audit, and handoff in one place.</p></div>
+            <div><p class="label">Solution</p><p>Deepen credential-gap into a lifecycle module with production adapters for provider lookup, environment access, and probe execution.</p></div>
+            <div><p class="label">Wins</p><ul class="list-disc ml-5"><li>locality: gap policy central</li><li>leverage: one lifecycle test</li><li>credential values stay out</li><li>redundant asks prevented</li></ul></div>
+          </div>
+          <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">ADR conflict: ADR 0016 requires three-layer precheck, pause/resume verification, and audit rows; current production wiring does not make that one deep module.</div>
+        </article>
+
+        <article id="selector-promotion" class="rounded-xl border border-slate-200 bg-white shadow-sm p-6 space-y-5">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="text-2xl font-semibold mr-auto">Make selector promotion reach the registry</h2>
+            <span class="px-3 py-1 rounded-full border text-xs font-semibold badge-strong">Strong</span>
+            <span class="px-3 py-1 rounded-full border border-slate-200 bg-slate-50 text-xs">in-process</span>
+          </div>
+          <div>
+            <p class="label mb-1">Files</p>
+            <p class="font-mono text-sm text-slate-700">src/macro_foundry/agent/catalog.py:122 - src/macro_foundry/ingestion/runtime/selectors/__init__.py:12 - tests/macrodb/test_selector_promotion.py:83 - src/macro_foundry/ingestion/runtime/README.md:76</p>
+          </div>
+          <div class="grid md:grid-cols-2 gap-5">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4 diagram-box">
+              <p class="label mb-3">Before</p>
+              <div class="space-y-3">
+                <div class="module">apply_catalog</div>
+                <div class="arrow">copies sandbox file</div>
+                <div class="module">selectors/runtime_dir/custom.py</div>
+                <div class="red-arrow">but registry remains static</div>
+                <div class="module leak">list_selector_types cannot see it</div>
+              </div>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4 diagram-box">
+              <p class="label mb-3">After</p>
+              <div class="deep">
+                <p class="dark-label">Deep module</p>
+                <p class="font-semibold">Selector promotion</p>
+                <div class="grid grid-cols-2 gap-2 mt-3 text-sm">
+                  <div class="bg-slate-800 rounded p-2">copy</div>
+                  <div class="bg-slate-800 rounded p-2">validate import</div>
+                  <div class="bg-slate-800 rounded p-2">register</div>
+                  <div class="bg-slate-800 rounded p-2">rollback</div>
+                </div>
+              </div>
+              <div class="arrow text-center my-3">down</div>
+              <div class="grid grid-cols-2 gap-3">
+                <div class="module text-center">get_selector</div>
+                <div class="module text-center">list_selector_types</div>
+              </div>
+            </div>
+          </div>
+          <div class="grid md:grid-cols-3 gap-5 text-sm">
+            <div><p class="label">Problem</p><p>The selector promotion module is shallow: a copied file is not the same as a registered selector type.</p></div>
+            <div><p class="label">Solution</p><p>Make promotion mean runtime visibility through the selector registry, with rollback locality when validation or tests fail.</p></div>
+            <div><p class="label">Wins</p><ul class="list-disc ml-5"><li>locality: promotion owns rollback</li><li>leverage: registry tests catch drift</li><li>MCP discovery stays truthful</li><li>custom selectors become real adapters</li></ul></div>
+          </div>
+          <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">ADR conflict: ADR 0012 makes selector discovery a catalog of runtime capability; copying a file without registry visibility does not satisfy that.</div>
+        </article>
+
+        <article id="catalog-application" class="rounded-xl border border-slate-200 bg-white shadow-sm p-6 space-y-5">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="text-2xl font-semibold mr-auto">Extract catalog application from the MCP adapter</h2>
+            <span class="px-3 py-1 rounded-full border text-xs font-semibold badge-worth">Worth exploring</span>
+            <span class="px-3 py-1 rounded-full border border-slate-200 bg-slate-50 text-xs">ports & adapters</span>
+          </div>
+          <div>
+            <p class="label mb-1">Files</p>
+            <p class="font-mono text-sm text-slate-700">src/macro_foundry/mcp/write_tools.py:123 - src/macro_foundry/agent/catalog.py:26 - src/macro_foundry/agent/proposal.py:57 - tests/macrodb/test_write_mcp.py:41</p>
+          </div>
+          <div class="grid md:grid-cols-2 gap-5">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4 diagram-box">
+              <p class="label mb-3">Before</p>
+              <div class="grid grid-cols-2 gap-3">
+                <div class="module">MCP adapter</div>
+                <div class="module leak">concept/family/series writes</div>
+                <div class="module leak">provider catalog choice</div>
+                <div class="module leak">series source + feed/member</div>
+                <div class="module leak">hierarchy skip policy</div>
+                <div class="module leak">audit row semantics</div>
+              </div>
+              <p class="text-xs text-red-600 mt-4">The adapter is doing domain implementation work instead of adapting a deeper module.</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4 diagram-box">
+              <p class="label mb-3">After</p>
+              <div class="module text-center">MCP adapter</div>
+              <div class="arrow text-center my-3">down</div>
+              <div class="deep">
+                <p class="dark-label">Deep module</p>
+                <p class="font-semibold">Catalog application</p>
+                <div class="grid grid-cols-2 gap-2 mt-3 text-sm">
+                  <div class="bg-slate-800 rounded p-2">identity resolution</div>
+                  <div class="bg-slate-800 rounded p-2">feed/member authoring</div>
+                  <div class="bg-slate-800 rounded p-2">selector validation</div>
+                  <div class="bg-slate-800 rounded p-2">audit semantics</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="grid md:grid-cols-3 gap-5 text-sm">
+            <div><p class="label">Problem</p><p>`MacrodbWriteTools.propose_create_series` is broad but not deep; many catalog invariants are encoded directly in the MCP adapter.</p></div>
+            <div><p class="label">Solution</p><p>Move approved proposal application into a catalog module and keep MCP as an adapter over that implementation.</p></div>
+            <div><p class="label">Wins</p><ul class="list-disc ml-5"><li>locality: catalog rules central</li><li>leverage: MCP and tests share path</li><li>selector config checked earlier</li><li>hierarchy outcomes explicit</li></ul></div>
+          </div>
+        </article>
+
+        <article id="test-surface" class="rounded-xl border border-slate-200 bg-white shadow-sm p-6 space-y-5">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="text-2xl font-semibold mr-auto">Make the test surface authoritative</h2>
+            <span class="px-3 py-1 rounded-full border text-xs font-semibold badge-strong">Strong</span>
+            <span class="px-3 py-1 rounded-full border border-slate-200 bg-slate-50 text-xs">in-process</span>
+          </div>
+          <div>
+            <p class="label mb-1">Files</p>
+            <p class="font-mono text-sm text-slate-700">tests/test_constraints.py:245 - tests/shared/test_constraints.py:261 - pyproject.toml:48 - docs/project_overview.md:60</p>
+          </div>
+          <div class="grid md:grid-cols-2 gap-5">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4 diagram-box">
+              <p class="label mb-3">Before</p>
+              <div class="space-y-3">
+                <div class="module">docs say: uv run pytest</div>
+                <div class="arrow text-center">down</div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="module leak">
+                    <p class="label">Root suite</p>
+                    <p class="font-mono text-xs mt-2">external_code unique</p>
+                  </div>
+                  <div class="module">
+                    <p class="label">Shared suite</p>
+                    <p class="font-mono text-xs mt-2">external_code not unique</p>
+                  </div>
+                </div>
+                <div class="red-arrow text-center">one command, conflicting contracts</div>
+              </div>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4 diagram-box">
+              <p class="label mb-3">After</p>
+              <div class="deep">
+                <p class="dark-label">Deep module</p>
+                <p class="font-semibold">Test surface</p>
+                <div class="grid grid-cols-2 gap-2 mt-3 text-sm">
+                  <div class="bg-slate-800 rounded p-2">one authoritative suite</div>
+                  <div class="bg-slate-800 rounded p-2">schema contract tests</div>
+                  <div class="bg-slate-800 rounded p-2">shared fixtures</div>
+                  <div class="bg-slate-800 rounded p-2">stale assumptions fail fast</div>
+                </div>
+              </div>
+              <div class="arrow text-center my-3">down</div>
+              <div class="module text-center">uv run pytest has one contract</div>
+            </div>
+          </div>
+          <div class="grid md:grid-cols-3 gap-5 text-sm">
+            <div><p class="label">Problem</p><p>The test module layout is shallow: old root tests and newer shared/macrodb tests can encode conflicting macrodb contracts.</p></div>
+            <div><p class="label">Solution</p><p>Make one test surface own schema contracts and fixture reuse; remove or quarantine stale pre-ADR tests.</p></div>
+            <div><p class="label">Wins</p><ul class="list-disc ml-5"><li>locality: schema tests central</li><li>leverage: one pytest command</li><li>ADR drift becomes visible</li><li>fixtures stop multiplying</li></ul></div>
+          </div>
+          <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">ADR conflict: the root test expects `series_sources.external_code` to be unique inside a provider catalog, while ADR 0010 says it is nullable and non-unique descriptive metadata.</div>
+        </article>
+      </section>
+
+      <section id="top-recommendation" class="rounded-xl border border-emerald-200 bg-emerald-50 p-6">
+        <p class="label text-emerald-700">Top recommendation</p>
+        <h2 class="text-2xl font-semibold text-emerald-950 mt-1">Deepen feed execution around the ingestion feed</h2>
+        <p class="text-emerald-900 mt-2">Tackle <a class="underline font-semibold" href="#feed-execution">feed execution</a> first because it is a real ADR 0012 mismatch, blocks a truthful MCP write tool, and determines whether onboarding, bootstrap, and scheduled ingestion all get leverage from one module.</p>
+      </section>
+    </main>
+  </body>
+</html>
