@@ -14,6 +14,7 @@ from macro_foundry.agent.checkpoint import postgres_checkpointer_for_target
 from macro_foundry.agent.graph import build_hello_world_graph, initial_graph_update, user_input_graph_update
 from macro_foundry.agent.onboarding_state import SessionMetadata
 from macro_foundry.agent.onboarding_targets import OnboardingTarget
+from macro_foundry.agent.roles import AgentRole, RoleOverride, apply_role_overrides, default_role_configs
 
 
 class OnboardingResult(BaseModel):
@@ -29,17 +30,21 @@ async def run_onboarding_session(
     *,
     target: OnboardingTarget,
     resume_session_id: str | None,
+    role_config_overrides: dict[AgentRole, RoleOverride] | None = None,
     channel: Channel | None = None,
     checkpointer: Any | None = None,
     session_id_factory: Callable[[], str] | None = None,
 ) -> OnboardingResult:
     """Run the onboarding session shell."""
 
+    role_configs = apply_role_overrides(default_role_configs(), role_config_overrides or {})
+
     if checkpointer is None:
         async with postgres_checkpointer_for_target(target) as postgres_checkpointer:
             return await _run_onboarding_loop(
                 target=target,
                 resume_session_id=resume_session_id,
+                role_configs=role_configs,
                 channel=channel,
                 checkpointer=postgres_checkpointer,
                 session_id_factory=session_id_factory,
@@ -48,6 +53,7 @@ async def run_onboarding_session(
     return await _run_onboarding_loop(
         target=target,
         resume_session_id=resume_session_id,
+        role_configs=role_configs,
         channel=channel,
         checkpointer=checkpointer,
         session_id_factory=session_id_factory,
@@ -58,12 +64,14 @@ async def _run_onboarding_loop(
     *,
     target: OnboardingTarget,
     resume_session_id: str | None,
+    role_configs: dict[AgentRole, object],
     channel: Channel | None,
     checkpointer: Any,
     session_id_factory: Callable[[], str] | None,
 ) -> OnboardingResult:
     """Run the onboarding prompt loop against an already-open checkpointer."""
 
+    _ = role_configs
     session_id = resume_session_id or (session_id_factory or _default_session_id)()
     greeting = f"hello-world onboarding session {session_id}"
     active_channel = channel or RichQuestionaryChannel()

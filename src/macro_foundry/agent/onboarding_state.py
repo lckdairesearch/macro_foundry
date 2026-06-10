@@ -49,6 +49,24 @@ class NodeTransition(BaseModel):
     created_at: datetime
 
 
+class LLMCallRecord(BaseModel):
+    """Append-only observability record for one LLM call."""
+
+    model_config = ConfigDict(frozen=True)
+
+    role: str
+    task_hint: str | None = None
+    provider: str
+    model: str
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    cost_estimate_usd: float
+    latency_ms: int
+    tool_calls: tuple[dict[str, object], ...] = ()
+    created_at: datetime
+
+
 class OnboardingCheckpointState(BaseModel):
     """Validated onboarding checkpoint state.
 
@@ -63,6 +81,7 @@ class OnboardingCheckpointState(BaseModel):
     raw_messages: tuple[RawMessage, ...] = ()
     transcript: tuple[TranscriptEntry, ...] = ()
     node_transitions: tuple[NodeTransition, ...] = ()
+    llm_calls: tuple[LLMCallRecord, ...] = ()
 
     @model_validator(mode="after")
     def enforce_checkpoint_invariants(self, info: ValidationInfo) -> "OnboardingCheckpointState":
@@ -78,6 +97,7 @@ class OnboardingCheckpointState(BaseModel):
         self._assert_append_only("raw_messages", previous.raw_messages, self.raw_messages)
         self._assert_append_only("transcript", previous.transcript, self.transcript)
         self._assert_append_only("node_transitions", previous.node_transitions, self.node_transitions)
+        self._assert_append_only("llm_calls", previous.llm_calls, self.llm_calls)
         return self
 
     @staticmethod
@@ -91,6 +111,7 @@ class OnboardingCheckpointState(BaseModel):
 
 
 __all__ = [
+    "LLMCallRecord",
     "NodeTransition",
     "OnboardingCheckpointState",
     "RawMessage",
