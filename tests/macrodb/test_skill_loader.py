@@ -183,8 +183,8 @@ Do not include this.
         base_role_prompt="draft base",
         node="draft_proposal",
         state={
-            "proposal": {"touches_prose": True},
-            "reference_metadata": {"cohort_A_empty": True},
+            "draft_proposal_touches_prose": True,
+            "is_first_in_family": True,
         },
         registry=registry,
         skill_triggers=METADATA_STANDARDISATION_SKILL_TRIGGERS,
@@ -200,8 +200,8 @@ Do not include this.
         base_role_prompt="draft base",
         node="draft_proposal",
         state={
-            "proposal": {"touches_prose": True},
-            "reference_metadata": {"cohort_A_empty": False},
+            "draft_proposal_touches_prose": True,
+            "is_first_in_family": False,
         },
         registry=registry,
         skill_triggers=METADATA_STANDARDISATION_SKILL_TRIGGERS,

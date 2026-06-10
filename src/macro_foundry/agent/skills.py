@@ -165,12 +165,12 @@ METADATA_STANDARDISATION_SKILL_TRIGGERS = [
     SkillTrigger(
         trigger_id="metadata-standardisation-prose",
         skill_id="skill-metadata-standardisation",
-        predicate=StatePredicate.path_equals("proposal.touches_prose", True),
+        predicate=StatePredicate.path_equals("draft_proposal_touches_prose", True),
     ),
     SkillTrigger(
         trigger_id="metadata-standardisation-seed-exemplars",
         skill_id="skill-metadata-standardisation",
-        predicate=StatePredicate.path_equals("reference_metadata.cohort_A_empty", True),
+        predicate=StatePredicate.path_equals("is_first_in_family", True),
         section_title="Seed exemplars",
     ),
 ]

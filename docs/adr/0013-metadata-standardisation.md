@@ -135,12 +135,12 @@ The governance reviewer judges whether the cited chorus is loud enough;
 there is no mechanical threshold.
 
 **Path-dependence: first-in-family scrutiny.** When
-`reference_metadata.cohort_A_empty == true`, the state field
+`reference_metadata.cohort_a` is empty, the state field
 `is_first_in_family = true` is set, and the governance reviewer loads
 extra scrutiny content. The metadata-standardisation skill conditionally
-loads a `Seed exemplars` sub-section containing operator-reviewed
-canonical example prose entries so the drafter has anchor language even
-when no siblings exist.
+loads a `Seed exemplars` sub-section when `is_first_in_family == true`,
+containing operator-reviewed canonical example prose entries so the
+drafter has anchor language even when no siblings exist.
 
 ## Consequences
 

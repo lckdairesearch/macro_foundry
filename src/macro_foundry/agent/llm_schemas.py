@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -38,6 +38,13 @@ class ApprovalOutput(BaseModel):
     edit_instructions: str = Field(default="")
 
 
+class ExtractionModeOutput(BaseModel):
+    """Structured output for ambiguous extraction-mode classification."""
+
+    extraction_mode: Literal["config_only", "custom_python"] = "config_only"
+    rationale: str = Field(default="")
+
+
 class TestReviewOutput(BaseModel):
     """Structured output for the test_reviewer role."""
 
@@ -45,4 +52,11 @@ class TestReviewOutput(BaseModel):
     passed: bool = True
 
 
-__all__ = ["ApprovalOutput", "DraftOutput", "ResearchOutput", "ReviewerOutput", "TestReviewOutput"]
+__all__ = [
+    "ApprovalOutput",
+    "DraftOutput",
+    "ExtractionModeOutput",
+    "ResearchOutput",
+    "ReviewerOutput",
+    "TestReviewOutput",
+]

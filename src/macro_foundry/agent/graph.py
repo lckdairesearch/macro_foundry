@@ -357,10 +357,12 @@ def make_draft_proposal_node(
                 "gather_reference_metadata must run first"
             )
 
+        prompt_state = dict(state)
+        prompt_state["draft_proposal_touches_prose"] = True
         assembled = assemble_prompt(
             base_role_prompt="",
             node="draft_proposal",
-            state=dict(state),
+            state=prompt_state,
             registry=registry,
             skill_triggers=METADATA_STANDARDISATION_SKILL_TRIGGERS,
         )

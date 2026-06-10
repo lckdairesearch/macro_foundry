@@ -12,6 +12,42 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-11] Issue 59 follow-up — Cohort contract, metadata skill trigger, and selector schema classification corrected
+
+Closed the last-mile wiring gaps found in the post-completion review of issue 59:
+
+- production `cohort_lookup` now normalizes both explicit FK hits
+  (`family_id`, `concept_id`, `provider_id`) and researcher-style
+  `{"kind": ..., "id": ...}` catalog hits before calling the MCP read tools,
+  so empty cohort A is a genuine observation rather than a shape mismatch.
+- the draft-proposal metadata skill trigger now uses graph-owned state:
+  metadata rules load for the drafter before prose is generated, and seed
+  exemplars load from `is_first_in_family == true` instead of the stale
+  `reference_metadata.cohort_A_empty` key.
+- `extraction_mode_classifier` now reads selector schemas through
+  `get_selector_schema` as well as `list_selector_types`; ambiguous shapes route
+  through the classifier-grade OpenAI path while clear registry matches remain
+  deterministic.
+- added a production-deps graph test proving a non-empty MCP cohort reaches the
+  drafter prompt.
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_production_deps.py -q -m no_db` exited 0
+  with `12 passed`
+- `uv run pytest tests/macrodb/test_skill_wiring.py tests/macrodb/test_skill_loader.py -q -m no_db`
+  exited 0 with `14 passed`
+- `uv run pytest tests/macrodb/test_reference_metadata_nodes.py -q -m no_db`
+  exited 0 with `27 passed`
+- `uv run ruff check src/macro_foundry/agent/production_deps.py src/macro_foundry/agent/llm_schemas.py src/macro_foundry/agent/graph.py src/macro_foundry/agent/skills.py tests/macrodb/test_production_deps.py tests/macrodb/test_skill_wiring.py tests/macrodb/test_skill_loader.py`
+  exited 0
+- `uv run pytest tests/macrodb/ -q -m no_db` exited 0 with
+  `222 passed, 85 deselected`
+- `uv run pytest tests/macrodb/ tests/shared/ -q` exited with
+  `342 passed, 1 failed`; the failure was the pre-existing flaky
+  `test_concurrency_advisory_warns_when_another_session_exists`, which passed
+  immediately in isolation.
+
 ### [2026-06-11] Issue 59 — MCP-backed cohorts and selector-registry extraction classification
 
 Replaced the two production dependency placeholders from issue 59:

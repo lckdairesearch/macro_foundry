@@ -42,9 +42,9 @@ structure lives in
   drafter has proposed updates to existing prose)
 
 The `Seed exemplars` sub-section is conditionally loaded only when
-`reference_metadata.cohort_A_empty == true` (no `series_family` siblings
-exist yet for the family under draft). When siblings exist, the cohort
-is the anchor and exemplars are unnecessary noise.
+`is_first_in_family == true` (no `series_family` siblings exist yet for
+the family under draft). When siblings exist, the cohort is the anchor
+and exemplars are unnecessary noise.
 
 ## Body
 
@@ -245,7 +245,7 @@ stamping `applied_at` plus `applied_by`).
 
 ### Seed exemplars
 
-Loaded only when `reference_metadata.cohort_A_empty == true`. Status:
+Loaded only when `is_first_in_family == true`. Status:
 **operator-reviewed and accepted** (issue #51).
 
 #### Exemplar 1 — Headline level series, monthly index, NSA
