@@ -26,11 +26,18 @@ from macro_foundry.agent.executor import (
 )
 from macro_foundry.agent.gate import (
     ApprovalLLMCallable,
+    CollisionChoice,
+    Gate2Outcome,
     GateOutcome,
     PickerCallable,
+    PlannerLLMCallable,
+    RepairCallable,
     is_structural_edit,
     make_apply_small_edit_node,
+    make_dangerous_correction_executor_node,
+    make_dangerous_correction_plan_node,
     make_gate_1_wait_node,
+    make_gate_2_wait_node,
 )
 from macro_foundry.agent.onboarding_state import (
     EnumGapProposal,
@@ -109,6 +116,12 @@ class OnboardingGraphState(TypedDict, total=False):
     collision_detail: dict[str, Any] | None
     gate_2_escalation: bool
     unapprove_rejected: bool
+    # Gate 2 / dangerous-correction state (issue 27)
+    gate_2_outcome: str | None
+    gate_2_approved: bool
+    gate_2_replan_instructions: str | None
+    dangerous_correction_plan: dict[str, Any] | None
+    dangerous_correction_repair: dict[str, Any] | None
     # Post-Gate-1 executor state (issue 50)
     applied_catalog: dict[str, Any]
     first_run_payload: Any
@@ -433,9 +446,19 @@ def EDGE_NEXT_FROM_GATE_1_WAIT(state: OnboardingGraphState) -> str:
 
 def EDGE_NEXT_FROM_APPLY_SMALL_EDIT(state: OnboardingGraphState) -> str:
     """Conditional edge after applying parsed small-edit instructions."""
-    if state.get("gate_2_escalation") or state.get("collision_choice"):
-        return END
+    if state.get("collision_choice") == CollisionChoice.CHALLENGE_EXISTING.value:
+        return "dangerous_correction_plan"
     return "gate_1_wait"
+
+
+def EDGE_NEXT_FROM_GATE_2_WAIT(state: OnboardingGraphState) -> str:
+    """Conditional edge out of Gate 2."""
+    outcome = state.get("gate_2_outcome")
+    if outcome == Gate2Outcome.APPROVE.value:
+        return "dangerous_correction_executor"
+    if outcome == Gate2Outcome.REQUEST_CHANGES.value:
+        return "dangerous_correction_plan"
+    return END
 
 
 async def _unapproval_window_node(state: OnboardingGraphState) -> dict[str, Any]:
@@ -588,6 +611,9 @@ def build_onboarding_graph(
     credential_gap_wait_node: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]] | None = None,
     unique_checker: Callable[..., Awaitable[dict[str, Any] | None]] | None = None,
     collision_picker: PickerCallable | None = None,
+    gate_2_picker: PickerCallable | None = None,
+    planner_llm: PlannerLLMCallable | None = None,
+    repair_fn: RepairCallable | None = None,
 ) -> Any:
     """Compile the canonical end-to-end onboarding graph.
 
@@ -614,6 +640,16 @@ def build_onboarding_graph(
     apply_small_edit_node = make_apply_small_edit_node(
         unique_checker=unique_checker or _no_unique_collision,
         collision_picker=collision_picker,
+    )
+    dangerous_plan_node = make_dangerous_correction_plan_node(
+        planner_llm=planner_llm or _no_op_planner_llm,
+    )
+    gate_2_node = make_gate_2_wait_node(
+        picker=gate_2_picker or _default_gate_2_picker,
+        approval_llm=approval_llm,
+    )
+    dangerous_exec_node = make_dangerous_correction_executor_node(
+        repair_fn=repair_fn or _no_op_repair_fn,
     )
     apply_node = make_apply_catalog_node(write_tools=write_tools)  # type: ignore[arg-type]
     trigger_node = make_trigger_first_run_node(write_tools=write_tools)  # type: ignore[arg-type]
@@ -651,6 +687,9 @@ def build_onboarding_graph(
     graph.add_node("data_correctness_review", data_node)
     graph.add_node("gate_1_wait", gate_node)
     graph.add_node("apply_small_edit", apply_small_edit_node)
+    graph.add_node("dangerous_correction_plan", dangerous_plan_node)
+    graph.add_node("gate_2_wait", gate_2_node)
+    graph.add_node("dangerous_correction_executor", dangerous_exec_node)
     graph.add_node("unapproval_window", _unapproval_window_node)
     graph.add_node("apply_catalog", apply_node)
     graph.add_node("trigger_first_run", trigger_node)
@@ -688,8 +727,15 @@ def build_onboarding_graph(
     graph.add_conditional_edges(
         "apply_small_edit",
         EDGE_NEXT_FROM_APPLY_SMALL_EDIT,
-        ["gate_1_wait", END],
+        ["gate_1_wait", "dangerous_correction_plan"],
     )
+    graph.add_edge("dangerous_correction_plan", "gate_2_wait")
+    graph.add_conditional_edges(
+        "gate_2_wait",
+        EDGE_NEXT_FROM_GATE_2_WAIT,
+        ["dangerous_correction_executor", "dangerous_correction_plan", END],
+    )
+    graph.add_edge("dangerous_correction_executor", END)
     graph.add_edge("unapproval_window", "apply_catalog")
     graph.add_edge("apply_catalog", "trigger_first_run")
     graph.add_edge("trigger_first_run", "monitor_first_run")
@@ -703,15 +749,31 @@ async def _no_unique_collision(*_args: Any, **_kwargs: Any) -> dict[str, Any] | 
     return None
 
 
+async def _no_op_planner_llm(_state: Any, **_kwargs: Any) -> dict[str, Any]:
+    """Fallback planner — returns an empty plan dict; inject a real planner in tests and production."""
+    return {"plan": {}}
+
+
+async def _default_gate_2_picker(_options: list[str], *_args: Any) -> str:
+    """Fallback gate_2 picker — raises to force injection; only used when gate_2_picker is None."""
+    raise RuntimeError("gate_2_picker must be injected; a dangerous-correction session cannot proceed without it")
+
+
+async def _no_op_repair_fn(_plan: Any, **_kwargs: Any) -> dict[str, Any]:
+    """Fallback repair function — no-op; inject a real repair_fn for production."""
+    return {}
+
+
 __all__ = [
     "CohortLookupCallable",
-    "EDGE_NEXT_FROM_ENUM_GAP_WAIT",
     "EDGE_NEXT_FROM_APPLY_SMALL_EDIT",
+    "EDGE_NEXT_FROM_CREDENTIAL_GAP_WAIT",
     "EDGE_NEXT_FROM_DRAFT",
     "EDGE_NEXT_FROM_DRAFT_FOR_REVIEW",
+    "EDGE_NEXT_FROM_ENUM_GAP_WAIT",
     "EDGE_NEXT_FROM_GATE_1_WAIT",
+    "EDGE_NEXT_FROM_GATE_2_WAIT",
     "EDGE_NEXT_FROM_RESEARCH",
-    "EDGE_NEXT_FROM_CREDENTIAL_GAP_WAIT",
     "ExtractionModeCallable",
     "LLMCallable",
     "OnboardingGraphState",

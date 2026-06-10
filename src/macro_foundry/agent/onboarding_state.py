@@ -184,6 +184,12 @@ class OnboardingCheckpointState(BaseModel):
     collision_detail: dict[str, object] | None = None
     gate_2_escalation: bool = False
     unapprove_rejected: bool = False
+    # Gate 2 / dangerous-correction state (issue 27)
+    gate_2_outcome: str | None = None
+    gate_2_approved: bool = False
+    gate_2_replan_instructions: str | None = None
+    dangerous_correction_plan: dict[str, object] | None = None
+    dangerous_correction_repair: dict[str, object] | None = None
     # Post-Gate-1 executor state (issue 50)
     applied_catalog: dict[str, object] = Field(default_factory=dict)
     first_run: dict[str, object] = Field(default_factory=dict)

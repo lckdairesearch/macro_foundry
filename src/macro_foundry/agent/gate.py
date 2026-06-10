@@ -1,10 +1,12 @@
-"""Gate 1 wait node, approval_parse, apply_small_edit, and un-approval window (issue 45)."""
+"""Gate 1 + Gate 2 wait nodes, apply_small_edit, dangerous-correction path (issues 45, 27)."""
 
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
+
+from pydantic import BaseModel, field_validator
 
 from macro_foundry.agent.channel import Channel, ChannelEvent
 from macro_foundry.agent.proposal import DraftProposal
@@ -17,10 +19,40 @@ class GateOutcome(str, Enum):
     PERMIT_FURTHER_CYCLE = "permit_further_cycle"
 
 
+class Gate2Outcome(str, Enum):
+    APPROVE = "approve"
+    REJECT = "reject"
+    REQUEST_CHANGES = "request_changes"
+
+
 class CollisionChoice(str, Enum):
     RENAME = "rename"
     CHALLENGE_EXISTING = "challenge_existing"
     CANCEL = "cancel"
+
+
+_REPAIR_STRATEGIES = frozenset({"rename_in_place", "supersede_and_replace", "route_future_only"})
+
+
+class DangerousCorrectionPlan(BaseModel):
+    """Impact analysis and repair plan produced by the dangerous_correction_plan node."""
+
+    collision_column: str
+    existing_code: str
+    proposed_code: str
+    affected_source_mappings: list[str]
+    affected_feeds: list[str]
+    affected_observations_count: int
+    affected_derivations: list[str]
+    repair_strategy: Literal["rename_in_place", "supersede_and_replace", "route_future_only"]
+    repair_rationale: str
+
+    @field_validator("repair_strategy")
+    @classmethod
+    def _validate_strategy(cls, v: str) -> str:
+        if v not in _REPAIR_STRATEGIES:
+            raise ValueError(f"repair_strategy must be one of {sorted(_REPAIR_STRATEGIES)}")
+        return v
 
 
 # Picker callable: receives (options, review_cycle) → returns outcome string.
@@ -155,11 +187,11 @@ def make_apply_small_edit_node(
         from macro_foundry.agent.onboarding_state import NodeTransition
         from datetime import datetime, timezone
 
-        proposal_dict: dict[str, Any] = dict(state.get("proposal") or {})
+        original_proposal_dict: dict[str, Any] = dict(state.get("proposal") or {})
         edit_instructions: str = state.get("small_edit_instructions") or ""
 
-        # Apply edit to proposal dict (simple field-rename heuristic for v1)
-        proposal_dict = _apply_edit_to_proposal(proposal_dict, edit_instructions)
+        # Apply edit to a copy of the proposal dict.
+        proposal_dict = _apply_edit_to_proposal(original_proposal_dict, edit_instructions)
 
         collision = await unique_checker(proposal_dict, edit_instructions)
 
@@ -171,6 +203,9 @@ def make_apply_small_edit_node(
                 "proposal": proposal_dict,
                 "gate_1_outcome": None,
                 "small_edit_instructions": None,
+                "collision_choice": None,
+                "collision_detail": None,
+                "gate_2_escalation": False,
                 "node_transitions": [transition],
             }
 
@@ -180,15 +215,40 @@ def make_apply_small_edit_node(
             [c.value for c in CollisionChoice],
             collision,
         )
-        collision_update: dict[str, Any] = {
+
+        if choice_str == CollisionChoice.CANCEL.value:
+            # Restore original proposal and clear all collision state.
+            return {
+                "proposal": original_proposal_dict,
+                "collision_choice": None,
+                "collision_detail": None,
+                "gate_1_outcome": None,
+                "small_edit_instructions": None,
+                "gate_2_escalation": False,
+                "node_transitions": [transition],
+            }
+
+        if choice_str == CollisionChoice.RENAME.value:
+            # Return to gate_1_wait with the original proposal so the operator
+            # can provide a different code via Request changes.
+            return {
+                "proposal": original_proposal_dict,
+                "collision_choice": None,
+                "collision_detail": None,
+                "gate_1_outcome": None,
+                "small_edit_instructions": None,
+                "gate_2_escalation": False,
+                "node_transitions": [transition],
+            }
+
+        # CollisionChoice.CHALLENGE_EXISTING — route to dangerous_correction_plan.
+        return {
             "proposal": proposal_dict,
             "collision_choice": choice_str,
             "collision_detail": collision,
+            "gate_2_escalation": True,
             "node_transitions": [transition],
         }
-        if choice_str == CollisionChoice.CHALLENGE_EXISTING.value:
-            collision_update["gate_2_escalation"] = True
-        return collision_update
 
     return _apply_small_edit_node
 
@@ -285,14 +345,152 @@ async def _default_collision_picker(options: list[str], collision: dict[str, Any
     raise RuntimeError("collision_picker must be injected; use make_apply_small_edit_node(collision_picker=...)")
 
 
+# ---------------------------------------------------------------------------
+# Dangerous-correction path (issue 27)
+# ---------------------------------------------------------------------------
+
+# LLM callable that receives state and returns {"plan": <plan_dict>}.
+PlannerLLMCallable = Callable[..., Awaitable[dict[str, Any]]]
+
+# Repair callable: receives (plan_dict) → returns repair result dict.
+RepairCallable = Callable[..., Awaitable[dict[str, Any]]]
+
+
+def make_dangerous_correction_plan_node(
+    *,
+    planner_llm: PlannerLLMCallable,
+) -> Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]:
+    """Return the dangerous_correction_plan node.
+
+    Calls the planner LLM with collision detail + proposal context and
+    records the resulting impact analysis + repair plan in state.
+    """
+
+    async def _dangerous_correction_plan_node(state: dict[str, Any]) -> dict[str, Any]:
+        from datetime import datetime, timezone
+
+        from macro_foundry.agent.onboarding_state import NodeTransition
+
+        result = await planner_llm(state)
+        plan_dict: dict[str, Any] = result.get("plan") or {}
+
+        now = datetime.now(timezone.utc)
+        return {
+            "dangerous_correction_plan": plan_dict,
+            "node_transitions": [
+                NodeTransition(
+                    node="dangerous_correction_plan",
+                    event="completed",
+                    created_at=now,
+                ).model_dump(mode="json")
+            ],
+        }
+
+    return _dangerous_correction_plan_node
+
+
+def make_gate_2_wait_node(
+    *,
+    picker: PickerCallable,
+    approval_llm: ApprovalLLMCallable,
+) -> Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]:
+    """Return the gate_2_wait node.
+
+    Same structural shape as Gate 1: Approve / Reject / Request changes.
+    Approve → sets gate_2_approved=True, no LLM call.
+    Reject → records outcome, no LLM call.
+    Request changes → calls approval_llm to extract re-plan instructions.
+    """
+
+    async def _gate_2_wait_node(state: dict[str, Any]) -> dict[str, Any]:
+        from datetime import datetime, timezone
+
+        from macro_foundry.agent.onboarding_state import NodeTransition
+
+        options = [
+            Gate2Outcome.APPROVE.value,
+            Gate2Outcome.REJECT.value,
+            Gate2Outcome.REQUEST_CHANGES.value,
+        ]
+        outcome_str = await picker(options, state)
+
+        now = datetime.now(timezone.utc)
+        update: dict[str, Any] = {
+            "gate_2_outcome": outcome_str,
+            "node_transitions": [
+                NodeTransition(
+                    node="gate_2_wait",
+                    event="completed",
+                    created_at=now,
+                ).model_dump(mode="json")
+            ],
+        }
+
+        if outcome_str == Gate2Outcome.APPROVE.value:
+            update["gate_2_approved"] = True
+        elif outcome_str == Gate2Outcome.REQUEST_CHANGES.value:
+            result = await approval_llm(state)
+            update["gate_2_replan_instructions"] = result.get("edit_instructions")
+
+        return update
+
+    return _gate_2_wait_node
+
+
+def make_dangerous_correction_executor_node(
+    *,
+    repair_fn: RepairCallable,
+) -> Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]:
+    """Return the dangerous_correction_executor node.
+
+    Applies only the approved repair plan. Rejects execution when
+    gate_2_approved is not True — routine catalog writes are not allowed
+    on this branch.
+    """
+
+    async def _dangerous_correction_executor_node(state: dict[str, Any]) -> dict[str, Any]:
+        from datetime import datetime, timezone
+
+        from macro_foundry.agent.onboarding_state import NodeTransition
+
+        now = datetime.now(timezone.utc)
+        transition = NodeTransition(
+            node="dangerous_correction_executor",
+            event="completed",
+            created_at=now,
+        ).model_dump(mode="json")
+
+        if not state.get("gate_2_approved"):
+            return {
+                "node_transitions": [transition],
+            }
+
+        plan_dict: dict[str, Any] = state.get("dangerous_correction_plan") or {}
+        repair_result = await repair_fn(plan_dict)
+
+        return {
+            "dangerous_correction_repair": repair_result,
+            "node_transitions": [transition],
+        }
+
+    return _dangerous_correction_executor_node
+
+
 __all__ = [
     "CollisionChoice",
+    "DangerousCorrectionPlan",
+    "Gate2Outcome",
     "GateOutcome",
     "PickerCallable",
+    "PlannerLLMCallable",
+    "RepairCallable",
     "UniqueCheckerCallable",
     "is_structural_edit",
-    "make_apply_small_edit_node",
+    "make_dangerous_correction_executor_node",
+    "make_dangerous_correction_plan_node",
     "make_gate_1_wait_node",
+    "make_gate_2_wait_node",
+    "make_apply_small_edit_node",
     "make_unapprove_node",
     "render_gate_1_summary",
 ]

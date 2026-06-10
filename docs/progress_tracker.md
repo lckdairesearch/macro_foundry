@@ -12,6 +12,47 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-10] Issue 27 — Small-edit subflow with uniqueness collision and Gate 2 dangerous-correction branch
+
+Implemented the Gate 2 dangerous-correction path per issue 27:
+
+- `Gate2Outcome` enum and `DangerousCorrectionPlan` Pydantic model (carries
+  `collision_column`, `existing_code`, `proposed_code`, all affected-row
+  categories, and `repair_strategy` from a closed three-value allowlist)
+- `make_dangerous_correction_plan_node` — injects a planner LLM and records
+  the impact analysis + repair plan in graph state
+- `make_gate_2_wait_node` — same structural shape as Gate 1 (`Approve` /
+  `Reject` / `Request changes`); `Approve` sets `gate_2_approved=True`, no
+  LLM call; `Request changes` calls the approval LLM and loops to re-plan
+- `make_dangerous_correction_executor_node` — applies only the approved repair
+  plan via an injected `repair_fn`; rejects execution when `gate_2_approved`
+  is not `True`; routine catalog writes are not permitted on this branch
+- updated `apply_small_edit`: `rename` and `cancel` paths now clear
+  `collision_choice` and restore the original proposal so
+  `EDGE_NEXT_FROM_APPLY_SMALL_EDIT` routes back to `gate_1_wait` instead of
+  `END`; `challenge_existing` preserves `collision_choice` for routing to
+  `dangerous_correction_plan`
+- new graph edges: `apply_small_edit → dangerous_correction_plan → gate_2_wait
+  → dangerous_correction_executor → END`; `gate_2_wait` loops back to
+  `dangerous_correction_plan` on `Request changes`
+- `gate_2_picker`, `planner_llm`, and `repair_fn` added as optional injectable
+  parameters to `build_onboarding_graph` (no-op defaults for backwards
+  compatibility)
+- `gate_2_outcome`, `gate_2_approved`, `gate_2_replan_instructions`,
+  `dangerous_correction_plan`, `dangerous_correction_repair` added to
+  `OnboardingGraphState` and `OnboardingCheckpointState`
+- `skill-dangerous-correction` promoted from `stub` to `accepted` with the
+  full publication-boundary test, trigger-condition inventory, repair-strategy
+  decision criteria, Gate 2 semantics, executor scope constraint, and
+  anti-pattern list distilled from `docs/series_catalog_governance.md` and
+  `docs/series_onboarding_workflow.md`
+
+Verification:
+
+- `uv run ruff check src/macro_foundry/agent/gate.py src/macro_foundry/agent/graph.py src/macro_foundry/agent/onboarding_state.py tests/macrodb/test_dangerous_correction.py tests/macrodb/test_gate_1.py` exited 0
+- `uv run pytest tests/macrodb/ -q -m no_db` exited 0 with `170 passed`
+- `uv run pytest tests/macrodb/ tests/shared/ -q` exited 0 with `290 passed` (1 pre-existing flaky concurrency advisory test unaffected)
+
 ### [2026-06-10] Issue 56 — Production onboarding graph assembled and wired into CLI loop
 
 Promoted the injectable end-to-end onboarding graph to the canonical
