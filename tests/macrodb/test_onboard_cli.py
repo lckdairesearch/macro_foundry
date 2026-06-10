@@ -159,6 +159,71 @@ def _fake_graph_dependencies() -> OnboardingGraphDependencies:
     )
 
 
+def _patch_production_deps(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Patch build_production_dependencies and DB session creation for CLI unit tests.
+
+    These patches allow CLI argument-parsing tests to reach run_onboarding_session
+    without needing a real OpenAI key or DB connection.
+    """
+    from unittest.mock import AsyncMock, MagicMock
+
+    from macro_foundry.agent.onboarding import OnboardingGraphDependencies
+    from macro_foundry.agent.skills import SkillRegistry
+
+    async def _stub_llm(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        return {}
+
+    class _StubWriteTools:
+        async def propose_create_series(self, args: Any) -> dict[str, Any]: return {}
+        async def record_suggest_human_apply(self, args: Any) -> dict[str, Any]: return {}
+        async def apply_credential_gap_resolutions(self, args: Any) -> dict[str, Any]: return {}
+        async def trigger_feed_execution(self, args: Any) -> dict[str, Any]: return {}
+
+    class _StubRunLogs:
+        async def get_ingestion_run_log(self, run_log_id: str) -> dict[str, Any]: return {}
+
+    class _StubPackageStore:
+        async def save_onboarding_package(self, package: Any) -> dict[str, Any]: return {}
+
+    stub_deps = OnboardingGraphDependencies(
+        research_llm=_stub_llm,
+        cohort_lookup=_stub_llm,
+        extraction_mode_classifier=_stub_llm,
+        draft_llm=_stub_llm,
+        governance_llm=_stub_llm,
+        data_correctness_llm=_stub_llm,
+        approval_llm=_stub_llm,
+        gate_1_picker=_stub_llm,
+        write_tools=_StubWriteTools(),
+        run_logs=_StubRunLogs(),
+        test_reviewer=_stub_llm,
+        package_store=_StubPackageStore(),
+        registry=SkillRegistry({}),
+    )
+    monkeypatch.setattr(
+        "macro_foundry.cli.onboard.build_production_dependencies",
+        lambda *_args, **_kwargs: stub_deps,
+    )
+
+    # Stub out the DB session creation so no real DB connection is attempted.
+    mock_session = AsyncMock()
+    mock_factory = MagicMock()
+    mock_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+    monkeypatch.setattr(
+        "macro_foundry.cli.onboard.create_session_factory",
+        lambda *_args, **_kwargs: mock_factory,
+    )
+    monkeypatch.setattr(
+        "macro_foundry.cli.onboard.create_async_engine_for_url",
+        lambda *_args, **_kwargs: MagicMock(),
+    )
+    monkeypatch.setattr(
+        "macro_foundry.cli.onboard.database_url_for_env_target",
+        lambda *_args, **_kwargs: "postgresql+psycopg://stub",
+    )
+
+
 @pytest.mark.no_db
 def test_onboard_cli_starts_session_with_allowed_target(
     monkeypatch: pytest.MonkeyPatch,
@@ -173,6 +238,7 @@ def test_onboard_cli_starts_session_with_allowed_target(
         assert resume_session_id is None
         return OnboardingResult(session_id="onboard-demo", saved=True)
 
+    _patch_production_deps(monkeypatch)
     monkeypatch.setattr(
         "macro_foundry.cli.onboard.run_onboarding_session",
         fake_run_onboarding_session,
@@ -203,6 +269,7 @@ def test_onboard_cli_passes_role_model_overrides(
         }
         return OnboardingResult(session_id="onboard-demo", saved=True)
 
+    _patch_production_deps(monkeypatch)
     monkeypatch.setattr(
         "macro_foundry.cli.onboard.run_onboarding_session",
         fake_run_onboarding_session,
@@ -312,6 +379,7 @@ def test_onboard_cli_accepts_cost_cap_flag(
         captured["runtime_config"] = runtime_config
         return OnboardingResult(session_id="onboard-cost-test", saved=True)
 
+    _patch_production_deps(monkeypatch)
     monkeypatch.setattr(
         "macro_foundry.cli.onboard.run_onboarding_session",
         fake_run_onboarding_session,
@@ -320,7 +388,8 @@ def test_onboard_cli_accepts_cost_cap_flag(
     result = runner.invoke(app, ["onboard", "--cost-cap", "2.50"])
 
     assert result.exit_code == 0
-    assert captured["runtime_config"] == SessionRuntimeConfig(max_session_cost_usd=2.50)
+    assert captured["runtime_config"].max_session_cost_usd == 2.50
+    assert captured["runtime_config"].graph_dependencies is not None
 
 
 @pytest.mark.no_db
