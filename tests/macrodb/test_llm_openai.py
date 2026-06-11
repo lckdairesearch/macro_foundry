@@ -5,17 +5,15 @@ from __future__ import annotations
 import asyncio
 import json
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
 
 from macro_foundry.agent.llm_openai import (
-    LLMTimeoutError,
     estimate_cost,
     make_openai_llm_callable,
     make_openai_reviewer_callable,
-    openai_client_from_env,
 )
 from macro_foundry.agent.llm_retry import TransientLLMError
 from macro_foundry.agent.llm_schemas import DraftOutput, ResearchOutput, ReviewerOutput
@@ -124,6 +122,37 @@ async def test_make_openai_llm_callable_passes_decode_params_to_api() -> None:
     assert call_kwargs["temperature"] == 0.2
     assert call_kwargs["max_tokens"] == 2000
     assert call_kwargs["response_format"] is ResearchOutput
+
+
+@pytest.mark.no_db
+@pytest.mark.asyncio
+async def test_gpt5_model_uses_max_completion_tokens() -> None:
+    parsed = ResearchOutput(
+        source_summary="Summary.",
+        existing_catalog_hits=[],
+        ambiguity_flags=[],
+        credential_gap_proposals=[],
+    )
+    mock_client = MagicMock()
+    mock_client.beta.chat.completions.parse = AsyncMock(
+        return_value=_mock_parse_response(parsed)
+    )
+    role = RoleConfig(
+        role=AgentRole.RESEARCHER,
+        default_model="gpt-5.4",
+        provider=LLMProvider.OPENAI,
+        decode=DecodeParams(reasoning_effort="medium", max_tokens=2000),
+    )
+
+    callable_ = make_openai_llm_callable(role, ResearchOutput, client=mock_client)
+    await callable_([{"role": "user", "content": "test"}])
+
+    call_kwargs = mock_client.beta.chat.completions.parse.call_args.kwargs
+    assert call_kwargs["model"] == "gpt-5.4"
+    assert call_kwargs["max_completion_tokens"] == 2000
+    assert "max_tokens" not in call_kwargs
+    assert call_kwargs["reasoning_effort"] == "medium"
+    assert "temperature" not in call_kwargs
 
 
 # ---------------------------------------------------------------------------
@@ -496,13 +525,6 @@ async def test_openai_callable_exercised_through_onboarding_graph() -> None:
 
         async def prompt(self, prompt: ChannelPrompt) -> ChannelResponse:
             return ChannelResponse(text="")
-
-    from macro_foundry.agent.executor import (
-        FirstRunLogReaderProtocol,
-        FirstRunWriteToolsProtocol,
-        OnboardingPackageStoreProtocol,
-        TestReviewerProtocol,
-    )
 
     class _StubWriteTools:
         async def propose_create_series(self, args: Any) -> dict[str, Any]:

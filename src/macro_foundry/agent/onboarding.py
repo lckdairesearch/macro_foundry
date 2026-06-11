@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -64,6 +64,7 @@ class OnboardingGraphDependencies:
     test_reviewer: TestReviewerProtocol
     package_store: OnboardingPackageStoreProtocol
     registry: SkillRegistry
+    credential_gap_wait_node: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]] | None = None
 
 
 class OnboardingResult(BaseModel):
@@ -148,6 +149,7 @@ async def _run_onboarding_loop(
         package_store=dependencies.package_store,
         role_configs=role_configs,
         registry=dependencies.registry,
+        credential_gap_wait_node=dependencies.credential_gap_wait_node,
     )
     config = {"configurable": {"thread_id": session_id}}
 

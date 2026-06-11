@@ -16,6 +16,7 @@ import questionary
 import openai
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from macro_foundry.agent.credential_gap import CredentialProbeOutcome, make_credential_gap_wait_node
 from macro_foundry.agent.llm_openai import (
     make_openai_llm_callable,
     make_openai_reviewer_callable,
@@ -44,6 +45,7 @@ _SKILLS_DIR = Path(__file__).resolve().parents[3] / "docs" / "skills"
 _CUSTOM_PYTHON_KEYWORDS: frozenset[str] = frozenset(
     {"python", "script", "custom", "sdk", "client", "parse", "scrape"}
 )
+_KNOWN_CREDENTIAL_REFS: tuple[str, ...] = ("FRED_API_KEY",)
 
 
 def _openai_client_from_settings() -> openai.AsyncOpenAI:
@@ -295,6 +297,21 @@ def _make_test_reviewer(
     return _test_reviewer
 
 
+async def _credential_probe_ok(_env_var_name: str, _credential: str) -> CredentialProbeOutcome:
+    """Placeholder probe until provider-specific credential checks are wired."""
+    return CredentialProbeOutcome.OK
+
+
+def _settings_credential_environ() -> dict[str, str]:
+    """Resolve known provider credential refs through Settings/.env.local."""
+    resolved: dict[str, str] = {}
+    for credential_ref in _KNOWN_CREDENTIAL_REFS:
+        value = settings.resolve_credential_ref(credential_ref)
+        if value:
+            resolved[credential_ref] = value
+    return resolved
+
+
 class _DbRunLogReader:
     """DB-backed run log reader matching FirstRunLogReaderProtocol."""
 
@@ -410,6 +427,11 @@ def build_production_dependencies(
         test_reviewer=test_reviewer,
         package_store=package_store,
         registry=registry,
+        credential_gap_wait_node=make_credential_gap_wait_node(
+            write_tools=write_tools,
+            environ=_settings_credential_environ(),
+            probe=_credential_probe_ok,
+        ),
     )
 
 

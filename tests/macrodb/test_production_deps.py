@@ -138,7 +138,10 @@ def test_build_production_dependencies_uses_settings_openai_key(
     monkeypatch.setattr(
         production_deps,
         "settings",
-        SimpleNamespace(llm=SimpleNamespace(openai_api_key=SecretStr("settings-key"))),
+        SimpleNamespace(
+            llm=SimpleNamespace(openai_api_key=SecretStr("settings-key")),
+            resolve_credential_ref=lambda _ref: None,
+        ),
     )
 
     deps = production_deps.build_production_dependencies(
@@ -148,6 +151,52 @@ def test_build_production_dependencies_uses_settings_openai_key(
 
     assert captured["api_key"] == "settings-key"
     assert deps.research_llm is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.no_db
+async def test_build_production_dependencies_resolves_fred_key_from_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The production credential gap node sees FRED_API_KEY loaded from .env.local/settings."""
+    from macro_foundry.agent import production_deps
+    from macro_foundry.agent.roles import default_role_configs
+
+    monkeypatch.setattr(
+        production_deps,
+        "settings",
+        SimpleNamespace(
+            llm=SimpleNamespace(openai_api_key=SecretStr("settings-key")),
+            resolve_credential_ref=lambda ref: "fred-from-settings" if ref == "FRED_API_KEY" else None,
+        ),
+    )
+
+    deps = production_deps.build_production_dependencies(
+        default_role_configs(),
+        session=_make_mock_session(),
+        client=MagicMock(),
+    )
+
+    result = await deps.credential_gap_wait_node(
+        {
+            "credential_gap_proposals": [
+                {
+                    "provider_identity": {"kind": "new", "proposed_provider_name": "USA FRED"},
+                    "proposed_env_var_name": "FRED_API_KEY",
+                    "proposed_auth_scheme": "query_param_api_key",
+                    "inferred_rate_limit": None,
+                    "evidence_url": "https://fred.stlouisfed.org/docs/api/api_key.html",
+                    "evidence_snippet": "Use an API key.",
+                    "rationale": "FRED API requests use a key.",
+                }
+            ],
+        }
+    )
+
+    assert result["credential_gap_resolutions"][0]["outcome"] == "provisioned"
+    assert result["credential_gap_resolutions"][0]["applied_env_var_name"] == "FRED_API_KEY"
+    assert result["node_transitions"][0]["event"] == "resolved"
+    assert "fred-from-settings" not in repr(result)
 
 
 @pytest.mark.no_db
@@ -608,7 +657,13 @@ async def test_production_deps_full_graph_through_emit_package() -> None:
     draft_content = {
         "proposal": {
             "concept": {"action": "new", "code": "CPI", "name": "Consumer Price Index"},
-            "family": {"action": "new", "code": "USA_CPI", "name": "US CPI", "geography_code": "USA"},
+            "family": {
+                "action": "new",
+                "code": "USA_CPI",
+                "name": "US CPI",
+                "concept_code": "CPI",
+                "geography_code": "USA",
+            },
             "series": {
                 "action": "new",
                 "code": "CPI_USA_ALL_M_NSA_LEVEL",
@@ -622,10 +677,11 @@ async def test_production_deps_full_graph_through_emit_package() -> None:
                 "unit_kind": "INDEX",
             },
             "family_member": {"variant": "Headline NSA"},
-            "sources": [],
+            "source": {"provider_name": "USA FRED", "external_code": "CPIAUCSL"},
             "feed": {
                 "selector_type": "json_path",
-                "selector_config": {},
+                "selector_config_summary": "FRED observations JSON records",
+                "cron_schedule": "0 14 * * 5",
                 "feed_method": "api",
                 "fetch_url": "/series/observations",
             },
@@ -791,7 +847,13 @@ async def test_production_graph_flows_non_empty_cohort_into_drafter(
     draft_content = {
         "proposal": {
             "concept": {"action": "existing", "code": "CPI", "name": "Consumer Price Index"},
-            "family": {"action": "existing", "code": "USA_CPI", "name": "US CPI", "geography_code": "USA"},
+            "family": {
+                "action": "existing",
+                "code": "USA_CPI",
+                "name": "US CPI",
+                "concept_code": "CPI",
+                "geography_code": "USA",
+            },
             "series": {
                 "action": "new",
                 "code": "CPI_USA_CORE_M_NSA_LEVEL",
@@ -805,10 +867,11 @@ async def test_production_graph_flows_non_empty_cohort_into_drafter(
                 "unit_kind": "INDEX",
             },
             "family_member": {"variant": "Core NSA"},
-            "sources": [],
+            "source": {"provider_name": "USA FRED", "external_code": "CPILFESL"},
             "feed": {
                 "selector_type": "json_path",
-                "selector_config": {},
+                "selector_config_summary": "FRED observations JSON records",
+                "cron_schedule": "0 14 * * 5",
                 "feed_method": "api",
                 "fetch_url": "/series/observations",
             },

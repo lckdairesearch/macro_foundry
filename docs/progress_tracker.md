@@ -12,6 +12,30 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-11] Onboard CLI — GPT-5.4 OpenAI compatibility and FRED credential detection fixed
+
+Updated the OpenAI-backed onboarding LLM wrapper so GPT-5/reasoning-model
+chat completion calls send `max_completion_tokens` instead of the legacy
+`max_tokens` parameter while preserving `max_tokens` for older chat models
+such as `gpt-4o`. Replaced open `dict[str, Any]` structured-output fields
+with closed DTOs so GPT-5.4 accepts the response schemas. Wired the production
+credential-gap node through `settings.resolve_credential_ref("FRED_API_KEY")`
+so a key present in `.env.local` resolves the FRED credential gap instead of
+prompting the operator.
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_llm_openai.py -q -m no_db` exited 0
+  with `17 passed`
+- `uv run ruff check src/macro_foundry/agent/llm_openai.py tests/macrodb/test_llm_openai.py`
+  exited 0
+- `uv run pytest tests/macrodb/ -q -m no_db` exited 0 with
+  `225 passed, 85 deselected`
+- `uv run macrodb onboard --target test`, input
+  `onboard US FRED's M2 (M2SL)`, reached Gate 1 without rendering the
+  `FRED_API_KEY` credential-required picker; diagnostic session saved as
+  `onboard-c219e0bab780`
+
 ### [2026-06-11] Onboard CLI — test target allowed for local test-environment runs
 
 Adjusted `macrodb onboard --target test` to run against the local test
