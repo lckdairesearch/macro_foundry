@@ -277,3 +277,139 @@ and triggers backfill on the next deployment.
   table to the embedded set is a new ADR.
 - The supersede-execution mechanics (how a retiring series is
   marked). Tracked separately under governance.
+
+## Addendum — 2026-06-12 — locked composition recipe and scoping rule
+
+The original Decision section leaves the embed-input composition
+described structurally only ("label lines, parent context"). After a
+sanity-check pass against the FRED bootstrap data in `test_db`, the
+recipe is locked to the form below and the scoping of "what counts as
+a recipe change" is made explicit.
+
+### Locked recipe
+
+Three rules apply to all three `compose_*_embedding_input` functions:
+
+1. **Label style.** `Title-case key: value`, single space after the
+   colon. Each field is on its own line, `\n`-separated, no trailing
+   newline.
+2. **Empty / `None` fields omit the entire line.** No `Description: `
+   blank lines, no `Unit label: None`. Adding a field value later
+   still produces a content change and the row is correctly flagged
+   stale by the input hash.
+3. **Enum values are humanized, not raw.** `monthly` not `M`,
+   `seasonally adjusted annual rate` not `SAAR`. The humanization map
+   is part of the recipe surface: any change to it is a recipe change
+   and triggers re-embed.
+
+The humanization maps for the enums that appear in the composition:
+
+| Enum                         | Raw value  | Humanized                          |
+|------------------------------|------------|------------------------------------|
+| `Frequency`                  | `D`        | `daily`                            |
+|                              | `W`        | `weekly`                           |
+|                              | `M`        | `monthly`                          |
+|                              | `Q`        | `quarterly`                        |
+|                              | `S`        | `semi-annual`                      |
+|                              | `A`        | `annual`                           |
+| `UnitKind`                   | `index`    | `index`                            |
+|                              | `percent`  | `percent`                          |
+|                              | `bps`      | `basis points`                     |
+|                              | `currency` | `currency`                         |
+|                              | `count`    | `count`                            |
+|                              | `quantity` | `quantity`                         |
+|                              | `ratio`    | `ratio`                            |
+|                              | `none`     | `unitless`                         |
+| `Measure`                    | `level`    | `level`                            |
+|                              | `growth`   | `growth`                           |
+|                              | `change`   | `change`                           |
+| `SeasonalAdjustment`         | `SA`       | `seasonally adjusted`              |
+|                              | `SAAR`     | `seasonally adjusted annual rate`  |
+|                              | `NSA`      | `not seasonally adjusted`          |
+|                              | `unknown`  | `unknown`                          |
+
+The recipe templates, top to bottom — identity → naming → free text →
+geographic context → semantic descriptors → parent chain:
+
+**Concept**
+
+```
+Type: Concept
+Code: {code}
+Name: {name}
+Description: {description}
+```
+
+**SeriesFamily**
+
+```
+Type: SeriesFamily
+Code: {code}
+Name: {name}
+Description: {description}
+Geography: {geography.name}
+Concept: {concept.name} ({concept.code})
+Concept description: {concept.description}
+```
+
+**Series**
+
+```
+Type: Series
+Code: {code}
+Name: {name}
+Alt names: {", ".join(alt_name)}
+Description: {description}
+Geography: {geography.name}
+Frequency: {humanized}
+Unit: {humanized}
+Unit label: {unit_label}
+Measure: {humanized}
+Seasonal adjustment: {humanized}
+Family: {family.name} ({family.code})
+Concept: {concept.name} ({concept.code})
+```
+
+**Deliberately excluded from series composition.** These fields are
+either operational, too granular for semantic match, or implied by
+fields already present: `unit_scale`, `annualized`, `currency_code`,
+`origin_type`, `reference_kind`, `reference_year`, `reference_label`,
+`is_active`, `start_date`, `end_date`, `replaced_by_series_id`,
+`temporal_stock_flow`. Adding any of these later is a recipe change.
+
+### Per-table scoping of recipe changes
+
+Each embedded table carries its own `embedding_input_hash` column and
+its own `compose_*_embedding_input` function. Recipe changes are
+scoped:
+
+| Change                                                 | What re-embeds      |
+|--------------------------------------------------------|---------------------|
+| `compose_concept` wording or label change              | concepts only       |
+| `compose_family` wording or label change               | series_families only|
+| `compose_series` wording or label change               | series only         |
+| Humanization map entry change                          | every table whose recipe uses that map |
+| `EMBEDDING_MODEL` constant change                      | all three tables    |
+| Any change to non-embedded tables (`ingestion_feeds`, `providers`, `tags`, `geographies`, `observations`, `provider_catalogs`, `series_sources`) | nothing             |
+
+There is one intentional cross-table cascade. Because the family
+composition includes the parent concept's name and description, and
+the series composition includes both the parent family's and parent
+concept's name and code, an edit to a concept row (for example a
+curator changing `description` via SQLAdmin) shifts the composed text
+of every family under that concept and every series under those
+families. Those rows become stale by the input-hash predicate and
+`backfill` repairs them on the next run.
+
+This cascade is the design's intended behaviour: it is how the
+parent-context lines stay consistent with reality. The trade-off is
+that a single human edit at the top of the hierarchy can mark dozens
+of rows stale at once. `backfill` mops them all up in a single batch
+call, so the cost is bounded.
+
+### What this addendum does not change
+
+The Decision section above remains in force. The recipe templates,
+humanization map, exclusion list, and scoping rule are the only
+additions. The model, embedded-table set, schema columns, write path,
+search surface, and backfill semantics are unchanged.
