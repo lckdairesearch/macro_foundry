@@ -38,6 +38,7 @@ async def ensure_series_embedding_current(
     async with _registration_lock(session):
         hydrated = await session.scalar(
             select(Series)
+            .execution_options(populate_existing=True)
             .options(
                 selectinload(Series.geography),
                 selectinload(Series.family_member)

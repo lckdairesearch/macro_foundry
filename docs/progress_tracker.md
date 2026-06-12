@@ -12,6 +12,55 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-12] Issue 66 — routed MCP approval-time catalog writes through registration helpers
+
+Refactored the MCP write-tool approval path in
+`src/macro_foundry/mcp/write_tools.py` so approved catalog-row inserts for
+`concepts`, `series_families`, and `series` materialize through
+`register_concept`, `register_family`, and `register_series` instead of
+direct ORM construction.
+
+`apply_approved_proposal(...)` now:
+
+- loads proposal items explicitly and applies them in dependency order
+  (`concept` → `series_family` → `series` → `series_family_member`);
+- resolves foreign keys by either `*_id` or `*_code` in
+  `proposed_data`, so same-proposal inserts can refer to earlier rows by
+  code;
+- creates `series_family_members` after the series row exists and then
+  calls `ensure_series_embedding_current(...)` so the stored
+  `embedding_input_hash` already reflects live family/concept context;
+- wraps the entire approval-time materialization step in a savepoint so
+  an embedding failure rolls back all partial writes and leaves the
+  proposal in `approved` status.
+
+`src/macro_foundry/services/registration.py` also now reloads series with
+`populate_existing=True` inside `ensure_series_embedding_current(...)` so
+same-session refreshes do not reuse a stale `Series` identity that still
+has `family_member=None`.
+
+Test updates in `tests/macrodb/test_write_mcp.py`:
+
+- mocked `macro_foundry.services.registration.embed_text` for the full
+  write-tool suite;
+- asserted the existing `apply_catalog` integration path writes embedded
+  `Concept`, `SeriesFamily`, and `Series` rows;
+- added approval-path coverage for embedded `concept`, `series_family`,
+  and `series` materialization;
+- added a `series_family_member` approval case that proves the series
+  embedding hash is current after family attachment;
+- added a rollback case where the second embed call fails and verified no
+  partial catalog rows persist and the proposal remains `approved`.
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_write_mcp.py tests/macrodb/test_registration_services.py tests/macrodb/test_fred_bootstrap.py tests/macrodb/test_debug_bootstrap.py tests/macrodb/test_mcp_read_tools.py -q`
+  exited 0 with `39 passed`.
+- `uv run ruff check src/macro_foundry/mcp/write_tools.py src/macro_foundry/services/registration.py tests/macrodb/test_write_mcp.py`
+  exited 0.
+- `rg -nP "(?<![A-Za-z])(Concept|SeriesFamily|Series)\(" src/macro_foundry/mcp/write_tools.py`
+  returned no matches.
+
 ### [2026-06-12] Issue 65 — routed bootstrap catalog writes through registration helpers
 
 Refactored the embedded catalog creation paths in the bootstrap layer to
