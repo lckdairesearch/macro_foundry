@@ -105,7 +105,6 @@ def test_compose_series_embedding_input_humanizes_enums_and_includes_parents() -
     series = Series(
         code="USA_CPI_HEADLINE_M_NSA",
         name="USA Headline CPI",
-        alt_name=["Headline CPI", "CPI-U All Items"],
         description="Headline consumer price index for the United States.",
         origin_type=OriginType.INGESTED,
         geography=geography,
@@ -119,6 +118,7 @@ def test_compose_series_embedding_input_humanizes_enums_and_includes_parents() -
         seasonal_adjustment=SeasonalAdjustment.NSA,
         is_active=True,
     )
+    series.alt_name = ["Headline CPI", "CPI-U All Items"]
     SeriesFamilyMember(
         family=family,
         series=series,
@@ -162,7 +162,6 @@ def test_compose_series_embedding_input_omits_empty_lines() -> None:
     series = Series(
         code="USA_GDP_Q",
         name="USA GDP",
-        alt_name=[],
         description="",
         origin_type=OriginType.INGESTED,
         geography=geography,
@@ -177,6 +176,7 @@ def test_compose_series_embedding_input_omits_empty_lines() -> None:
         seasonal_adjustment=SeasonalAdjustment.SAAR,
         is_active=True,
     )
+    series.alt_name = []
 
     assert compose_series_embedding_input(series) == (
         "Type: Series\n"

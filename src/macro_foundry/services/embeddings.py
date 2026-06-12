@@ -100,7 +100,8 @@ def compose_family_embedding_input(family: SeriesFamily) -> str:
 
 
 def compose_series_embedding_input(series: Series) -> str:
-    alt_names = ", ".join(series.alt_name) if series.alt_name else None
+    raw_alt_names = getattr(series, "alt_name", None)
+    alt_names = ", ".join(raw_alt_names) if raw_alt_names else None
     family_member = series.family_member
     family = family_member.family if family_member is not None else None
     concept = family.concept if family is not None else None
