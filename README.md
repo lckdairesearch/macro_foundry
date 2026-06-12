@@ -4,7 +4,7 @@ An ambitious, long-running personal project to build the macroeconomic analysis 
 
 ## What it is
 
-A canonical macro database designed for code and AI consumers, with the surrounding tooling to grow and use it. Series have semantic identifiers (`US_CPI_CORE_M_SA_LEVEL`) instead of provider tickers, every observation is vintage-tracked, and changes to the catalog are gated through a structured review workflow. On top of that foundation the eventual system includes a chat-style onboarding agent (runs end-to-end locally), a nowcasting layer, and a web frontend.
+A canonical macro database designed for code and AI consumers, with the surrounding tooling to grow and use it. Series have semantic identifiers (`US_CPI_CORE_M_SA`) instead of provider tickers, every observation is vintage-tracked, and changes to the catalog are gated through a structured review workflow. On top of that foundation the eventual system includes a chat-style onboarding agent (runs end-to-end locally), a nowcasting layer, and a web frontend.
 
 ## Try it
 

@@ -18,9 +18,7 @@ from macro_foundry.bootstrap import (
 from macro_foundry.enums import Frequency
 from macro_foundry.ingestion.providers import FredObservation, FredSeriesMetadata
 from macro_foundry.models import (
-    ComputationRunLog,
     Concept,
-    DerivedSeries,
     IngestionFeed,
     IngestionFeedMember,
     IngestionRunLog,
@@ -168,28 +166,22 @@ async def test_fred_bootstrap_creates_curated_rows_and_run_logs(
 
     assert summary.target is EnvTarget.TEST
     assert len(summary.raw_imports) == 4
-    assert len(summary.derived_imports) == 4
     assert sum(result.rows_written for result in summary.raw_imports) == 18
-    assert sum(result.rows_written for result in summary.derived_imports) == 8
 
     async with test_session_factory() as session:
         assert await _count_rows(session, Concept) == 2
         assert await _count_rows(session, SeriesFamily) == 2
-        assert await _count_rows(session, Series) == 8
-        assert await _count_rows(session, SeriesFamilyMember) == 8
+        assert await _count_rows(session, Series) == 4
+        assert await _count_rows(session, SeriesFamilyMember) == 4
         assert await _count_rows(session, SeriesSource) == 4
         assert await _count_rows(session, IngestionFeed) == 4
         assert await _count_rows(session, IngestionFeedMember) == 4
-        assert await _count_rows(session, DerivedSeries) == 4
         assert await _count_rows(session, IngestionRunLog) == 4
         assert await _count_rows(session, IngestionRunLogMember) == 4
-        assert await _count_rows(session, ComputationRunLog) == 4
-        assert await _count_rows(session, Observation) == 26
+        assert await _count_rows(session, Observation) == 18
 
-        raw_series = await _series(session, "US_CPI_HEADLINE_M_NSA_LEVEL")
-        derived_series = await _series(session, "US_CPI_HEADLINE_M_NSA_YOY")
+        raw_series = await _series(session, "US_CPI_HEADLINE_M_NSA")
         assert raw_series.start_date == date(2025, 1, 1)
-        assert derived_series.start_date == date(2026, 1, 1)
 
         source = await session.scalar(
             select(SeriesSource).where(SeriesSource.external_code == "GDP"),
@@ -267,16 +259,14 @@ async def test_fred_bootstrap_rerun_skips_unchanged_snapshot_rows(
     )
 
     assert all(result.rows_written == 0 for result in second_summary.raw_imports)
-    assert all(result.rows_written == 0 for result in second_summary.derived_imports)
     assert all(result.rows_skipped > 0 for result in second_summary.raw_imports)
     assert client.observation_starts["GDP"] == [None, date(2024, 4, 1)]
     assert client.observation_starts["CPIAUCNS"] == [None, date(2024, 8, 1)]
 
     async with test_session_factory() as session:
-        assert await _count_rows(session, Observation) == 26
+        assert await _count_rows(session, Observation) == 18
         assert await _count_rows(session, IngestionRunLog) == 8
         assert await _count_rows(session, IngestionRunLogMember) == 8
-        assert await _count_rows(session, ComputationRunLog) == 8
         zero_write_member_logs = (
             await session.execute(
                 select(IngestionRunLogMember).where(IngestionRunLogMember.rows_inserted == 0),
@@ -324,19 +314,12 @@ async def test_fred_bootstrap_rerun_inserts_only_changed_and_new_rows(
     raw_result = next(
         result
         for result in summary.raw_imports
-        if result.series_code == "US_CPI_HEADLINE_M_NSA_LEVEL"
-    )
-    derived_result = next(
-        result
-        for result in summary.derived_imports
-        if result.series_code == "US_CPI_HEADLINE_M_NSA_YOY"
+        if result.series_code == "US_CPI_HEADLINE_M_NSA"
     )
     assert raw_result.rows_written == 2
-    assert derived_result.rows_written == 2
 
     async with test_session_factory() as session:
-        raw_series = await _series(session, "US_CPI_HEADLINE_M_NSA_LEVEL")
-        derived_series = await _series(session, "US_CPI_HEADLINE_M_NSA_YOY")
+        raw_series = await _series(session, "US_CPI_HEADLINE_M_NSA")
 
         raw_rows = (
             await session.execute(
@@ -349,21 +332,6 @@ async def test_fred_bootstrap_rerun_inserts_only_changed_and_new_rows(
             )
         ).scalars().all()
         assert [row.period_start for row in raw_rows] == [
-            date(2026, 2, 1),
-            date(2026, 3, 1),
-        ]
-
-        derived_rows = (
-            await session.execute(
-                select(Observation)
-                .where(
-                    Observation.series_id == derived_series.id,
-                    Observation.vintage_date == date(2026, 6, 10),
-                )
-                .order_by(Observation.period_start),
-            )
-        ).scalars().all()
-        assert [row.period_start for row in derived_rows] == [
             date(2026, 2, 1),
             date(2026, 3, 1),
         ]
@@ -387,14 +355,13 @@ async def test_fred_bootstrap_reset_removes_curated_preset_rows_only(
         session_factory=test_session_factory,
     )
 
-    assert reset_summary.observations_deleted == 26
-    assert reset_summary.series_deleted == 8
+    assert reset_summary.observations_deleted == 18
+    assert reset_summary.series_deleted == 4
 
     async with test_session_factory() as session:
         assert await _count_rows(session, Observation) == 0
         assert await _count_rows(session, IngestionRunLog) == 0
         assert await _count_rows(session, IngestionRunLogMember) == 0
-        assert await _count_rows(session, ComputationRunLog) == 0
         assert await _count_rows(session, IngestionFeed) == 0
         assert await _count_rows(session, SeriesSource) == 0
         assert await _count_rows(session, Series) == 0

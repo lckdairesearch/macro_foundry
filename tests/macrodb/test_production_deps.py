@@ -666,7 +666,7 @@ async def test_production_deps_full_graph_through_emit_package() -> None:
             },
             "series": {
                 "action": "new",
-                "code": "CPI_USA_ALL_M_NSA_LEVEL",
+                "code": "CPI_USA_ALL_M_NSA",
                 "name": "US CPI Headline NSA",
                 "description": "US Consumer Price Index from FRED.",
                 "frequency": "M",
@@ -856,7 +856,7 @@ async def test_production_graph_flows_non_empty_cohort_into_drafter(
             },
             "series": {
                 "action": "new",
-                "code": "CPI_USA_CORE_M_NSA_LEVEL",
+                "code": "CPI_USA_CORE_M_NSA",
                 "name": "US CPI Core NSA",
                 "description": "US Consumer Price Index core variant from FRED.",
                 "frequency": "M",

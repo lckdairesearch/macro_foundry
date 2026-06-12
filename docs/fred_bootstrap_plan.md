@@ -11,12 +11,14 @@ Prove that macrodb can:
 - create curated concepts, families, series, sources, and feeds for a small
   U.S. macro preset
 - ingest raw latest-snapshot observations from FRED
-- compute derived YoY series from stored raw observations
-- write both ingestion and computation outputs into the database in a rerunnable
-  way
+- write ingestion outputs into the database in a rerunnable way
 
 This is intentionally a narrow preset bootstrap, not a general ingestion
 framework.
+
+Derived series (YoY, QoQ, etc.) are explicitly out of scope for this first
+pass. They will be added later as a separate workflow, not bundled into the
+bootstrap.
 
 ## Out of scope for first pass
 
@@ -104,26 +106,22 @@ inside the database.
 
 ### Raw ingested series
 
-- `US_GDP_NOMINAL_Q_SAAR_LEVEL`
-- `US_GDP_REAL_Q_SAAR_LEVEL`
-- `US_CPI_HEADLINE_M_NSA_LEVEL`
-- `US_CPI_CORE_M_SA_LEVEL`
+These are level series. Per `docs/series_catalog_governance.md`, level
+canonical codes omit the measure slot, so no `_LEVEL` suffix:
 
-### Derived series
-
-- `US_GDP_NOMINAL_Q_SAAR_YOY`
-- `US_GDP_REAL_Q_SAAR_YOY`
-- `US_CPI_HEADLINE_M_NSA_YOY`
-- `US_CPI_CORE_M_SA_YOY`
+- `US_GDP_NOMINAL_Q_SAAR`
+- `US_GDP_REAL_Q_SAAR`
+- `US_CPI_HEADLINE_M_NSA`
+- `US_CPI_CORE_M_SA`
 
 ## Raw FRED mappings
 
 The first preset should wire these external codes:
 
-- `GDP` -> `US_GDP_NOMINAL_Q_SAAR_LEVEL`
-- `GDPC1` -> `US_GDP_REAL_Q_SAAR_LEVEL`
-- `CPIAUCNS` -> `US_CPI_HEADLINE_M_NSA_LEVEL`
-- `CPILFESL` -> `US_CPI_CORE_M_SA_LEVEL`
+- `GDP` -> `US_GDP_NOMINAL_Q_SAAR`
+- `GDPC1` -> `US_GDP_REAL_Q_SAAR`
+- `CPIAUCNS` -> `US_CPI_HEADLINE_M_NSA`
+- `CPILFESL` -> `US_CPI_CORE_M_SA`
 
 Metadata confirmed from official FRED series pages:
 
@@ -212,24 +210,11 @@ providers behave like FRED.
 
 ## Derived-series policy
 
-Derived series should be registered and computed in the same bootstrap flow.
-
-Derived outputs:
-
-- nominal GDP YoY from `US_GDP_NOMINAL_Q_SAAR_LEVEL`
-- real GDP YoY from `US_GDP_REAL_Q_SAAR_LEVEL`
-- headline CPI YoY from `US_CPI_HEADLINE_M_NSA_LEVEL`
-- core CPI YoY from `US_CPI_CORE_M_SA_LEVEL`
-
-Expected metadata choices:
-
-- `origin_type=derived` on the output series
-- `execution_policy=upstream_update` or equivalent agreed implementation choice
-- `requires_vintage_awareness=false` for this first latest-snapshot pass
-- `code_ref` points to committed repo code that performs the YoY computation
-
-Implementation should also create the corresponding `derivation_inputs` and
-write a `computation_run_log`.
+Out of scope for this preset. The schema layer still supports derivations
+(`derived_series`, `derivation_inputs`, `computation_run_log` per
+`CONTEXT.md`), but the FRED bootstrap registers and ingests level series
+only. A later workflow will register and compute derived series against the
+ingested levels.
 
 ## Suggested implementation order
 
@@ -238,13 +223,11 @@ write a `computation_run_log`.
 3. Implement the FRED provider client and provider-specific period parsing.
 4. Implement catalog upsert/orchestration for the curated preset.
 5. Implement raw latest-snapshot observation ingest with run-log recording.
-6. Implement YoY computation and computation-run-log recording.
-7. Add tests around:
+6. Add tests around:
    - bootstrap catalog creation
    - first-run observation import
    - incremental rerun with unchanged data
    - incremental rerun with changed data
-   - derived-series computation
 
 ## References
 
