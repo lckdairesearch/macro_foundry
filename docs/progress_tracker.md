@@ -12,6 +12,36 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-12] Issue 62 — added `macrodb embeddings backfill` CLI
+
+Landed the ADR 0020 repair path as `macrodb embeddings backfill --target {dev|staging}`.
+The command rejects `test`, fails fast when `OPENAI_API_KEY` is absent, scans
+`concepts`, `series_families`, and `series` for stale rows using the locked
+predicate (`embedding` present, current `embedding_model`, matching
+`embedding_input_hash`), and re-embeds stale rows in batches of 50 using a
+single OpenAI embeddings call per batch. Added the embedding service module
+locally as required groundwork because the branch was missing the closed issue
+61 implementation, plus the `0012` Alembic migration and ORM columns needed for
+the command to run against real databases.
+
+One-time dev backfill note:
+
+- `uv run macrodb db migrate --target dev` upgraded `macrodb_dev` from `0011`
+  to `0012`.
+- `uv run macrodb embeddings backfill --target dev` completed successfully on
+  2026-06-12 and was a no-op: `concepts: 0 stale`, `series_families: 0 stale`,
+  `series: 0 stale`.
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_embeddings_backfill.py -q` exited 0 with
+  `5 passed`.
+- `uv run ruff check src/macro_foundry/cli/embeddings.py src/macro_foundry/cli/_app.py src/macro_foundry/cli/__init__.py src/macro_foundry/models/concept.py src/macro_foundry/models/series.py src/macro_foundry/models/_vector.py src/macro_foundry/services/__init__.py src/macro_foundry/services/embeddings.py tests/macrodb/test_embeddings_backfill.py alembic/versions/0012_catalog_embedding_columns.py`
+  exited 0.
+- `uv run macrodb db migrate --target test` reported `before=0012 after=0012`.
+- `uv run macrodb embeddings backfill --target dev` reported `0 stale` for all
+  three embedded tables; rerunnable no-op confirmed on the live command path.
+
 ### [2026-06-12] Onboarding — designed `check_db` node and catalog embeddings
 
 Two Proposed ADRs and one prompt landed as the design anchor for the
