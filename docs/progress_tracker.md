@@ -12,6 +12,45 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-12] CLI — added `macrodb db migrate --target {dev|test}`
+
+Plugged the ergonomic gap surfaced by the `series.alt_name` rollout:
+`uv run alembic upgrade head` only ever touched `MACRODB_OWNER_URL`
+(= `macrodb_dev`), so the test database silently drifted behind the
+model whenever a migration landed locally, and `macrodb serve api
+--target test` would 500 on any table the migration added a column to.
+
+New surface:
+
+```
+macrodb db migrate --target {dev|test} [--revision REV] [--downgrade] [--json]
+```
+
+`--target` defaults to `dev`, matching the rest of the CLI. The
+command resolves the owner-role URL for the selected target via a new
+`owner_url_for_env_target` helper (reuses the database-name swap
+pattern from `tests/conftest.py:_owner_test_url`), then runs Alembic
+programmatically. Output is key=value (or JSON) and includes
+before/after revisions so a no-op upgrade is obvious from a glance.
+
+`alembic/env.py` now respects a pre-set `sqlalchemy.url` on the
+Alembic Config and only falls back to `settings.db.owner_url` when
+nothing is set, so terminal `uv run alembic upgrade head` continues to
+work unchanged.
+
+Verification:
+
+- `uv run macrodb db migrate --target dev` → `before=0011 after=0011`
+  (no-op, dev already at head).
+- `uv run macrodb db migrate --target test --downgrade --revision 0010` →
+  `before=0011 after=0010`.
+- `uv run macrodb db migrate --target test --json` →
+  `{"target":"test","direction":"upgrade","revision":"head","before":"0010","after":"0011"}`.
+- Direct SQL probe against both URLs confirms `macrodb_dev` and
+  `macrodb_test` are distinct physical databases and both carry the
+  `series.alt_name` column.
+- `uv run ruff check` clean across all touched files.
+
 ### [2026-06-12] Series — added `alt_name` column and brought FRED bootstrap prose to skill
 
 Added `alt_name text[]` (nullable) to `series`, mirroring the existing

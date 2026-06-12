@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from enum import Enum
 
+from sqlalchemy.engine import make_url
+
 from macro_foundry.config import settings
 
 
@@ -31,4 +33,22 @@ def database_url_for_env_target(target: EnvTarget) -> str:
     return settings.db.app_url
 
 
-__all__ = ["EnvTarget", "database_url_for_env_target"]
+def owner_url_for_env_target(target: EnvTarget) -> str:
+    """Resolve the owner-role database URL for an environment target.
+
+    Reuses MACRODB_OWNER_URL's host/credentials but substitutes the
+    database name of the selected target. This mirrors the pattern in
+    tests/conftest.py so migrations can land on whichever physical
+    database the user is operating against.
+    """
+
+    owner = make_url(settings.db.owner_url)
+    if target is EnvTarget.DEV:
+        return owner.render_as_string(hide_password=False)
+    target_db = make_url(database_url_for_env_target(target)).database
+    if target_db is None:
+        raise ValueError(f"Cannot resolve database name for target {target.value!r}")
+    return owner.set(database=target_db).render_as_string(hide_password=False)
+
+
+__all__ = ["EnvTarget", "database_url_for_env_target", "owner_url_for_env_target"]

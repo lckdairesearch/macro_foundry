@@ -3,19 +3,89 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Annotated
 
 import typer
+from alembic import command as alembic_command
+from alembic.config import Config as AlembicConfig
+from alembic.runtime.migration import MigrationContext
+from sqlalchemy import create_engine
 
-from macro_foundry.db import EnvTarget
+from macro_foundry.db import EnvTarget, owner_url_for_env_target
 
 from . import _helpers
 from ._app import db_app
 
 _DEV_OR_TEST = {EnvTarget.DEV, EnvTarget.TEST}
+_ALEMBIC_INI = Path(__file__).resolve().parents[3] / "alembic.ini"
+
+
+def _alembic_config_for(url: str) -> AlembicConfig:
+    config = AlembicConfig(str(_ALEMBIC_INI))
+    config.set_main_option("sqlalchemy.url", url)
+    return config
+
+
+def _current_revision(url: str) -> str | None:
+    engine = create_engine(url, poolclass=None)
+    try:
+        with engine.connect() as connection:
+            return MigrationContext.configure(connection).get_current_revision()
+    finally:
+        engine.dispose()
+
 
 bootstrap_app = typer.Typer(help="Curated bootstrap/import commands.")
 db_app.add_typer(bootstrap_app, name="bootstrap")
+
+
+@db_app.command("migrate")
+@_helpers.cli_error_handler
+def migrate(
+    target: Annotated[
+        EnvTarget,
+        typer.Option("--target", case_sensitive=False, help="Target dev or test database."),
+    ] = EnvTarget.DEV,
+    revision: Annotated[
+        str,
+        typer.Option("--revision", help="Alembic revision identifier (default: head)."),
+    ] = "head",
+    downgrade: Annotated[
+        bool,
+        typer.Option("--downgrade", help="Downgrade to --revision instead of upgrading."),
+    ] = False,
+    output_json: Annotated[
+        bool,
+        typer.Option("--json", help="Emit results as JSON instead of key=value lines."),
+    ] = False,
+) -> None:
+    """Run Alembic migrations against the selected database as macrodb_owner."""
+
+    if target not in _DEV_OR_TEST:
+        typer.echo(f"db migrate does not support --target {target.value} (allowed: dev, test)", err=True)
+        raise typer.Exit(code=2)
+
+    url = owner_url_for_env_target(target)
+    config = _alembic_config_for(url)
+
+    before = _current_revision(url)
+    if downgrade:
+        alembic_command.downgrade(config, revision)
+    else:
+        alembic_command.upgrade(config, revision)
+    after = _current_revision(url)
+
+    _helpers.print_result(
+        {
+            "target": target.value,
+            "direction": "downgrade" if downgrade else "upgrade",
+            "revision": revision,
+            "before": before or "base",
+            "after": after or "base",
+        },
+        as_json=output_json,
+    )
 
 
 @bootstrap_app.command("fred-us-macro")

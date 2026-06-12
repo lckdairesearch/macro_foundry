@@ -1,7 +1,7 @@
 """Database package."""
 
 from macro_foundry.db.base import Base, CreatedAtBase, TimestampedBase
-from macro_foundry.db.env_target import EnvTarget, database_url_for_env_target
+from macro_foundry.db.env_target import EnvTarget, database_url_for_env_target, owner_url_for_env_target
 from macro_foundry.db.session import (
     AsyncSessionLocal,
     async_engine,
@@ -23,4 +23,5 @@ __all__ = [
     "create_session_factory",
     "database_url_for_env_target",
     "get_session",
+    "owner_url_for_env_target",
 ]
