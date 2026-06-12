@@ -43,6 +43,40 @@ Verification:
   exited 0
 - live OpenAI probe through `embed_text("headline inflation rate, monthly, United States")`
   returned a `list[float]` of length `1536`
+
+### [2026-06-12] Issue 60 — catalog embedding schema migration and local pgvector support
+
+Landed the schema foundation from ADR 0020:
+
+- Alembic revision `0012_catalog_embedding_columns.py` adds
+  `embedding vector(1536)`, `embedding_model text`, and
+  `embedding_input_hash text` to `concepts`, `series_families`, and
+  `series`, plus one HNSW cosine index per table.
+- Downgrade drops the three column sets and the HNSW indexes while
+  leaving the `vector` extension installed.
+- `tests/shared/test_migrations.py` now covers both directions:
+  `head` exposes the columns/indexes and supports a real vector
+  insert/cosine query on `concepts`; downgrade to `0011` removes the
+  embedding schema but keeps the extension in place before re-upgrading
+  to `head`.
+
+Local-infra note: the issue looked migration-only, but local Docker did
+not actually provide pgvector. To make the acceptance criteria real on a
+fresh local environment, `docker-compose.yml` now uses the official
+`pgvector/pgvector:0.8.2-pg18` image and
+`docker/postgres/init/01_roles.sql` enables `vector` in both
+`macrodb_dev` and `macrodb_test` during first boot. This keeps Alembic
+running as `macrodb_owner` while avoiding a local-only privilege failure
+on `CREATE EXTENSION`.
+
+Verification:
+
+- `.venv/bin/pytest tests/shared/test_migrations.py -q` exited 0 with
+  `3 passed`.
+- `.venv/bin/ruff check alembic/versions/0012_catalog_embedding_columns.py tests/shared/test_migrations.py`
+  exited 0.
+- `.venv/bin/macrodb db migrate --target test` exited 0 with
+  `before=0012 after=0012`.
 ### [2026-06-12] Onboarding — designed `check_db` node and catalog embeddings
 
 Two Proposed ADRs and one prompt landed as the design anchor for the

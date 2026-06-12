@@ -6,6 +6,7 @@ import asyncio
 
 from alembic import command
 from alembic.config import Config
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from macro_foundry.config import settings
@@ -35,6 +36,10 @@ EXPECTED_TABLES = {
     "series_tags",
     "tags",
 }
+
+EMBEDDED_TABLES = ("concepts", "series", "series_families")
+EMBEDDED_COLUMNS = ("embedding", "embedding_input_hash", "embedding_model")
+VECTOR_LITERAL = "[" + ",".join(["0.1"] * 1536) + "]"
 
 
 async def _assert_round_trip_and_reseed() -> None:
@@ -136,6 +141,173 @@ async def _assert_round_trip_and_reseed() -> None:
         await app_engine.dispose()
 
 
+async def _assert_catalog_embedding_schema() -> None:
+    owner_engine = create_async_engine(settings.db.owner_url, pool_pre_ping=True)
+
+    try:
+        async with owner_engine.connect() as conn:
+            extension_name = (
+                await conn.execute(
+                    text("SELECT extname FROM pg_extension WHERE extname = 'vector'"),
+                )
+            ).scalar_one_or_none()
+            assert extension_name == "vector"
+
+            column_rows = await conn.execute(
+                text(
+                    """
+                    SELECT table_name, column_name, udt_name
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND table_name = ANY(:tables)
+                      AND column_name = ANY(:columns)
+                    ORDER BY table_name, column_name
+                    """,
+                ),
+                {"tables": list(EMBEDDED_TABLES), "columns": list(EMBEDDED_COLUMNS)},
+            )
+            assert {
+                (row.table_name, row.column_name, row.udt_name) for row in column_rows
+            } == {
+                ("concepts", "embedding", "vector"),
+                ("concepts", "embedding_input_hash", "text"),
+                ("concepts", "embedding_model", "text"),
+                ("series", "embedding", "vector"),
+                ("series", "embedding_input_hash", "text"),
+                ("series", "embedding_model", "text"),
+                ("series_families", "embedding", "vector"),
+                ("series_families", "embedding_input_hash", "text"),
+                ("series_families", "embedding_model", "text"),
+            }
+
+            index_rows = await conn.execute(
+                text(
+                    """
+                    SELECT tablename, indexdef
+                    FROM pg_indexes
+                    WHERE schemaname = 'public'
+                      AND tablename = ANY(:tables)
+                    """,
+                ),
+                {"tables": list(EMBEDDED_TABLES)},
+            )
+            index_defs_by_table = {
+                row.tablename: row.indexdef
+                for row in index_rows
+                if "USING hnsw" in row.indexdef and "vector_cosine_ops" in row.indexdef
+            }
+            assert set(index_defs_by_table) == set(EMBEDDED_TABLES)
+
+            concept_id = (
+                await conn.execute(
+                    text(
+                        """
+                        INSERT INTO concepts (
+                            code,
+                            name,
+                            description,
+                            embedding,
+                            embedding_model,
+                            embedding_input_hash
+                        )
+                        VALUES (
+                            :code,
+                            :name,
+                            :description,
+                            CAST(:embedding AS vector(1536)),
+                            :embedding_model,
+                            :embedding_input_hash
+                        )
+                        ON CONFLICT (code) DO UPDATE
+                        SET name = EXCLUDED.name,
+                            description = EXCLUDED.description,
+                            embedding = EXCLUDED.embedding,
+                            embedding_model = EXCLUDED.embedding_model,
+                            embedding_input_hash = EXCLUDED.embedding_input_hash
+                        RETURNING id
+                        """,
+                    ),
+                    {
+                        "code": "TEST_EMBEDDING_CONCEPT",
+                        "name": "Test embedding concept",
+                        "description": "Vector migration smoke test",
+                        "embedding": VECTOR_LITERAL,
+                        "embedding_model": "text-embedding-3-small",
+                        "embedding_input_hash": "test-input-hash",
+                    },
+                )
+            ).scalar_one()
+
+            nearest_id = (
+                await conn.execute(
+                    text(
+                        """
+                        SELECT id
+                        FROM concepts
+                        WHERE embedding IS NOT NULL
+                        ORDER BY embedding <=> CAST(:embedding AS vector(1536))
+                        LIMIT 1
+                        """,
+                    ),
+                    {"embedding": VECTOR_LITERAL},
+                )
+            ).scalar_one()
+            assert nearest_id == concept_id
+    finally:
+        await owner_engine.dispose()
+
+
+async def _assert_catalog_embedding_schema_removed_but_extension_persists() -> None:
+    owner_engine = create_async_engine(settings.db.owner_url, pool_pre_ping=True)
+
+    try:
+        async with owner_engine.connect() as conn:
+            extension_name = (
+                await conn.execute(
+                    text("SELECT extname FROM pg_extension WHERE extname = 'vector'"),
+                )
+            ).scalar_one_or_none()
+            assert extension_name == "vector"
+
+            column_rows = await conn.execute(
+                text(
+                    """
+                    SELECT table_name, column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND table_name = ANY(:tables)
+                      AND column_name = ANY(:columns)
+                    """,
+                ),
+                {"tables": list(EMBEDDED_TABLES), "columns": list(EMBEDDED_COLUMNS)},
+            )
+            assert list(column_rows) == []
+
+            index_rows = await conn.execute(
+                text(
+                    """
+                    SELECT indexname
+                    FROM pg_indexes
+                    WHERE schemaname = 'public'
+                      AND tablename = ANY(:tables)
+                    """,
+                ),
+                {"tables": list(EMBEDDED_TABLES)},
+            )
+            hnsw_indexes = [
+                row.indexname
+                for row in index_rows
+                if row.indexname in {
+                    "ix_concepts_embedding_hnsw",
+                    "ix_series_embedding_hnsw",
+                    "ix_series_families_embedding_hnsw",
+                }
+            ]
+            assert hnsw_indexes == []
+    finally:
+        await owner_engine.dispose()
+
+
 def test_alembic_round_trip_recreates_schema_and_view(
     alembic_config: Config,
 ) -> None:
@@ -143,3 +315,17 @@ def test_alembic_round_trip_recreates_schema_and_view(
     command.upgrade(alembic_config, "head")
 
     asyncio.run(_assert_round_trip_and_reseed())
+
+
+def test_head_migration_adds_catalog_embedding_schema() -> None:
+    asyncio.run(_assert_catalog_embedding_schema())
+
+
+def test_downgrade_to_0011_removes_embedding_schema_but_keeps_extension(
+    alembic_config: Config,
+) -> None:
+    command.downgrade(alembic_config, "0011")
+    asyncio.run(_assert_catalog_embedding_schema_removed_but_extension_persists())
+
+    command.upgrade(alembic_config, "head")
+    asyncio.run(_assert_catalog_embedding_schema())

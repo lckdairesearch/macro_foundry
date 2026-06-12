@@ -55,6 +55,8 @@ GRANT CONNECT ON DATABASE macrodb_test TO macrodb_app;
 
 \connect macrodb_dev
 
+CREATE EXTENSION IF NOT EXISTS vector;
+
 GRANT USAGE ON SCHEMA public TO macrodb_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO macrodb_app;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO macrodb_app;
@@ -66,6 +68,8 @@ ALTER DEFAULT PRIVILEGES FOR ROLE macrodb_owner IN SCHEMA public
     GRANT USAGE, SELECT ON SEQUENCES TO macrodb_app;
 
 \connect macrodb_test
+
+CREATE EXTENSION IF NOT EXISTS vector;
 
 GRANT USAGE ON SCHEMA public TO macrodb_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO macrodb_app;
