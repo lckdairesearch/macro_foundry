@@ -33,7 +33,7 @@ def test_dangerous_correction_plan_model_validates() -> None:
     plan = DangerousCorrectionPlan(
         collision_column="series.code",
         existing_code="CPI_HKG_ALL_M",
-        proposed_code="CPI_HKG_HEADLINE_M_NSA_LEVEL",
+        proposed_code="CPI_HKG_HEADLINE_M_NSA",
         affected_source_mappings=["src-uuid-1"],
         affected_feeds=["feed-uuid-1"],
         affected_observations_count=142,
@@ -56,7 +56,7 @@ def test_dangerous_correction_plan_requires_repair_strategy_in_allowed_set() -> 
         DangerousCorrectionPlan(
             collision_column="series.code",
             existing_code="CPI_HKG_ALL_M",
-            proposed_code="CPI_HKG_HEADLINE_M_NSA_LEVEL",
+            proposed_code="CPI_HKG_HEADLINE_M_NSA",
             affected_source_mappings=[],
             affected_feeds=[],
             affected_observations_count=0,
@@ -79,7 +79,7 @@ async def test_dangerous_correction_plan_node_records_plan_in_state() -> None:
     plan_dict = {
         "collision_column": "series.code",
         "existing_code": "CPI_HKG_ALL_M",
-        "proposed_code": "CPI_HKG_HEADLINE_M_NSA_LEVEL",
+        "proposed_code": "CPI_HKG_HEADLINE_M_NSA",
         "affected_source_mappings": ["src-1"],
         "affected_feeds": ["feed-1"],
         "affected_observations_count": 10,
@@ -93,7 +93,7 @@ async def test_dangerous_correction_plan_node_records_plan_in_state() -> None:
 
     state: dict[str, Any] = {
         "collision_detail": {"column": "series.code", "existing_code": "CPI_HKG_ALL_M"},
-        "proposal": {"series": {"code": "CPI_HKG_HEADLINE_M_NSA_LEVEL"}},
+        "proposal": {"series": {"code": "CPI_HKG_HEADLINE_M_NSA"}},
     }
     result = await node(state)
 
@@ -119,7 +119,7 @@ async def test_gate_2_wait_approve_sets_gate_2_approved() -> None:
     plan_dict = {
         "collision_column": "series.code",
         "existing_code": "CPI_HKG_ALL_M",
-        "proposed_code": "CPI_HKG_HEADLINE_M_NSA_LEVEL",
+        "proposed_code": "CPI_HKG_HEADLINE_M_NSA",
         "affected_source_mappings": [],
         "affected_feeds": [],
         "affected_observations_count": 0,
@@ -174,7 +174,7 @@ async def test_dangerous_correction_executor_applies_repair_and_records_result()
     plan_dict = {
         "collision_column": "series.code",
         "existing_code": "CPI_HKG_ALL_M",
-        "proposed_code": "CPI_HKG_HEADLINE_M_NSA_LEVEL",
+        "proposed_code": "CPI_HKG_HEADLINE_M_NSA",
         "affected_source_mappings": ["src-1"],
         "affected_feeds": ["feed-1"],
         "affected_observations_count": 10,
@@ -374,7 +374,7 @@ async def test_graph_small_edit_happy_path_no_collision() -> None:
 
     graph = _build_graph(
         gate_1_picker=_gate_1_picker,
-        approval_llm=AsyncMock(return_value={"edit_instructions": "rename series.code to CPI_HKG_ALL_M_NSA_LEVEL"}),
+        approval_llm=AsyncMock(return_value={"edit_instructions": "rename series.code to CPI_HKG_ALL_M_NSA"}),
         unique_checker=unique_checker,
         collision_picker=None,
         draft_llm=_draft_llm_stub(_DRAFT_PAYLOAD),
@@ -427,7 +427,7 @@ async def test_graph_collision_paths_route_correctly(collision_choice: str) -> N
     plan_dict = {
         "collision_column": "series.code",
         "existing_code": "CPI_HKG_ALL_M",
-        "proposed_code": "CPI_HKG_ALL_M_NSA_LEVEL",
+        "proposed_code": "CPI_HKG_ALL_M_NSA",
         "affected_source_mappings": [],
         "affected_feeds": [],
         "affected_observations_count": 0,
@@ -489,7 +489,7 @@ async def test_graph_dangerous_correction_full_session() -> None:
     plan_dict = {
         "collision_column": "series.code",
         "existing_code": "CPI_HKG_ALL_M",
-        "proposed_code": "CPI_HKG_ALL_M_NSA_LEVEL",
+        "proposed_code": "CPI_HKG_ALL_M_NSA",
         "affected_source_mappings": ["src-1"],
         "affected_feeds": ["feed-1"],
         "affected_observations_count": 99,
@@ -502,7 +502,7 @@ async def test_graph_dangerous_correction_full_session() -> None:
 
     graph = _build_graph(
         gate_1_picker=_gate_1_picker,
-        approval_llm=AsyncMock(return_value={"edit_instructions": "rename series.code to CPI_HKG_ALL_M_NSA_LEVEL"}),
+        approval_llm=AsyncMock(return_value={"edit_instructions": "rename series.code to CPI_HKG_ALL_M_NSA"}),
         unique_checker=AsyncMock(return_value=collision_detail),
         collision_picker=AsyncMock(return_value="challenge_existing"),
         draft_llm=_draft_llm_stub(_DRAFT_PAYLOAD),

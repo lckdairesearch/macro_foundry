@@ -4,32 +4,44 @@ An ambitious, long-running personal project to build the macroeconomic analysis 
 
 ## What it is
 
-A canonical macro database designed for code and AI consumers, with the surrounding tooling to grow and use it. Series have semantic identifiers (`US_CPI_CORE_M_SA_LEVEL`) instead of provider tickers, every observation is vintage-tracked, and changes to the catalog are gated through a structured review workflow. On top of that foundation the eventual system includes a chat-style onboarding agent (in implementation), a nowcasting layer, and a web frontend.
+A canonical macro database designed for code and AI consumers, with the surrounding tooling to grow and use it. Series have semantic identifiers (`US_CPI_CORE_M_SA`) instead of provider tickers, every observation is vintage-tracked, and changes to the catalog are gated through a structured review workflow. On top of that foundation the eventual system includes a chat-style onboarding agent (runs end-to-end locally), a nowcasting layer, and a web frontend.
 
 ## Try it
 
 ```bash
 git clone https://github.com/lckdairesearch/macro_foundry && cd macro_foundry
-cp .env.example .env.local            # add MACRODB_* and FRED_API_KEY
+cp .env.example .env.local            # add MACRODB_*, FRED_API_KEY, OPENAI_API_KEY
 docker compose --env-file .env.local up -d
-uv sync && alembic upgrade head
-uv run macrodb seed
-uv run macrodb bootstrap fred-us-macro --database app
-uv run macrodb serve
+uv sync && uv run alembic upgrade head
+uv run macrodb seed --target dev
+uv run macrodb db bootstrap fred-us-macro --target dev
+uv run macrodb serve api --target dev
 ```
+
+`--target dev` resolves to the local `macrodb_dev` database using the `macrodb_app` role (`MACRODB_APP_URL`). Target availability is command-specific; `prod` is never a CLI target. Migrations run as `macrodb_owner` via `MACRODB_OWNER_URL`.
 
 Then open:
 - **API docs** — http://127.0.0.1:8000/docs
 - **Admin UI** — http://127.0.0.1:8000/admin
 
-Run the test suite with `uv run pytest` (~80 tests).
+Run the test suite with `uv run pytest`.
+
+### Try the onboarding agent
+
+With the catalog seeded (above), open a chat-style onboarding session and describe a source in natural language:
+
+```bash
+uv run macrodb onboard --target dev --cost-cap 2.00
+```
+
+It needs `OPENAI_API_KEY` set and makes real LLM calls — `--cost-cap` is a hard spend limit. `/save` or Ctrl-D checkpoints and exits; resume with `uv run macrodb onboard --target dev --resume <session-id>`.
 
 ## Status
 
 | Component | State |
 |---|---|
 | `macrodb` — curated database, FastAPI, SQLAdmin, seed, FRED bootstrap | Built and working locally; Neon parity next |
-| Gated onboarding agent | Designed (ADRs 0011 / 0012, issue [#19](https://github.com/lckdairesearch/macro_foundry/issues/19)); implementation in progress |
+| Gated onboarding agent | Runs end-to-end locally — chat-style LangGraph session, custom MCP catalog server, real OpenAI calls (PRD [#32](https://github.com/lckdairesearch/macro_foundry/issues/32), ADRs 0011–0016) |
 | Nowcasting | Planned; not started |
 | Frontend | Planned; not started |
 

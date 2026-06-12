@@ -78,8 +78,7 @@ backward-compatible aliases.
   `prod` is deliberately absent: the CLI never targets production
   (promotion is an outer workflow). The flag is always `--target`.
   Each command declares the subset it accepts and rejects the rest with
-  a uniform error (e.g. `seed` refuses `staging`; `onboard` refuses
-  `test`). The `app` value is retired.
+  a uniform error (e.g. `seed` refuses `staging`). The `app` value is retired.
 
 - **One raw-URL escape hatch.** `--database-url` survives only on
   `serve mcp`, where an MCP client may need to point a process at an
@@ -104,7 +103,7 @@ backward-compatible aliases.
 ### Command tree
 
 ```
-macrodb onboard [--target dev|staging] [--resume ID]
+macrodb onboard [--target dev|test|staging] [--resume ID]
                 [--model ROLE=NAME ...] [--cost-cap USD]
 macrodb seed    [--only ...] [--dry-run] [--reset] [-y]   --target dev|test
 macrodb db bootstrap <preset> [--reset] [-y]              --target dev|test
@@ -141,9 +140,9 @@ macrodb serve mcp  [--write] [--database-url URL]         --target dev|test|stag
   this is pre-1.0 internal tooling with a single operator, no alias
   shim is provided.
 - `EnvTarget` replaces `DatabaseTarget` and `OnboardingTarget`; their
-  `database_url_for_*` resolvers consolidate into one
-  `database_url_for_target(EnvTarget)` with per-command subset
-  validation at the CLI boundary.
+  target resolvers consolidate into `app_url_for_target(EnvTarget)` and
+  `owner_url_for_target(EnvTarget)` with per-command subset validation at
+  the CLI boundary.
 - Implementation is deferred. This ADR is the spec; the refactor lands
   as a follow-up once accepted.
 

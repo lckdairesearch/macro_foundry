@@ -6,6 +6,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.orm import selectinload
 
 from macro_foundry.agent.catalog import make_apply_catalog_node
 from macro_foundry.agent.proposal import (
@@ -21,9 +22,21 @@ from macro_foundry.agent.proposal import (
 from macro_foundry.backend.main import admin, app
 from macro_foundry.config import settings
 from macro_foundry.enums import Action, ItemType, ProposalStatus, ProposalType, RequestedBy, RiskLevel, TargetType, ValidationStatus
-from macro_foundry.models import ChangeProposal, ChangeProposalItem, IngestionFeedMember, Provider, Series, SeriesSource
+from macro_foundry.models import (
+    ChangeProposal,
+    ChangeProposalItem,
+    Concept,
+    Geography,
+    IngestionFeedMember,
+    Provider,
+    Series,
+    SeriesFamily,
+    SeriesFamilyMember,
+    SeriesSource,
+)
 from macro_foundry.mcp.write_tools import (
     ApplyCredentialGapResolutionsArgs,
+    ApplyApprovedProposalArgs,
     MacrodbWriteTools,
     MarkProposalOutcomeArgs,
     ProposeCreateSeriesArgs,
@@ -31,11 +44,29 @@ from macro_foundry.mcp.write_tools import (
     RecordEnumGapProposalArgs,
     RecordSuggestHumanApplyArgs,
 )
+from macro_foundry.services.embeddings import (
+    EMBEDDING_DIMENSIONS,
+    EMBEDDING_MODEL,
+    compose_series_embedding_input,
+    hash_embedding_input,
+)
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def mock_registration_embed_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_embed_text(text: str) -> list[float]:
+        fill = float((sum(ord(ch) for ch in text) % 17) + 1)
+        return [fill] * EMBEDDING_DIMENSIONS
+
+    monkeypatch.setattr(
+        "macro_foundry.services.registration.embed_text",
+        fake_embed_text,
+    )
 
 
 def _minimal_draft_payload(series_code: str) -> dict:
@@ -277,6 +308,302 @@ async def test_apply_approved_proposal_validates_status(
 
 
 @pytest.mark.asyncio
+async def test_apply_approved_proposal_materializes_concept_with_embeddings(
+    session: AsyncSession,
+) -> None:
+    tools = MacrodbWriteTools(session)
+    proposal = ChangeProposal(
+        title="approved concept proposal",
+        proposal_type=ProposalType.ADD_CONCEPT,
+        status=ProposalStatus.APPROVED,
+        requested_by=RequestedBy.AGENT,
+        risk_level=RiskLevel.LOW,
+        source_agent_session_id="sess-apply-concept-001",
+        created_by_agent="onboarding_agent",
+    )
+    session.add(proposal)
+    await session.flush()
+    session.add(
+        ChangeProposalItem(
+            proposal_id=proposal.id,
+            item_type=ItemType.DB_ROW,
+            target_type=TargetType.CONCEPTS,
+            action=Action.INSERT,
+            proposed_data={
+                "code": "APPLIED_CONCEPT_66",
+                "name": "Applied Concept 66",
+                "description": "Approved concept proposal materialization.",
+            },
+            validation_status=ValidationStatus.PASSED,
+        ),
+    )
+    await session.flush()
+
+    result = await tools.apply_approved_proposal(
+        ApplyApprovedProposalArgs(approved_proposal_id=proposal.id),
+    )
+
+    concept = (
+        await session.execute(select(Concept).where(Concept.code == "APPLIED_CONCEPT_66"))
+    ).scalar_one()
+    assert result["status"] == ProposalStatus.APPLIED.value
+    assert concept.embedding is not None
+    assert concept.embedding_model == EMBEDDING_MODEL
+    assert concept.embedding_input_hash is not None
+
+
+@pytest.mark.asyncio
+async def test_apply_approved_proposal_materializes_family_with_embeddings(
+    session: AsyncSession,
+) -> None:
+    tools = MacrodbWriteTools(session)
+    concept = Concept(
+        code="FAMILY_PARENT_CONCEPT_66",
+        name="Family Parent Concept 66",
+        description="Parent concept for approved family proposal.",
+    )
+    session.add(concept)
+    await session.flush()
+    geography = (
+        await session.execute(select(Geography).where(Geography.code == "HKG"))
+    ).scalar_one()
+
+    proposal = ChangeProposal(
+        title="approved family proposal",
+        proposal_type=ProposalType.ADD_FAMILY,
+        status=ProposalStatus.APPROVED,
+        requested_by=RequestedBy.AGENT,
+        risk_level=RiskLevel.LOW,
+        source_agent_session_id="sess-apply-family-001",
+        created_by_agent="onboarding_agent",
+    )
+    session.add(proposal)
+    await session.flush()
+    session.add(
+        ChangeProposalItem(
+            proposal_id=proposal.id,
+            item_type=ItemType.DB_ROW,
+            target_type=TargetType.SERIES_FAMILIES,
+            action=Action.INSERT,
+            proposed_data={
+                "code": "APPLIED_FAMILY_66",
+                "name": "Applied Family 66",
+                "description": "Approved family proposal materialization.",
+                "concept_code": concept.code,
+                "geography_code": geography.code,
+            },
+            validation_status=ValidationStatus.PASSED,
+        ),
+    )
+    await session.flush()
+
+    result = await tools.apply_approved_proposal(
+        ApplyApprovedProposalArgs(approved_proposal_id=proposal.id),
+    )
+
+    family = (
+        await session.execute(
+            select(SeriesFamily).where(SeriesFamily.code == "APPLIED_FAMILY_66")
+        )
+    ).scalar_one()
+    assert result["status"] == ProposalStatus.APPLIED.value
+    assert family.embedding is not None
+    assert family.embedding_model == EMBEDDING_MODEL
+    assert family.embedding_input_hash is not None
+
+
+@pytest.mark.asyncio
+async def test_apply_approved_proposal_materializes_series_with_current_family_context(
+    session: AsyncSession,
+) -> None:
+    tools = MacrodbWriteTools(session)
+    geography = (
+        await session.execute(select(Geography).where(Geography.code == "HKG"))
+    ).scalar_one()
+    concept = Concept(
+        code="SERIES_PARENT_CONCEPT_66",
+        name="Series Parent Concept 66",
+        description="Parent concept for approved series proposal.",
+    )
+    session.add(concept)
+    await session.flush()
+    family = SeriesFamily(
+        code="SERIES_PARENT_FAMILY_66",
+        name="Series Parent Family 66",
+        description="Parent family for approved series proposal.",
+        concept_id=concept.id,
+        geography_id=geography.id,
+    )
+    session.add(family)
+    await session.flush()
+
+    proposal = ChangeProposal(
+        title="approved series proposal",
+        proposal_type=ProposalType.ADD_PROVIDER_SERIES,
+        status=ProposalStatus.APPROVED,
+        requested_by=RequestedBy.AGENT,
+        risk_level=RiskLevel.LOW,
+        source_agent_session_id="sess-apply-series-001",
+        created_by_agent="onboarding_agent",
+    )
+    session.add(proposal)
+    await session.flush()
+    session.add_all(
+        [
+            ChangeProposalItem(
+                proposal_id=proposal.id,
+                item_type=ItemType.DB_ROW,
+                target_type=TargetType.SERIES,
+                action=Action.INSERT,
+                proposed_data={
+                    "code": "APPLIED_SERIES_66",
+                    "name": "Applied Series 66",
+                    "description": "Approved series proposal materialization.",
+                    "origin_type": "ingested",
+                    "geography_code": geography.code,
+                    "frequency": "M",
+                    "temporal_stock_flow": "index",
+                    "unit_kind": "index",
+                    "unit_scale": "one",
+                    "measure": "level",
+                    "annualized": False,
+                    "seasonal_adjustment": "NSA",
+                    "is_active": True,
+                },
+                validation_status=ValidationStatus.PASSED,
+            ),
+            ChangeProposalItem(
+                proposal_id=proposal.id,
+                item_type=ItemType.DB_ROW,
+                target_type=TargetType.SERIES_FAMILY_MEMBERS,
+                action=Action.INSERT,
+                proposed_data={
+                    "family_code": family.code,
+                    "series_code": "APPLIED_SERIES_66",
+                    "variant": "headline",
+                    "is_primary": True,
+                },
+                validation_status=ValidationStatus.PASSED,
+            ),
+        ]
+    )
+    await session.flush()
+
+    result = await tools.apply_approved_proposal(
+        ApplyApprovedProposalArgs(approved_proposal_id=proposal.id),
+    )
+
+    session.expire_all()
+    series = (
+        await session.execute(
+            select(Series)
+            .options(
+                selectinload(Series.geography),
+                selectinload(Series.family_member)
+                .selectinload(SeriesFamilyMember.family)
+                .selectinload(SeriesFamily.concept),
+            )
+            .where(Series.code == "APPLIED_SERIES_66")
+        )
+    ).scalar_one()
+    assert result["status"] == ProposalStatus.APPLIED.value
+    assert series.embedding is not None
+    assert series.embedding_model == EMBEDDING_MODEL
+    assert series.embedding_input_hash == hash_embedding_input(
+        compose_series_embedding_input(series)
+    )
+    assert series.family_member is not None
+    assert series.family_member.family_id == family.id
+
+
+@pytest.mark.asyncio
+async def test_apply_approved_proposal_rolls_back_partial_writes_when_embedding_fails(
+    session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+
+    async def flaky_embed_text(text: str) -> list[float]:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("embedding failure during approval")
+        return [1.0] * EMBEDDING_DIMENSIONS
+
+    monkeypatch.setattr(
+        "macro_foundry.services.registration.embed_text",
+        flaky_embed_text,
+    )
+
+    tools = MacrodbWriteTools(session)
+    geography = (
+        await session.execute(select(Geography).where(Geography.code == "HKG"))
+    ).scalar_one()
+    proposal = ChangeProposal(
+        title="approved multi-row proposal",
+        proposal_type=ProposalType.MIXED,
+        status=ProposalStatus.APPROVED,
+        requested_by=RequestedBy.AGENT,
+        risk_level=RiskLevel.LOW,
+        source_agent_session_id="sess-apply-rollback-001",
+        created_by_agent="onboarding_agent",
+    )
+    session.add(proposal)
+    await session.flush()
+    session.add_all(
+        [
+            ChangeProposalItem(
+                proposal_id=proposal.id,
+                item_type=ItemType.DB_ROW,
+                target_type=TargetType.CONCEPTS,
+                action=Action.INSERT,
+                proposed_data={
+                    "code": "ROLLBACK_CONCEPT_66",
+                    "name": "Rollback Concept 66",
+                    "description": "Should be rolled back with the failed approval.",
+                },
+                validation_status=ValidationStatus.PASSED,
+            ),
+            ChangeProposalItem(
+                proposal_id=proposal.id,
+                item_type=ItemType.DB_ROW,
+                target_type=TargetType.SERIES_FAMILIES,
+                action=Action.INSERT,
+                proposed_data={
+                    "code": "ROLLBACK_FAMILY_66",
+                    "name": "Rollback Family 66",
+                    "description": "Should be rolled back with the failed approval.",
+                    "concept_code": "ROLLBACK_CONCEPT_66",
+                    "geography_code": geography.code,
+                },
+                validation_status=ValidationStatus.PASSED,
+            ),
+        ]
+    )
+    await session.flush()
+
+    with pytest.raises(RuntimeError, match="embedding failure during approval"):
+        await tools.apply_approved_proposal(
+            ApplyApprovedProposalArgs(approved_proposal_id=proposal.id),
+        )
+
+    await session.refresh(proposal)
+    assert proposal.status == ProposalStatus.APPROVED
+    assert proposal.applied_at is None
+
+    concept = (
+        await session.execute(select(Concept).where(Concept.code == "ROLLBACK_CONCEPT_66"))
+    ).scalar_one_or_none()
+    family = (
+        await session.execute(
+            select(SeriesFamily).where(SeriesFamily.code == "ROLLBACK_FAMILY_66")
+        )
+    ).scalar_one_or_none()
+    assert concept is None
+    assert family is None
+
+
+@pytest.mark.asyncio
 async def test_mark_proposal_outcome_flips_to_applied_by_operator(
     session: AsyncSession,
 ) -> None:
@@ -451,9 +778,21 @@ async def test_apply_catalog_writes_catalog_rows_and_pending_sha_items(
     assert result["gate_1_applied"] is True
 
     # Catalog rows written
+    concept = (
+        await session.execute(select(Concept).where(Concept.code == "TST_CONCEPT_AC6"))
+    ).scalar_one()
+    family = (
+        await session.execute(select(SeriesFamily).where(SeriesFamily.code == "TST_FAM_AC6"))
+    ).scalar_one()
     series = (
         await session.execute(select(Series).where(Series.code == "TST_SERIES_AC6"))
     ).scalar_one()
+    assert concept.embedding is not None
+    assert family.embedding is not None
+    assert series.embedding is not None
+    assert concept.embedding_model == EMBEDDING_MODEL
+    assert family.embedding_model == EMBEDDING_MODEL
+    assert series.embedding_model == EMBEDDING_MODEL
     assert series.name == "Test AC6 Series"
 
     feed_member = (

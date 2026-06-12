@@ -25,9 +25,11 @@ This skill does not cover *which* family or concept a code belongs to
 ## Body
 
 To be written. Should cover: the slot definitions; the fixed suffix
-(`<freq>_<sa>_<measure>`) and right-parsing rule; the longest-known
-concept-code match for resolving the middle of a code; compound variant
-handling with separated tokens (e.g., `CORE_1P_HH`, not `CORE1PHH`); the
-default-variant omission case; common anti-patterns (provider tickers,
-reordered slots, ad-hoc abbreviations); and worked examples from the FRED
-preset (US_GDP_NOMINAL_Q_SAAR_LEVEL, US_CPI_CORE_M_SA_LEVEL).
+(`<freq>_<sa>` for levels, `<freq>_<sa>_<measure>` for non-level measures)
+and right-parsing rule; the longest-known concept-code match for resolving
+the middle of a code; compound variant handling with separated tokens
+(e.g., `CORE_1P_HH`, not `CORE1PHH`); the default-variant omission case;
+the level-default measure-omission rule (no trailing `_LEVEL`); common
+anti-patterns (provider tickers, reordered slots, ad-hoc abbreviations);
+and worked examples from the FRED preset (`US_GDP_NOMINAL_Q_SAAR`,
+`US_CPI_CORE_M_SA`).

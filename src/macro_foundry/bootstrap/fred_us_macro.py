@@ -3,34 +3,27 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
-from decimal import Decimal
+from datetime import date
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 from sqlalchemy import delete, func, select
-from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from macro_foundry.config import settings
 from macro_foundry.db import (
     EnvTarget,
+    app_url_for_target,
     create_async_engine_for_url,
     create_session_factory,
-    database_url_for_env_target,
 )
 from macro_foundry.enums import (
-    ComputationRunStatus,
-    ComputationTriggeredBy,
-    ExecutionPolicy,
     FeedMethod,
     Frequency,
     IngestionTriggeredBy,
-    InputVintagePolicy,
     Measure,
     MeasureHorizon,
     OriginType,
-    OutputMode,
     PriceBasis,
     ProviderRole,
     ProviderType,
@@ -43,10 +36,7 @@ from macro_foundry.enums import (
 from macro_foundry.ingestion.providers.fred import FredClient, FredClientProtocol, FredSeriesMetadata
 from macro_foundry.ingestion.runtime import execute_feed
 from macro_foundry.models import (
-    ComputationRunLog,
     Concept,
-    DerivationInput,
-    DerivedSeries,
     Geography,
     IngestionFeed,
     IngestionFeedMember,
@@ -62,8 +52,6 @@ from macro_foundry.models import (
 )
 from macro_foundry.schemas import (
     ConceptCreate,
-    DerivedSeriesCreate,
-    DerivationInputCreate,
     IngestionFeedCreate,
     IngestionFeedMemberCreate,
     ProviderCatalogCreate,
@@ -74,6 +62,12 @@ from macro_foundry.schemas import (
     SeriesSourceCreate,
 )
 from macro_foundry.seed._shared import assign_if_changed
+from macro_foundry.services.registration import (
+    ensure_series_embedding_current,
+    register_concept,
+    register_family,
+    register_series,
+)
 
 _FRED_PROVIDER_NAME = "USA FRED"
 _FRED_CATALOG_NAME = "FRED default catalog"
@@ -84,7 +78,6 @@ _FRED_DOC_URL = "https://fred.stlouisfed.org/docs/api/fred/"
 _FRED_HOMEPAGE_URL = "https://fred.stlouisfed.org/"
 _FRED_BASE_URL = "https://api.stlouisfed.org/fred"
 _FRED_SCHEDULE = "TZ=America/New_York 0 8 * * *"
-_YOY_CODE_REF = "macro_foundry.bootstrap.fred_us_macro.compute_yoy_growth"
 _FRED_MISSING_VALUE_TOKENS = [".", ""]
 _FRED_FREQUENCY_MAP = {
     "A": Frequency.ANNUAL.value,
@@ -127,21 +120,6 @@ class RawSeriesSpec:
     reference_kind: ReferenceKind | None
     reference_year: int | None
     reference_label: str | None
-    derived_series_code: str
-    derived_series_name: str
-    derived_series_alt_name: tuple[str, ...]
-    derived_series_description: str
-    derived_family_variant: str
-
-
-@dataclass(frozen=True, slots=True)
-class DerivedComputationOutcome:
-    """Summary of one derived YoY computation pass."""
-
-    series_code: str
-    rows_computed: int
-    rows_written: int
-    rows_skipped: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,22 +139,18 @@ class FredImportOutcome:
 class FredUsMacroBootstrapResult:
     """End-to-end bootstrap summary returned to the CLI and tests."""
 
-    database: EnvTarget
+    target: EnvTarget
     run_date: date
     raw_imports: tuple[FredImportOutcome, ...]
-    derived_imports: tuple[DerivedComputationOutcome, ...]
 
 
 @dataclass(frozen=True, slots=True)
 class FredUsMacroResetResult:
     """Summary of removing the curated first-pass FRED preset."""
 
-    database: EnvTarget
+    target: EnvTarget
     observations_deleted: int
     ingestion_run_logs_deleted: int
-    computation_run_logs_deleted: int
-    derivation_inputs_deleted: int
-    derived_series_deleted: int
     ingestion_feeds_deleted: int
     series_sources_deleted: int
     family_members_deleted: int
@@ -197,16 +171,6 @@ class PreparedRawSeries:
 
 
 @dataclass(slots=True)
-class PreparedDerivedSeries:
-    """Upserted derived-series rows needed for YoY computation."""
-
-    spec: RawSeriesSpec
-    output_series: Series
-    derived_series: DerivedSeries
-    input_series: Series
-
-
-@dataclass(slots=True)
 class FredRuntimeConfig:
     """Resolved runtime config for the provider-backed FRED client."""
 
@@ -222,7 +186,7 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
         family_code="US_GDP",
         family_name="United States Gross Domestic Product",
         family_description="Curated United States GDP variants.",
-        series_code="US_GDP_NOMINAL_Q_SAAR_LEVEL",
+        series_code="US_GDP_NOMINAL_Q_SAAR",
         series_name="USA – Gross Domestic Product, Nominal, Seasonally Adjusted Annual Rate, Billions of Dollars",
         series_alt_name=(
             "United States Gross Domestic Product, Nominal Level",
@@ -247,14 +211,6 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
         reference_kind=None,
         reference_year=None,
         reference_label=None,
-        derived_series_code="US_GDP_NOMINAL_Q_SAAR_YOY",
-        derived_series_name="USA – Gross Domestic Product, Nominal, Year-over-Year Percent Change",
-        derived_series_alt_name=(
-            "United States Gross Domestic Product, Nominal YoY",
-            "Nominal GDP YoY",
-        ),
-        derived_series_description="Year-over-year percent change in nominal gross domestic product for the United States. Derived from the quarterly nominal GDP level by comparing each period to the same quarter one year earlier.",
-        derived_family_variant="Nominal YoY",
     ),
     RawSeriesSpec(
         concept_code="GDP",
@@ -263,7 +219,7 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
         family_code="US_GDP",
         family_name="United States Gross Domestic Product",
         family_description="Curated United States GDP variants.",
-        series_code="US_GDP_REAL_Q_SAAR_LEVEL",
+        series_code="US_GDP_REAL_Q_SAAR",
         series_name="USA – Gross Domestic Product, Real, Seasonally Adjusted Annual Rate, Billions of Chained 2017 Dollars",
         series_alt_name=(
             "United States Gross Domestic Product, Real Level",
@@ -288,14 +244,6 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
         reference_kind=ReferenceKind.CONSTANT_PRICES,
         reference_year=2017,
         reference_label="Chained 2017 dollars",
-        derived_series_code="US_GDP_REAL_Q_SAAR_YOY",
-        derived_series_name="USA – Gross Domestic Product, Real, Year-over-Year Percent Change",
-        derived_series_alt_name=(
-            "United States Gross Domestic Product, Real YoY",
-            "Real GDP YoY",
-        ),
-        derived_series_description="Year-over-year percent change in real gross domestic product for the United States. Derived from the quarterly real GDP level by comparing each period to the same quarter one year earlier.",
-        derived_family_variant="Real YoY",
     ),
     RawSeriesSpec(
         concept_code="CPI",
@@ -304,7 +252,7 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
         family_code="US_CPI",
         family_name="United States Consumer Price Index",
         family_description="Curated United States CPI variants.",
-        series_code="US_CPI_HEADLINE_M_NSA_LEVEL",
+        series_code="US_CPI_HEADLINE_M_NSA",
         series_name="USA – Consumer Price Index for All Urban Consumers: All Items in U.S. City Average",
         series_alt_name=(
             "Consumer Price Index for All Urban Consumers: All Items in U.S. City Average",
@@ -330,15 +278,6 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
         reference_kind=ReferenceKind.INDEX_BASE,
         reference_year=None,
         reference_label="1982-1984=100",
-        derived_series_code="US_CPI_HEADLINE_M_NSA_YOY",
-        derived_series_name="USA – Consumer Price Index for All Urban Consumers: All Items, 12-Month Percent Change in U.S. City Average",
-        derived_series_alt_name=(
-            "United States CPI Headline, YoY",
-            "Headline CPI Inflation",
-            "CPI-U All Items YoY",
-        ),
-        derived_series_description="Twelve-month percent change in the Consumer Price Index for All Urban Consumers (CPI-U) covering all items, U.S. city average. Not seasonally adjusted. Derived from the monthly CPI-U all-items index level.",
-        derived_family_variant="Headline YoY",
     ),
     RawSeriesSpec(
         concept_code="CPI",
@@ -347,7 +286,7 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
         family_code="US_CPI",
         family_name="United States Consumer Price Index",
         family_description="Curated United States CPI variants.",
-        series_code="US_CPI_CORE_M_SA_LEVEL",
+        series_code="US_CPI_CORE_M_SA",
         series_name="USA – Consumer Price Index for All Urban Consumers: All Items Less Food and Energy in U.S. City Average",
         series_alt_name=(
             "Consumer Price Index for All Urban Consumers: All Items Less Food and Energy in U.S. City Average",
@@ -373,22 +312,13 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
         reference_kind=ReferenceKind.INDEX_BASE,
         reference_year=None,
         reference_label="1982-1984=100",
-        derived_series_code="US_CPI_CORE_M_SA_YOY",
-        derived_series_name="USA – Consumer Price Index for All Urban Consumers: All Items Less Food and Energy, 12-Month Percent Change in U.S. City Average",
-        derived_series_alt_name=(
-            "United States CPI Core, YoY",
-            "Core CPI Inflation",
-            "CPI-U Less Food and Energy YoY",
-        ),
-        derived_series_description="Twelve-month percent change in the Consumer Price Index for All Urban Consumers (CPI-U) covering all items excluding food and energy (\"core CPI\"), U.S. city average. Seasonally adjusted. Derived from the monthly core CPI index level.",
-        derived_family_variant="Core YoY",
     ),
 )
 
 
 async def run_fred_us_macro_bootstrap(
     *,
-    database: EnvTarget = EnvTarget.DEV,
+    target: EnvTarget = EnvTarget.DEV,
     session_factory: async_sessionmaker[AsyncSession] | None = None,
     client: FredClientProtocol | None = None,
     run_date: date | None = None,
@@ -400,14 +330,14 @@ async def run_fred_us_macro_bootstrap(
     managed_engine = None
 
     if session_factory is None:
-        managed_engine = create_async_engine_for_url(database_url_for_env_target(database))
+        managed_engine = create_async_engine_for_url(app_url_for_target(target))
         session_factory = create_session_factory(managed_engine)
 
     try:
         return await _run_bootstrap_transaction(
             session_factory=session_factory,
             client=client,
-            database=database,
+            target=target,
             run_date=resolved_run_date,
             code_version=code_version,
         )
@@ -418,20 +348,20 @@ async def run_fred_us_macro_bootstrap(
 
 async def reset_fred_us_macro_bootstrap(
     *,
-    database: EnvTarget = EnvTarget.DEV,
+    target: EnvTarget = EnvTarget.DEV,
     session_factory: async_sessionmaker[AsyncSession] | None = None,
 ) -> FredUsMacroResetResult:
     """Delete the curated first-pass FRED preset rows while preserving provider seeds."""
 
     managed_engine = None
     if session_factory is None:
-        managed_engine = create_async_engine_for_url(database_url_for_env_target(database))
+        managed_engine = create_async_engine_for_url(app_url_for_target(target))
         session_factory = create_session_factory(managed_engine)
 
     try:
         async with session_factory() as session:
             try:
-                result = await _reset_bootstrap_transaction(session, database=database)
+                result = await _reset_bootstrap_transaction(session, target=target)
                 await session.commit()
                 return result
             except Exception:
@@ -446,7 +376,7 @@ async def _run_bootstrap_transaction(
     *,
     session_factory: async_sessionmaker[AsyncSession],
     client: FredClientProtocol | None,
-    database: EnvTarget,
+    target: EnvTarget,
     run_date: date,
     code_version: str | None,
 ) -> FredUsMacroBootstrapResult:
@@ -467,7 +397,6 @@ async def _run_bootstrap_transaction(
 
             try:
                 prepared_raw_series: list[PreparedRawSeries] = []
-                prepared_derived_series: list[PreparedDerivedSeries] = []
                 for spec in RAW_SERIES_SPECS:
                     prepared = await _prepare_series_catalog(
                         session,
@@ -475,8 +404,7 @@ async def _run_bootstrap_transaction(
                         geography=usa,
                         provider_catalog=catalog,
                     )
-                    prepared_raw_series.append(prepared[0])
-                    prepared_derived_series.append(prepared[1])
+                    prepared_raw_series.append(prepared)
 
                 raw_results: list[FredImportOutcome] = []
                 for prepared in prepared_raw_series:
@@ -494,27 +422,15 @@ async def _run_bootstrap_transaction(
                         metadata=outcome.metadata,
                     )
                     raw_results.append(outcome)
-
-                derived_results: list[DerivedComputationOutcome] = []
-                for prepared in prepared_derived_series:
-                    derived_results.append(
-                        await _compute_and_write_yoy_series(
-                            session,
-                            prepared=prepared,
-                            run_date=run_date,
-                            code_version=code_version,
-                        ),
-                    )
             finally:
                 if owned_client is not None:
                     await owned_client.aclose()
 
             await session.commit()
             return FredUsMacroBootstrapResult(
-                database=database,
+                target=target,
                 run_date=run_date,
                 raw_imports=tuple(raw_results),
-                derived_imports=tuple(derived_results),
             )
         except Exception:
             await session.rollback()
@@ -524,7 +440,7 @@ async def _run_bootstrap_transaction(
 async def _reset_bootstrap_transaction(
     session: AsyncSession,
     *,
-    database: EnvTarget,
+    target: EnvTarget,
 ) -> FredUsMacroResetResult:
     series_codes = _all_bootstrap_series_codes()
     series_rows = (
@@ -534,12 +450,9 @@ async def _reset_bootstrap_transaction(
     ).all()
     if not series_rows:
         return FredUsMacroResetResult(
-            database=database,
+            target=target,
             observations_deleted=0,
             ingestion_run_logs_deleted=0,
-            computation_run_logs_deleted=0,
-            derivation_inputs_deleted=0,
-            derived_series_deleted=0,
             ingestion_feeds_deleted=0,
             series_sources_deleted=0,
             family_members_deleted=0,
@@ -549,14 +462,11 @@ async def _reset_bootstrap_transaction(
         )
 
     series_ids = {series_id for series_id, _ in series_rows}
-    raw_codes = {spec.series_code for spec in RAW_SERIES_SPECS}
-    raw_series_ids = {series_id for series_id, code in series_rows if code in raw_codes}
-    derived_output_ids = series_ids - raw_series_ids
 
     source_ids = set(
         (
             await session.execute(
-                select(SeriesSource.id).where(SeriesSource.series_id.in_(raw_series_ids)),
+                select(SeriesSource.id).where(SeriesSource.series_id.in_(series_ids)),
             )
         ).scalars().all()
     )
@@ -574,21 +484,10 @@ async def _reset_bootstrap_transaction(
             )
         ).scalars().all()
     )
-    derived_series_ids = set(
-        (
-            await session.execute(
-                select(DerivedSeries.id).where(DerivedSeries.series_id.in_(derived_output_ids)),
-            )
-        ).scalars().all()
-    )
 
     observations_deleted = await _execute_delete(
         session,
         delete(Observation).where(Observation.series_id.in_(series_ids)),
-    )
-    computation_run_logs_deleted = await _execute_delete(
-        session,
-        delete(ComputationRunLog).where(ComputationRunLog.derived_series_id.in_(derived_series_ids)),
     )
     await _execute_delete(
         session,
@@ -597,14 +496,6 @@ async def _reset_bootstrap_transaction(
     ingestion_run_logs_deleted = await _execute_delete(
         session,
         delete(IngestionRunLog).where(IngestionRunLog.ingestion_feed_id.in_(feed_ids)),
-    )
-    derivation_inputs_deleted = await _execute_delete(
-        session,
-        delete(DerivationInput).where(DerivationInput.derived_series_id.in_(derived_series_ids)),
-    )
-    derived_series_deleted = await _execute_delete(
-        session,
-        delete(DerivedSeries).where(DerivedSeries.id.in_(derived_series_ids)),
     )
     ingestion_feeds_deleted = await _execute_delete(
         session,
@@ -652,12 +543,9 @@ async def _reset_bootstrap_transaction(
             )
 
     return FredUsMacroResetResult(
-        database=database,
+        target=target,
         observations_deleted=observations_deleted,
         ingestion_run_logs_deleted=ingestion_run_logs_deleted,
-        computation_run_logs_deleted=computation_run_logs_deleted,
-        derivation_inputs_deleted=derivation_inputs_deleted,
-        derived_series_deleted=derived_series_deleted,
         ingestion_feeds_deleted=ingestion_feeds_deleted,
         series_sources_deleted=series_sources_deleted,
         family_members_deleted=family_members_deleted,
@@ -667,19 +555,13 @@ async def _reset_bootstrap_transaction(
     )
 
 
-def compute_yoy_growth(*, current: Decimal, prior: Decimal) -> Decimal:
-    """Compute a year-over-year percent change from level inputs."""
-
-    return ((current / prior) - Decimal("1")) * Decimal("100")
-
-
 async def _prepare_series_catalog(
     session: AsyncSession,
     *,
     spec: RawSeriesSpec,
     geography: Geography,
     provider_catalog: ProviderCatalog,
-) -> tuple[PreparedRawSeries, PreparedDerivedSeries]:
+) -> PreparedRawSeries:
     concept = await _upsert_concept(
         session,
         payload=ConceptCreate(
@@ -712,6 +594,7 @@ async def _prepare_series_catalog(
             is_primary=spec.is_primary_family_member,
         ).model_dump(),
     )
+    raw_series = await ensure_series_embedding_current(session, raw_series)
     source = await _upsert_series_source(
         session,
         payload=SeriesSourceCreate(
@@ -744,52 +627,7 @@ async def _prepare_series_catalog(
         ).model_dump(),
     )
 
-    derived_output_series = await _upsert_series(
-        session,
-        payload=_derived_series_payload(spec, geography_id=geography.id),
-    )
-    await _upsert_series_family_member(
-        session,
-        payload=SeriesFamilyMemberCreate(
-            family_id=family.id,
-            series_id=derived_output_series.id,
-            variant=spec.derived_family_variant,
-            is_primary=False,
-        ).model_dump(),
-    )
-    derived_series = await _upsert_derived_series(
-        session,
-        payload=DerivedSeriesCreate(
-            series_id=derived_output_series.id,
-            formula_config={
-                "op": "yoy_percent_change",
-                "lag_periods": _yoy_lag_for_frequency(spec.frequency),
-            },
-            description=spec.derived_series_description,
-            execution_policy=ExecutionPolicy.UPSTREAM_UPDATE,
-            is_deterministic=True,
-            requires_vintage_awareness=False,
-            code_ref=_YOY_CODE_REF,
-        ).model_dump(),
-    )
-    await _upsert_derivation_input(
-        session,
-        payload=DerivationInputCreate(
-            derived_series_id=derived_series.id,
-            input_series_id=raw_series.id,
-            notes="single-input year-over-year growth",
-        ).model_dump(),
-    )
-
-    return (
-        PreparedRawSeries(spec=spec, series=raw_series, source=source, feed=feed, feed_member=feed_member),
-        PreparedDerivedSeries(
-            spec=spec,
-            output_series=derived_output_series,
-            derived_series=derived_series,
-            input_series=raw_series,
-        ),
-    )
+    return PreparedRawSeries(spec=spec, series=raw_series, source=source, feed=feed, feed_member=feed_member)
 
 
 def _fred_json_path_selector_config(spec: RawSeriesSpec) -> dict[str, Any]:
@@ -951,163 +789,6 @@ def _build_fred_run_parameters(
     return payload
 
 
-async def _compute_and_write_yoy_series(
-    session: AsyncSession,
-    *,
-    prepared: PreparedDerivedSeries,
-    run_date: date,
-    code_version: str | None,
-) -> DerivedComputationOutcome:
-    started_at = datetime.now(timezone.utc)
-    latest_input_observations = await _load_latest_series_observations(
-        session,
-        series_id=prepared.input_series.id,
-    )
-    latest_output_by_period = await _load_latest_observations_by_period_for_series(
-        session,
-        series_id=prepared.output_series.id,
-    )
-
-    rows_to_write: list[dict[str, Any]] = []
-    rows_computed = 0
-    rows_skipped = 0
-    for current_observation in latest_input_observations.values():
-        prior_period_start = _prior_year_period_start(
-            current_observation.period_start,
-            frequency=prepared.spec.frequency,
-        )
-        prior_observation = latest_input_observations.get(prior_period_start)
-        if (
-            prior_observation is None
-            or current_observation.value is None
-            or prior_observation.value is None
-            or prior_observation.value == 0
-        ):
-            rows_skipped += 1
-            continue
-
-        rows_computed += 1
-        output_value = compute_yoy_growth(
-            current=current_observation.value,
-            prior=prior_observation.value,
-        )
-        existing = latest_output_by_period.get(current_observation.period_start)
-        if existing is not None and existing.value == output_value:
-            rows_skipped += 1
-            continue
-
-        rows_to_write.append(
-            {
-                "series_id": prepared.output_series.id,
-                "period_start": current_observation.period_start,
-                "period_end": current_observation.period_end,
-                "value": output_value,
-                "vintage_date": run_date,
-            },
-        )
-
-    run_log = ComputationRunLog(
-        derived_series_id=prepared.derived_series.id,
-        started_at=started_at,
-        finished_at=datetime.now(timezone.utc),
-        status=ComputationRunStatus.SUCCESS,
-        rows_computed=rows_computed,
-        rows_inserted=len(rows_to_write),
-        rows_updated=0,
-        rows_skipped=rows_skipped,
-        triggered_by=ComputationTriggeredBy.UPSTREAM_UPDATE,
-        code_version=code_version,
-        input_vintage_policy=InputVintagePolicy.LATEST_AVAILABLE,
-        parameters={
-            "input_series_code": prepared.input_series.code,
-            "snapshot_vintage_date": run_date.isoformat(),
-        },
-        output_mode=OutputMode.WRITE_OBSERVATIONS,
-        notes="latest-snapshot YoY computation",
-    )
-    session.add(run_log)
-    await session.flush()
-
-    if rows_to_write:
-        for row in rows_to_write:
-            row["computation_run_log_id"] = run_log.id
-
-        statement = insert(Observation).values(rows_to_write)
-        excluded = statement.excluded
-        statement = statement.on_conflict_do_update(
-            index_elements=[
-                Observation.series_id,
-                Observation.period_start,
-                Observation.vintage_date,
-            ],
-            set_={
-                "period_end": excluded.period_end,
-                "value": excluded.value,
-                "ingestion_run_log_member_id": None,
-                "computation_run_log_id": excluded.computation_run_log_id,
-            },
-        )
-        await session.execute(statement)
-
-        derived_start_date = min(row["period_start"] for row in rows_to_write)
-        if prepared.output_series.start_date is None or prepared.output_series.start_date > derived_start_date:
-            prepared.output_series.start_date = derived_start_date
-
-    return DerivedComputationOutcome(
-        series_code=prepared.output_series.code,
-        rows_computed=rows_computed,
-        rows_written=len(rows_to_write),
-        rows_skipped=rows_skipped,
-    )
-
-
-async def _load_latest_series_observations(
-    session: AsyncSession,
-    *,
-    series_id: Any,
-) -> dict[date, Observation]:
-    rows = (
-        await session.execute(
-            select(Observation)
-            .where(Observation.series_id == series_id)
-            .order_by(Observation.period_start, Observation.vintage_date.desc()),
-        )
-    ).scalars()
-
-    latest: dict[date, Observation] = {}
-    for row in rows:
-        latest.setdefault(row.period_start, row)
-    return latest
-
-
-async def _load_latest_observations_by_period_for_series(
-    session: AsyncSession,
-    *,
-    series_id: Any,
-) -> dict[date, Observation]:
-    return await _load_latest_series_observations(session, series_id=series_id)
-
-
-def _prior_year_period_start(period_start: date, *, frequency: Frequency) -> date:
-    if frequency is Frequency.MONTHLY:
-        return date(period_start.year - 1, period_start.month, 1)
-    if frequency is Frequency.QUARTERLY:
-        return date(period_start.year - 1, period_start.month, 1)
-    if frequency is Frequency.ANNUAL:
-        return date(period_start.year - 1, 1, 1)
-    raise ValueError(f"YoY computation is not implemented for frequency {frequency.value!r}")
-
-
-def _yoy_lag_for_frequency(frequency: Frequency) -> int:
-    if frequency is Frequency.MONTHLY:
-        return 12
-    if frequency is Frequency.QUARTERLY:
-        return 4
-    if frequency is Frequency.ANNUAL:
-        return 1
-    raise ValueError(f"YoY lag is not implemented for frequency {frequency.value!r}")
-
-
 def _sync_raw_metadata_from_fred(
     series: Series,
     source: SeriesSource,
@@ -1198,10 +879,10 @@ async def _upsert_fred_catalog(
 async def _upsert_concept(session: AsyncSession, *, payload: dict[str, Any]) -> Concept:
     concept = await session.scalar(select(Concept).where(Concept.code == payload["code"]))
     if concept is None:
-        concept = Concept(**payload)
-        session.add(concept)
-        await session.flush()
-        return concept
+        return await register_concept(
+            session,
+            ConceptCreate.model_validate(payload),
+        )
     assign_if_changed(concept, payload, ("name", "description"))
     await session.flush()
     return concept
@@ -1214,10 +895,10 @@ async def _upsert_series_family(
 ) -> SeriesFamily:
     family = await session.scalar(select(SeriesFamily).where(SeriesFamily.code == payload["code"]))
     if family is None:
-        family = SeriesFamily(**payload)
-        session.add(family)
-        await session.flush()
-        return family
+        return await register_family(
+            session,
+            SeriesFamilyCreate.model_validate(payload),
+        )
     assign_if_changed(
         family,
         payload,
@@ -1234,10 +915,10 @@ async def _upsert_series(
 ) -> Series:
     series = await session.scalar(select(Series).where(Series.code == payload["code"]))
     if series is None:
-        series = Series(**payload)
-        session.add(series)
-        await session.flush()
-        return series
+        return await register_series(
+            session,
+            SeriesCreate.model_validate(payload),
+        )
     assign_if_changed(
         series,
         payload,
@@ -1387,56 +1068,6 @@ async def _upsert_ingestion_feed_member(
     return member
 
 
-async def _upsert_derived_series(
-    session: AsyncSession,
-    *,
-    payload: dict[str, Any],
-) -> DerivedSeries:
-    derived = await session.scalar(
-        select(DerivedSeries).where(DerivedSeries.series_id == payload["series_id"]),
-    )
-    if derived is None:
-        derived = DerivedSeries(**payload)
-        session.add(derived)
-        await session.flush()
-        return derived
-    assign_if_changed(
-        derived,
-        payload,
-        (
-            "formula_config",
-            "description",
-            "execution_policy",
-            "is_deterministic",
-            "requires_vintage_awareness",
-            "code_ref",
-        ),
-    )
-    await session.flush()
-    return derived
-
-
-async def _upsert_derivation_input(
-    session: AsyncSession,
-    *,
-    payload: dict[str, Any],
-) -> DerivationInput:
-    derivation_input = await session.scalar(
-        select(DerivationInput).where(
-            DerivationInput.derived_series_id == payload["derived_series_id"],
-            DerivationInput.input_series_id == payload["input_series_id"],
-        ),
-    )
-    if derivation_input is None:
-        derivation_input = DerivationInput(**payload)
-        session.add(derivation_input)
-        await session.flush()
-        return derivation_input
-    assign_if_changed(derivation_input, payload, ("notes",))
-    await session.flush()
-    return derivation_input
-
-
 def _raw_series_payload(spec: RawSeriesSpec, *, geography_id: Any) -> dict[str, Any]:
     return SeriesCreate(
         code=spec.series_code,
@@ -1463,32 +1094,6 @@ def _raw_series_payload(spec: RawSeriesSpec, *, geography_id: Any) -> dict[str, 
     ).model_dump()
 
 
-def _derived_series_payload(spec: RawSeriesSpec, *, geography_id: Any) -> dict[str, Any]:
-    return SeriesCreate(
-        code=spec.derived_series_code,
-        name=spec.derived_series_name,
-        alt_name=list(spec.derived_series_alt_name) if spec.derived_series_alt_name else None,
-        description=spec.derived_series_description,
-        origin_type=OriginType.DERIVED,
-        geography_id=geography_id,
-        frequency=spec.frequency,
-        temporal_stock_flow=TemporalStockFlow.RATE,
-        unit_kind=UnitKind.PERCENT,
-        unit_scale=UnitScale.ONE,
-        unit_label=None,
-        price_basis=spec.price_basis,
-        currency_code=None,
-        measure=Measure.GROWTH,
-        measure_horizon=MeasureHorizon.YOY,
-        annualized=False,
-        seasonal_adjustment=spec.seasonal_adjustment,
-        reference_kind=None,
-        reference_year=None,
-        reference_label=None,
-        is_active=True,
-    ).model_dump()
-
-
 def _current_code_version() -> str | None:
     try:
         return version("macro-foundry")
@@ -1510,11 +1115,7 @@ def _resolve_fred_runtime_config(provider: Provider) -> FredRuntimeConfig:
 
 
 def _all_bootstrap_series_codes() -> tuple[str, ...]:
-    return tuple(
-        code
-        for spec in RAW_SERIES_SPECS
-        for code in (spec.series_code, spec.derived_series_code)
-    )
+    return tuple(spec.series_code for spec in RAW_SERIES_SPECS)
 
 
 def _bootstrap_family_codes() -> tuple[str, ...]:
@@ -1532,10 +1133,8 @@ async def _execute_delete(session: AsyncSession, statement: Any) -> int:
 
 __all__ = [
     "EnvTarget",
-    "DerivedComputationOutcome",
     "FredUsMacroBootstrapResult",
     "FredUsMacroResetResult",
-    "compute_yoy_growth",
     "reset_fred_us_macro_bootstrap",
     "run_fred_us_macro_bootstrap",
 ]

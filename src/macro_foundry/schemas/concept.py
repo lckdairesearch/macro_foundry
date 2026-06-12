@@ -29,4 +29,17 @@ class ConceptRead(TimestampedReadSchema, ConceptBase):
     """API read model for a concept."""
 
 
-__all__ = ["ConceptBase", "ConceptCreate", "ConceptRead", "ConceptUpdate"]
+class ConceptSearchHit(SchemaModel):
+    """Semantic-search wrapper for a concept hit."""
+
+    concept: ConceptRead
+    similarity: float
+
+
+__all__ = [
+    "ConceptBase",
+    "ConceptCreate",
+    "ConceptRead",
+    "ConceptSearchHit",
+    "ConceptUpdate",
+]

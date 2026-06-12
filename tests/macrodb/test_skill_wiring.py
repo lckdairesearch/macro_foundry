@@ -184,7 +184,7 @@ async def test_governance_review_does_not_load_draft_skill(tmp_path: Path) -> No
 
 @pytest.mark.no_db
 @pytest.mark.asyncio
-async def test_draft_proposal_populates_loaded_skills_when_touches_prose(tmp_path: Path) -> None:
+async def test_draft_proposal_populates_loaded_metadata_skill(tmp_path: Path) -> None:
     from macro_foundry.agent.graph import make_draft_proposal_node
     from macro_foundry.agent.roles import AgentRole, default_role_configs
 
@@ -200,8 +200,13 @@ async def test_draft_proposal_populates_loaded_skills_when_touches_prose(tmp_pat
         "existing_catalog_hits": [],
         "coerce_hints": {},
         "coerce_rationales": {},
-        "reference_metadata": {"cohort_A_empty": False},
-        "proposal": {"touches_prose": True},
+        "reference_metadata": {
+            "cohort_a": [{"code": "US_CPI_NSA_M"}],
+            "cohort_b": [],
+            "cohort_c": [],
+            "is_first_in_family": False,
+        },
+        "is_first_in_family": False,
         "enum_gap_proposals": [],
         "llm_calls": [],
         "loaded_skills": [],
@@ -218,7 +223,7 @@ async def test_draft_proposal_populates_loaded_skills_when_touches_prose(tmp_pat
 
 @pytest.mark.no_db
 @pytest.mark.asyncio
-async def test_draft_proposal_loads_seed_exemplars_subsection_when_cohort_a_empty(tmp_path: Path) -> None:
+async def test_draft_proposal_loads_seed_exemplars_subsection_when_first_in_family(tmp_path: Path) -> None:
     from macro_foundry.agent.graph import make_draft_proposal_node
     from macro_foundry.agent.roles import AgentRole, default_role_configs
 
@@ -239,8 +244,13 @@ async def test_draft_proposal_loads_seed_exemplars_subsection_when_cohort_a_empt
         "existing_catalog_hits": [],
         "coerce_hints": {},
         "coerce_rationales": {},
-        "reference_metadata": {"cohort_A_empty": True},
-        "proposal": {"touches_prose": True},
+        "reference_metadata": {
+            "cohort_a": [],
+            "cohort_b": [],
+            "cohort_c": [],
+            "is_first_in_family": True,
+        },
+        "is_first_in_family": True,
         "enum_gap_proposals": [],
         "llm_calls": [],
         "loaded_skills": [],
@@ -255,7 +265,52 @@ async def test_draft_proposal_loads_seed_exemplars_subsection_when_cohort_a_empt
 
 @pytest.mark.no_db
 @pytest.mark.asyncio
-async def test_draft_proposal_does_not_load_skill_when_prose_not_touched(tmp_path: Path) -> None:
+async def test_draft_proposal_loads_metadata_rules_from_real_reference_state(
+    tmp_path: Path,
+) -> None:
+    from macro_foundry.agent.graph import make_draft_proposal_node
+    from macro_foundry.agent.roles import AgentRole, default_role_configs
+
+    doc = SkillDocument(
+        skill_id="skill-metadata-standardisation",
+        status=SkillStatus.ACCEPTED,
+        body="General prose rules.",
+        sections={"Seed exemplars": "Seed exemplar rules."},
+        path=tmp_path / "skill-metadata-standardisation.md",
+    )
+    registry = SkillRegistry({"skill-metadata-standardisation": doc})
+    role_config = default_role_configs()[AgentRole.PROPOSAL_DRAFTER]
+    node = make_draft_proposal_node(_fake_draft_llm(), role_config, registry)
+
+    result = await node({
+        "pending_input": "Onboard CPI",
+        "source_summary": "FRED CPI",
+        "existing_catalog_hits": [],
+        "coerce_hints": {},
+        "coerce_rationales": {},
+        "reference_metadata": {
+            "cohort_a": [],
+            "cohort_b": [],
+            "cohort_c": [],
+            "is_first_in_family": True,
+        },
+        "is_first_in_family": True,
+        "enum_gap_proposals": [],
+        "llm_calls": [],
+        "loaded_skills": [],
+        "node_transitions": [],
+    })
+
+    trigger_ids = [event["trigger_id"] for event in result["loaded_skills"]]
+    assert trigger_ids == [
+        "metadata-standardisation-prose",
+        "metadata-standardisation-seed-exemplars",
+    ]
+
+
+@pytest.mark.no_db
+@pytest.mark.asyncio
+async def test_draft_proposal_loads_metadata_rules_before_proposal_exists(tmp_path: Path) -> None:
     from macro_foundry.agent.graph import make_draft_proposal_node
     from macro_foundry.agent.roles import AgentRole, default_role_configs
 
@@ -271,15 +326,22 @@ async def test_draft_proposal_does_not_load_skill_when_prose_not_touched(tmp_pat
         "existing_catalog_hits": [],
         "coerce_hints": {},
         "coerce_rationales": {},
-        "reference_metadata": {"cohort_A_empty": False},
-        "proposal": {"touches_prose": False},
+        "reference_metadata": {
+            "cohort_a": [{"code": "US_CPI_NSA_M"}],
+            "cohort_b": [],
+            "cohort_c": [],
+            "is_first_in_family": False,
+        },
+        "is_first_in_family": False,
         "enum_gap_proposals": [],
         "llm_calls": [],
         "loaded_skills": [],
         "node_transitions": [],
     })
 
-    assert result["loaded_skills"] == []
+    assert [event["trigger_id"] for event in result["loaded_skills"]] == [
+        "metadata-standardisation-prose"
+    ]
 
 
 # ---------------------------------------------------------------------------

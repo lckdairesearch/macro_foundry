@@ -30,6 +30,13 @@ _COST_TABLE: dict[str, tuple[float, float]] = {
     "o1-mini": (0.003, 0.012),
 }
 
+_MAX_COMPLETION_TOKEN_MODEL_PREFIXES: tuple[str, ...] = (
+    "gpt-5",
+    "o1",
+    "o3",
+    "o4",
+)
+
 
 class LLMTimeoutError(Exception):
     """Raised when an LLM call exceeds the 60-second operational timeout."""
@@ -68,8 +75,11 @@ async def _parse_call(
         "model": model,
         "messages": messages,
         "response_format": response_format,
-        "max_tokens": max_tokens,
     }
+    if _uses_max_completion_tokens(model):
+        kwargs["max_completion_tokens"] = max_tokens
+    else:
+        kwargs["max_tokens"] = max_tokens
     if reasoning_effort is not None:
         kwargs["reasoning_effort"] = reasoning_effort
     else:
@@ -99,6 +109,12 @@ async def _parse_call(
         "cost_estimate_usd": estimate_cost(model, usage.prompt_tokens, usage.completion_tokens),
         "latency_ms": latency_ms,
     }
+
+
+def _uses_max_completion_tokens(model: str) -> bool:
+    """Return whether the model expects the newer chat completion token cap key."""
+    normalized = model.lower()
+    return normalized.startswith(_MAX_COMPLETION_TOKEN_MODEL_PREFIXES)
 
 
 def make_openai_llm_callable(

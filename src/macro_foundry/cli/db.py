@@ -12,7 +12,7 @@ from alembic.config import Config as AlembicConfig
 from alembic.runtime.migration import MigrationContext
 from sqlalchemy import create_engine
 
-from macro_foundry.db import EnvTarget, owner_url_for_env_target
+from macro_foundry.db import EnvTarget, owner_url_for_target
 
 from . import _helpers
 from ._app import db_app
@@ -66,7 +66,7 @@ def migrate(
         typer.echo(f"db migrate does not support --target {target.value} (allowed: dev, test)", err=True)
         raise typer.Exit(code=2)
 
-    url = owner_url_for_env_target(target)
+    url = owner_url_for_target(target)
     config = _alembic_config_for(url)
 
     before = _current_revision(url)
@@ -127,13 +127,10 @@ def bootstrap_fred_us_macro(
 
     if reset:
         result = {
-            "target": summary.database.value,
+            "target": summary.target.value,
             "reset": "fred-us-macro",
             "observations_deleted": summary.observations_deleted,
             "ingestion_run_logs_deleted": summary.ingestion_run_logs_deleted,
-            "computation_run_logs_deleted": summary.computation_run_logs_deleted,
-            "derivation_inputs_deleted": summary.derivation_inputs_deleted,
-            "derived_series_deleted": summary.derived_series_deleted,
             "ingestion_feeds_deleted": summary.ingestion_feeds_deleted,
             "series_sources_deleted": summary.series_sources_deleted,
             "family_members_deleted": summary.family_members_deleted,
@@ -145,14 +142,12 @@ def bootstrap_fred_us_macro(
         return
 
     result = {
-        "target": summary.database.value,
+        "target": summary.target.value,
         "run_date": summary.run_date.isoformat(),
     }
     _helpers.print_result(result, as_json=output_json)
     for r in summary.raw_imports:
         typer.echo(f"raw {r.series_code}: fetched={r.rows_fetched} written={r.rows_written} skipped={r.rows_skipped}")
-    for r in summary.derived_imports:
-        typer.echo(f"derived {r.series_code}: computed={r.rows_computed} written={r.rows_written} skipped={r.rows_skipped}")
 
 
 @bootstrap_app.command("debug-smoke")
@@ -182,7 +177,7 @@ def bootstrap_debug_smoke(
     )
 
     result = {
-        "target": summary.database.value,
+        "target": summary.target.value,
         "run_date": summary.run_date.isoformat(),
         "preset": "debug-smoke",
         "request_feed_members": summary.feed_members,

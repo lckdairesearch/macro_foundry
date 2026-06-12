@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -31,9 +31,9 @@ from macro_foundry.agent.graph import (
     user_input_graph_update,
 )
 from macro_foundry.agent.onboarding_state import SessionMetadata
-from macro_foundry.agent.onboarding_targets import OnboardingTarget
 from macro_foundry.agent.roles import AgentRole, RoleOverride, apply_role_overrides, default_role_configs
 from macro_foundry.agent.skills import SkillRegistry
+from macro_foundry.db import EnvTarget
 
 _log = logging.getLogger(__name__)
 _ACTIVE_SESSION_REGISTRY: dict[tuple[int, str], set[str]] = {}
@@ -64,6 +64,7 @@ class OnboardingGraphDependencies:
     test_reviewer: TestReviewerProtocol
     package_store: OnboardingPackageStoreProtocol
     registry: SkillRegistry
+    credential_gap_wait_node: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]] | None = None
 
 
 class OnboardingResult(BaseModel):
@@ -79,7 +80,7 @@ class OnboardingResult(BaseModel):
 
 async def run_onboarding_session(
     *,
-    target: OnboardingTarget,
+    target: EnvTarget,
     resume_session_id: str | None,
     role_config_overrides: dict[AgentRole, RoleOverride] | None = None,
     channel: Channel | None = None,
@@ -117,7 +118,7 @@ async def run_onboarding_session(
 
 async def _run_onboarding_loop(
     *,
-    target: OnboardingTarget,
+    target: EnvTarget,
     resume_session_id: str | None,
     role_configs: dict[AgentRole, Any],
     channel: Channel | None,
@@ -148,6 +149,7 @@ async def _run_onboarding_loop(
         package_store=dependencies.package_store,
         role_configs=role_configs,
         registry=dependencies.registry,
+        credential_gap_wait_node=dependencies.credential_gap_wait_node,
     )
     config = {"configurable": {"thread_id": session_id}}
 
@@ -159,7 +161,7 @@ async def _run_onboarding_loop(
     if is_new_session:
         metadata = SessionMetadata(
             session_id=session_id,
-            target_environment=target,
+            target_environment=target.value,
             created_at=datetime.now(timezone.utc),
             created_by="macrodb-cli",
             cli_version="0.1.0",
@@ -280,7 +282,7 @@ async def _warn_if_concurrent_session(
     checkpointer: Any,
     *,
     current_session_id: str,
-    target: OnboardingTarget,
+    target: EnvTarget,
 ) -> None:
     registry_key = (id(checkpointer), str(target))
     for thread_id in _ACTIVE_SESSION_REGISTRY.get(registry_key, set()):
@@ -308,7 +310,7 @@ async def _warn_if_concurrent_session(
         pass
 
 
-def _remember_active_session(checkpointer: Any, *, session_id: str, target: OnboardingTarget) -> None:
+def _remember_active_session(checkpointer: Any, *, session_id: str, target: EnvTarget) -> None:
     registry_key = (id(checkpointer), str(target))
     _ACTIVE_SESSION_REGISTRY.setdefault(registry_key, set()).add(session_id)
 
@@ -322,7 +324,6 @@ def _default_session_id() -> str:
 __all__ = [
     "OnboardingResult",
     "OnboardingGraphDependencies",
-    "OnboardingTarget",
     "SessionRuntimeConfig",
     "run_onboarding_session",
 ]

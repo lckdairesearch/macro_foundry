@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from pydantic import SecretStr
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -68,6 +70,26 @@ def _make_mock_openai_client(responses: list[bytes]) -> Any:
     return openai_lib.AsyncOpenAI(api_key="test-key", http_client=http_client)
 
 
+def _make_capturing_openai_client(
+    responses: list[bytes],
+    captured_requests: list[dict[str, Any]],
+) -> Any:
+    """Return an openai.AsyncOpenAI that records request JSON bodies."""
+    import httpx
+    import openai as openai_lib
+
+    queue = list(responses)
+
+    class _CapturingTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            captured_requests.append(json.loads(request.content))
+            body = queue.pop(0)
+            return httpx.Response(200, content=body, headers={"content-type": "application/json"})
+
+    http_client = httpx.AsyncClient(transport=_CapturingTransport())
+    return openai_lib.AsyncOpenAI(api_key="test-key", http_client=http_client)
+
+
 class _ToolSeries:
     def __init__(self, code: str) -> None:
         self.code = code
@@ -95,6 +117,86 @@ def test_build_production_dependencies_returns_correct_type() -> None:
     deps = build_production_dependencies(role_configs, session=session, client=client)
 
     assert isinstance(deps, OnboardingGraphDependencies)
+
+
+@pytest.mark.no_db
+def test_build_production_dependencies_uses_settings_openai_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The production CLI path reads .env.local through settings, not os.environ."""
+    from macro_foundry.agent import production_deps
+    from macro_foundry.agent.roles import default_role_configs
+
+    captured: dict[str, str | None] = {}
+
+    def _fake_async_openai(*, api_key: str | None = None) -> MagicMock:
+        captured["api_key"] = api_key
+        return MagicMock()
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(production_deps.openai, "AsyncOpenAI", _fake_async_openai)
+    monkeypatch.setattr(
+        production_deps,
+        "settings",
+        SimpleNamespace(
+            llm=SimpleNamespace(openai_api_key=SecretStr("settings-key")),
+            resolve_credential_ref=lambda _ref: None,
+        ),
+    )
+
+    deps = production_deps.build_production_dependencies(
+        default_role_configs(),
+        session=_make_mock_session(),
+    )
+
+    assert captured["api_key"] == "settings-key"
+    assert deps.research_llm is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.no_db
+async def test_build_production_dependencies_resolves_fred_key_from_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The production credential gap node sees FRED_API_KEY loaded from .env.local/settings."""
+    from macro_foundry.agent import production_deps
+    from macro_foundry.agent.roles import default_role_configs
+
+    monkeypatch.setattr(
+        production_deps,
+        "settings",
+        SimpleNamespace(
+            llm=SimpleNamespace(openai_api_key=SecretStr("settings-key")),
+            resolve_credential_ref=lambda ref: "fred-from-settings" if ref == "FRED_API_KEY" else None,
+        ),
+    )
+
+    deps = production_deps.build_production_dependencies(
+        default_role_configs(),
+        session=_make_mock_session(),
+        client=MagicMock(),
+    )
+
+    result = await deps.credential_gap_wait_node(
+        {
+            "credential_gap_proposals": [
+                {
+                    "provider_identity": {"kind": "new", "proposed_provider_name": "USA FRED"},
+                    "proposed_env_var_name": "FRED_API_KEY",
+                    "proposed_auth_scheme": "query_param_api_key",
+                    "inferred_rate_limit": None,
+                    "evidence_url": "https://fred.stlouisfed.org/docs/api/api_key.html",
+                    "evidence_snippet": "Use an API key.",
+                    "rationale": "FRED API requests use a key.",
+                }
+            ],
+        }
+    )
+
+    assert result["credential_gap_resolutions"][0]["outcome"] == "provisioned"
+    assert result["credential_gap_resolutions"][0]["applied_env_var_name"] == "FRED_API_KEY"
+    assert result["node_transitions"][0]["event"] == "resolved"
+    assert "fred-from-settings" not in repr(result)
 
 
 @pytest.mark.no_db
@@ -307,6 +409,71 @@ async def test_cohort_lookup_returns_real_mcp_cohorts(monkeypatch: pytest.Monkey
     ]
 
 
+@pytest.mark.asyncio
+@pytest.mark.no_db
+async def test_cohort_lookup_uses_catalog_hit_kind_ids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from macro_foundry.agent.production_deps import build_production_dependencies
+    from macro_foundry.agent.roles import default_role_configs
+
+    calls: list[tuple[str, Any]] = []
+
+    class _StubReadTools:
+        def __init__(self, session: Any) -> None:
+            self.session = session
+
+        async def find_sibling_series(self, args: Any) -> list[_ToolSeries]:
+            calls.append(("siblings", str(args.family_id)))
+            return [_ToolSeries("US_CPI_HEADLINE")]
+
+        async def list_series_for_concept(self, args: Any) -> list[_ToolSeries]:
+            calls.append(("concept", str(args.concept_id)))
+            return [_ToolSeries("JP_CPI_HEADLINE")]
+
+        async def list_provider_series_for_concept(self, args: Any) -> list[_ToolSeries]:
+            calls.append(
+                ("provider_concept", (str(args.provider_id), str(args.concept_id)))
+            )
+            return [_ToolSeries("FRED_US_CPI_HEADLINE")]
+
+    monkeypatch.setattr(
+        "macro_foundry.agent.production_deps.MacrodbReadTools",
+        _StubReadTools,
+    )
+
+    deps = build_production_dependencies(
+        default_role_configs(),
+        session=_make_mock_session(),
+        client=MagicMock(),
+    )
+
+    cohorts = await deps.cohort_lookup(
+        [
+            {"kind": "family", "id": "00000000-0000-0000-0000-000000000001"},
+            {"kind": "concept", "id": "00000000-0000-0000-0000-000000000002"},
+            {"kind": "provider", "id": "00000000-0000-0000-0000-000000000003"},
+        ]
+    )
+
+    assert calls == [
+        ("siblings", "00000000-0000-0000-0000-000000000001"),
+        ("concept", "00000000-0000-0000-0000-000000000002"),
+        (
+            "provider_concept",
+            (
+                "00000000-0000-0000-0000-000000000003",
+                "00000000-0000-0000-0000-000000000002",
+            ),
+        ),
+    ]
+    assert [item["code"] for item in cohorts["cohort_a"]] == ["US_CPI_HEADLINE"]
+    assert [item["code"] for item in cohorts["cohort_b"]] == ["JP_CPI_HEADLINE"]
+    assert [item["code"] for item in cohorts["cohort_c"]] == [
+        "FRED_US_CPI_HEADLINE"
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Cycle 6 — extraction_mode_classifier consults selector registry
 # ---------------------------------------------------------------------------
@@ -331,6 +498,16 @@ async def test_extraction_mode_classifier_prefers_registered_selector_over_keywo
             list_selector_types_called = True
             return ["json_path"]
 
+        async def get_selector_schema(self, args: Any) -> dict[str, Any]:
+            return {
+                "required": [
+                    "records_path",
+                    "period_anchor_field",
+                    "value_field",
+                    "frequency",
+                ]
+            }
+
     monkeypatch.setattr(
         "macro_foundry.agent.production_deps.MacrodbReadTools",
         _StubReadTools,
@@ -348,6 +525,110 @@ async def test_extraction_mode_classifier_prefers_registered_selector_over_keywo
 
     assert list_selector_types_called is True
     assert mode == "config_only"
+
+
+@pytest.mark.asyncio
+@pytest.mark.no_db
+async def test_extraction_mode_classifier_consults_selector_schemas(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from macro_foundry.agent.production_deps import build_production_dependencies
+    from macro_foundry.agent.roles import default_role_configs
+
+    schemas_requested: list[str] = []
+
+    class _StubReadTools:
+        def __init__(self, session: Any) -> None:
+            self.session = session
+
+        async def list_selector_types(self) -> list[str]:
+            return ["json_path"]
+
+        async def get_selector_schema(self, args: Any) -> dict[str, Any]:
+            schemas_requested.append(args.selector_type)
+            return {
+                "type": "object",
+                "required": [
+                    "records_path",
+                    "period_anchor_field",
+                    "value_field",
+                    "frequency",
+                ],
+                "properties": {
+                    "records_path": {"type": "string"},
+                    "period_anchor_field": {"type": "string"},
+                    "value_field": {"type": "string"},
+                    "frequency": {"type": "string"},
+                },
+            }
+
+    monkeypatch.setattr(
+        "macro_foundry.agent.production_deps.MacrodbReadTools",
+        _StubReadTools,
+    )
+
+    deps = build_production_dependencies(
+        default_role_configs(),
+        session=_make_mock_session(),
+        client=MagicMock(),
+    )
+
+    mode = await deps.extraction_mode_classifier(
+        "Provider returns a JSON array of records with period and value fields."
+    )
+
+    assert schemas_requested == ["json_path"]
+    assert mode == "config_only"
+
+
+@pytest.mark.asyncio
+@pytest.mark.no_db
+async def test_extraction_mode_classifier_uses_small_llm_for_ambiguous_shape(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from macro_foundry.agent.production_deps import build_production_dependencies
+    from macro_foundry.agent.roles import default_role_configs
+
+    class _StubReadTools:
+        def __init__(self, session: Any) -> None:
+            self.session = session
+
+        async def list_selector_types(self) -> list[str]:
+            return ["json_path"]
+
+        async def get_selector_schema(self, args: Any) -> dict[str, Any]:
+            return {
+                "required": [
+                    "records_path",
+                    "period_anchor_field",
+                    "value_field",
+                    "frequency",
+                ]
+            }
+
+    monkeypatch.setattr(
+        "macro_foundry.agent.production_deps.MacrodbReadTools",
+        _StubReadTools,
+    )
+    client = _make_mock_openai_client([
+        _openai_response(
+            {
+                "extraction_mode": "custom_python",
+                "rationale": "XML envelope does not match registered JSON selectors.",
+            }
+        )
+    ])
+    deps = build_production_dependencies(
+        default_role_configs(),
+        session=_make_mock_session(),
+        client=client,
+    )
+
+    mode = await deps.extraction_mode_classifier(
+        "Provider returns a nested XML envelope with undocumented dimensions."
+    )
+
+    assert mode == "custom_python"
 
 
 # ---------------------------------------------------------------------------
@@ -376,10 +657,16 @@ async def test_production_deps_full_graph_through_emit_package() -> None:
     draft_content = {
         "proposal": {
             "concept": {"action": "new", "code": "CPI", "name": "Consumer Price Index"},
-            "family": {"action": "new", "code": "USA_CPI", "name": "US CPI", "geography_code": "USA"},
+            "family": {
+                "action": "new",
+                "code": "USA_CPI",
+                "name": "US CPI",
+                "concept_code": "CPI",
+                "geography_code": "USA",
+            },
             "series": {
                 "action": "new",
-                "code": "CPI_USA_ALL_M_NSA_LEVEL",
+                "code": "CPI_USA_ALL_M_NSA",
                 "name": "US CPI Headline NSA",
                 "description": "US Consumer Price Index from FRED.",
                 "frequency": "M",
@@ -390,10 +677,11 @@ async def test_production_deps_full_graph_through_emit_package() -> None:
                 "unit_kind": "INDEX",
             },
             "family_member": {"variant": "Headline NSA"},
-            "sources": [],
+            "source": {"provider_name": "USA FRED", "external_code": "CPIAUCSL"},
             "feed": {
                 "selector_type": "json_path",
-                "selector_config": {},
+                "selector_config_summary": "FRED observations JSON records",
+                "cron_schedule": "0 14 * * 5",
                 "feed_method": "api",
                 "fetch_url": "/series/observations",
             },
@@ -497,3 +785,207 @@ async def test_production_deps_full_graph_through_emit_package() -> None:
 
     # Graph ran to completion
     assert result.get("onboarding_package") or result.get("gate_1_approved")
+
+
+@pytest.mark.asyncio
+@pytest.mark.no_db
+async def test_production_graph_flows_non_empty_cohort_into_drafter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Full graph with production deps sends MCP cohort metadata to draft_proposal."""
+    from datetime import datetime, timezone
+
+    from langgraph.checkpoint.memory import MemorySaver
+
+    from macro_foundry.agent.graph import build_onboarding_graph
+    from macro_foundry.agent.onboarding_state import SessionMetadata
+    from macro_foundry.agent.production_deps import build_production_dependencies
+    from macro_foundry.agent.roles import default_role_configs
+    from macro_foundry.agent.skills import SkillRegistry
+
+    class _StubReadTools:
+        def __init__(self, session: Any) -> None:
+            self.session = session
+
+        async def find_sibling_series(self, args: Any) -> list[_ToolSeries]:
+            return [_ToolSeries("US_CPI_EXISTING_NSA")]
+
+        async def list_series_for_concept(self, args: Any) -> list[_ToolSeries]:
+            return [_ToolSeries("JP_CPI_EXISTING_NSA")]
+
+        async def list_provider_series_for_concept(self, args: Any) -> list[_ToolSeries]:
+            return [_ToolSeries("FRED_US_CPI_EXISTING_NSA")]
+
+        async def list_selector_types(self) -> list[str]:
+            return ["json_path"]
+
+        async def get_selector_schema(self, args: Any) -> dict[str, Any]:
+            return {
+                "required": [
+                    "records_path",
+                    "period_anchor_field",
+                    "value_field",
+                    "frequency",
+                ]
+            }
+
+    monkeypatch.setattr(
+        "macro_foundry.agent.production_deps.MacrodbReadTools",
+        _StubReadTools,
+    )
+
+    research_content = {
+        "source_summary": "FRED CPI JSON API.",
+        "existing_catalog_hits": [
+            {"kind": "family", "id": "00000000-0000-0000-0000-000000000004"},
+            {"kind": "concept", "id": "00000000-0000-0000-0000-000000000005"},
+            {"kind": "provider", "id": "00000000-0000-0000-0000-000000000006"},
+        ],
+        "ambiguity_flags": [],
+        "credential_gap_proposals": [],
+    }
+    draft_content = {
+        "proposal": {
+            "concept": {"action": "existing", "code": "CPI", "name": "Consumer Price Index"},
+            "family": {
+                "action": "existing",
+                "code": "USA_CPI",
+                "name": "US CPI",
+                "concept_code": "CPI",
+                "geography_code": "USA",
+            },
+            "series": {
+                "action": "new",
+                "code": "CPI_USA_CORE_M_NSA",
+                "name": "US CPI Core NSA",
+                "description": "US Consumer Price Index core variant from FRED.",
+                "frequency": "M",
+                "seasonal_adjustment": "NSA",
+                "measure": "LEVEL",
+                "temporal_stock_flow": "FLOW",
+                "unit_scale": "ONE",
+                "unit_kind": "INDEX",
+            },
+            "family_member": {"variant": "Core NSA"},
+            "source": {"provider_name": "USA FRED", "external_code": "CPILFESL"},
+            "feed": {
+                "selector_type": "json_path",
+                "selector_config_summary": "FRED observations JSON records",
+                "cron_schedule": "0 14 * * 5",
+                "feed_method": "api",
+                "fetch_url": "/series/observations",
+            },
+        },
+        "enum_gap_proposals": [],
+        "harmonisation_items": [],
+        "suggest_human_apply": [],
+    }
+    reviewer_content = {"findings": [], "bounce_to_drafter": False}
+    captured_requests: list[dict[str, Any]] = []
+    client = _make_capturing_openai_client(
+        [
+            _openai_response(research_content),
+            _openai_response(draft_content),
+            _openai_response(reviewer_content),
+            _openai_response(reviewer_content),
+        ],
+        captured_requests,
+    )
+    role_configs = default_role_configs()
+    deps = build_production_dependencies(
+        role_configs,
+        session=_make_mock_session(),
+        client=client,
+    )
+
+    class _StubWriteTools:
+        async def propose_create_series(self, args: Any) -> dict[str, Any]:
+            return {
+                "proposal_id": "00000000-0000-0000-0000-000000000001",
+                "item_id": "00000000-0000-0000-0000-000000000002",
+                "series_id": "00000000-0000-0000-0000-000000000003",
+                "family_id": "00000000-0000-0000-0000-000000000004",
+                "concept_id": "00000000-0000-0000-0000-000000000005",
+                "feed_id": "00000000-0000-0000-0000-000000000006",
+            }
+
+        async def record_suggest_human_apply(self, args: Any) -> dict[str, Any]:
+            return {}
+
+        async def apply_credential_gap_resolutions(self, args: Any) -> dict[str, Any]:
+            return {}
+
+        async def trigger_feed_execution(self, args: Any) -> dict[str, Any]:
+            return {"run_log_id": "run-stub"}
+
+    class _StubRunLogs:
+        async def get_ingestion_run_log(self, run_log_id: str) -> dict[str, Any]:
+            return {
+                "run_log_id": run_log_id,
+                "status": "success",
+                "rows_fetched": 5,
+                "rows_inserted": 5,
+                "rows_skipped": 0,
+                "diagnostics": {},
+                "warnings": [],
+            }
+
+    class _StubTestReviewer:
+        async def __call__(self, review_input: dict[str, Any]) -> dict[str, Any]:
+            return {"summary": "First run passed."}
+
+    class _StubPackageStore:
+        async def save_onboarding_package(self, package: dict[str, Any]) -> dict[str, Any]:
+            return {"package_id": "pkg-e2e"}
+
+    async def _approve_picker(options: list[str], *_: Any) -> str:
+        return "approve"
+
+    from macro_foundry.agent.channel import ChannelEvent, ChannelPrompt, ChannelResponse
+
+    class _SilentChannel:
+        async def emit(self, event: ChannelEvent) -> None:
+            pass
+
+        async def prompt(self, prompt: ChannelPrompt) -> ChannelResponse:
+            return ChannelResponse(text="")
+
+    graph = build_onboarding_graph(
+        checkpointer=MemorySaver(),
+        research_llm=deps.research_llm,
+        cohort_lookup=deps.cohort_lookup,
+        extraction_mode_classifier=deps.extraction_mode_classifier,
+        draft_llm=deps.draft_llm,
+        governance_llm=deps.governance_llm,
+        data_correctness_llm=deps.data_correctness_llm,
+        approval_llm=deps.approval_llm,
+        gate_1_picker=_approve_picker,
+        channel=_SilentChannel(),
+        write_tools=_StubWriteTools(),
+        run_logs=_StubRunLogs(),
+        test_reviewer=_StubTestReviewer(),
+        package_store=_StubPackageStore(),
+        role_configs=role_configs,
+        registry=SkillRegistry({}),
+    )
+
+    result = await graph.ainvoke(
+        {
+            "pending_input": "Onboard FRED CPI core",
+            "session_metadata": SessionMetadata(
+                session_id="prod-deps-non-empty-cohort",
+                target_environment="dev",
+                created_at=datetime.now(timezone.utc),
+                created_by="tester",
+                cli_version="0.0.0",
+            ).model_dump(mode="json"),
+        },
+        {"configurable": {"thread_id": "prod-deps-non-empty-cohort"}},
+    )
+
+    assert result["reference_metadata"]["cohort_a"][0]["code"] == "US_CPI_EXISTING_NSA"
+    assert result["is_first_in_family"] is False
+    draft_messages = captured_requests[1]["messages"]
+    draft_prompt = "\n".join(message["content"] for message in draft_messages)
+    assert "US_CPI_EXISTING_NSA" in draft_prompt
+    assert "FRED_US_CPI_EXISTING_NSA" in draft_prompt

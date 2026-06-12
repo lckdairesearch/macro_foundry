@@ -1,6 +1,12 @@
 """Public Pydantic schema surface for macro_foundry."""
 
-from macro_foundry.schemas.concept import ConceptBase, ConceptCreate, ConceptRead, ConceptUpdate
+from macro_foundry.schemas.concept import (
+    ConceptBase,
+    ConceptCreate,
+    ConceptRead,
+    ConceptSearchHit,
+    ConceptUpdate,
+)
 from macro_foundry.schemas.derived import (
     DerivedSeriesBase,
     DerivedSeriesCreate,
@@ -90,6 +96,7 @@ from macro_foundry.schemas.series import (
     SeriesFamilyMemberBase,
     SeriesFamilyMemberCreate,
     SeriesFamilyMemberRead,
+    SeriesFamilySearchHit,
     SeriesFamilyMemberUpdate,
     SeriesFamilyRead,
     SeriesFamilyReadDetail,
@@ -100,6 +107,7 @@ from macro_foundry.schemas.series import (
     SeriesHierarchyEdgeUpdate,
     SeriesRead,
     SeriesReadDetail,
+    SeriesSearchHit,
     SeriesUpdate,
 )
 from macro_foundry.schemas.tag import (
@@ -131,6 +139,7 @@ __all__ = [
     "ConceptBase",
     "ConceptCreate",
     "ConceptRead",
+    "ConceptSearchHit",
     "ConceptUpdate",
     "DerivedSeriesBase",
     "DerivedSeriesCreate",
@@ -189,6 +198,7 @@ __all__ = [
     "SeriesFamilyMemberBase",
     "SeriesFamilyMemberCreate",
     "SeriesFamilyMemberRead",
+    "SeriesFamilySearchHit",
     "SeriesFamilyMemberUpdate",
     "SeriesFamilyRead",
     "SeriesFamilyReadDetail",
@@ -199,6 +209,7 @@ __all__ = [
     "SeriesHierarchyEdgeUpdate",
     "SeriesRead",
     "SeriesReadDetail",
+    "SeriesSearchHit",
     "SeriesSourceBase",
     "SeriesSourceCreate",
     "SeriesSourceRead",

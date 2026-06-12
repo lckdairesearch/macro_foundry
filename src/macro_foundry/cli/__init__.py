@@ -7,9 +7,9 @@ root Typer app.
 
 from __future__ import annotations
 
-from ._app import app, db_app, serve_app
+from ._app import app, db_app, embeddings_app, serve_app
 
 # Import subcommand modules for their decorator side effects.
-from . import db, onboard, seed, serve  # noqa: F401  (side-effect imports)
+from . import db, embeddings, onboard, seed, serve  # noqa: F401  (side-effect imports)
 
-__all__ = ["app", "db_app", "serve_app"]
+__all__ = ["app", "db_app", "embeddings_app", "serve_app"]

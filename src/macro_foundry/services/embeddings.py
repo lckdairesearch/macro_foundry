@@ -1,20 +1,22 @@
-"""Embedding text recipes and client calls for ADR 0020.
+"""Embedding recipe helpers for semantic catalog search.
 
-Changing label wording, field order, or the humanization maps changes the
-embedding input recipe, invalidates stored embeddings, and requires backfill.
+Changing the label wording, field order, or humanization maps changes the
+composed input text and therefore invalidates existing embeddings. When the
+recipe changes, existing rows become stale and must be repaired with
+`macrodb embeddings backfill`.
 """
 
 from __future__ import annotations
 
 import asyncio
 import hashlib
+from collections.abc import Sequence
 
 import openai
 
-from macro_foundry.enums import Frequency, Measure, SeasonalAdjustment, UnitKind
 from macro_foundry.config import settings
-from macro_foundry.models.concept import Concept
-from macro_foundry.models.series import Series, SeriesFamily
+from macro_foundry.enums import Frequency, Measure, SeasonalAdjustment, UnitKind
+from macro_foundry.models import Concept, Series, SeriesFamily
 
 EMBEDDING_MODEL = "text-embedding-3-small"
 EMBEDDING_DIMENSIONS = 1536
@@ -73,39 +75,28 @@ def compose_concept_embedding_input(concept: Concept) -> str:
             _line("Code", concept.code),
             _line("Name", concept.name),
             _line("Description", concept.description),
-        ]
+        ],
     )
 
 
 def compose_family_embedding_input(family: SeriesFamily) -> str:
-    concept = family.concept
-    geography = family.geography
     return _compose(
         [
             _line("Type", "SeriesFamily"),
             _line("Code", family.code),
             _line("Name", family.name),
             _line("Description", family.description),
-            _line("Geography", geography.name if geography is not None else None),
-            _line(
-                "Concept",
-                f"{concept.name} ({concept.code})" if concept is not None else None,
-            ),
-            _line(
-                "Concept description",
-                concept.description if concept is not None else None,
-            ),
-        ]
+            _line("Geography", family.geography.name if family.geography else None),
+            _line("Concept", f"{family.concept.name} ({family.concept.code})" if family.concept else None),
+            _line("Concept description", family.concept.description if family.concept else None),
+        ],
     )
 
 
 def compose_series_embedding_input(series: Series) -> str:
-    raw_alt_names = getattr(series, "alt_name", None)
-    alt_names = ", ".join(raw_alt_names) if raw_alt_names else None
-    family_member = series.family_member
-    family = family_member.family if family_member is not None else None
-    concept = family.concept if family is not None else None
-    geography = series.geography
+    alt_names = ", ".join(series.alt_name) if series.alt_name else None
+    family = series.family_member.family if series.family_member else None
+    concept = family.concept if family else None
     return _compose(
         [
             _line("Type", "Series"),
@@ -113,21 +104,15 @@ def compose_series_embedding_input(series: Series) -> str:
             _line("Name", series.name),
             _line("Alt names", alt_names),
             _line("Description", series.description),
-            _line("Geography", geography.name if geography is not None else None),
+            _line("Geography", series.geography.name if series.geography else None),
             _line("Frequency", FREQUENCY_HUMAN.get(series.frequency)),
             _line("Unit", UNIT_KIND_HUMAN.get(series.unit_kind)),
             _line("Unit label", series.unit_label),
             _line("Measure", MEASURE_HUMAN.get(series.measure)),
-            _line(
-                "Seasonal adjustment",
-                SEASONAL_ADJUSTMENT_HUMAN.get(series.seasonal_adjustment),
-            ),
-            _line("Family", f"{family.name} ({family.code})" if family is not None else None),
-            _line(
-                "Concept",
-                f"{concept.name} ({concept.code})" if concept is not None else None,
-            ),
-        ]
+            _line("Seasonal adjustment", SEASONAL_ADJUSTMENT_HUMAN.get(series.seasonal_adjustment)),
+            _line("Family", f"{family.name} ({family.code})" if family else None),
+            _line("Concept", f"{concept.name} ({concept.code})" if concept else None),
+        ],
     )
 
 
@@ -135,10 +120,10 @@ def hash_embedding_input(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
 
-def _openai_client_from_settings() -> openai.AsyncOpenAI:
+def _client() -> openai.AsyncOpenAI:
     api_key = settings.llm.openai_api_key
     if api_key is None:
-        raise RuntimeError("OPENAI_API_KEY is required for embedding writes.")
+        raise ValueError("OPENAI_API_KEY is required for embeddings")
     return openai.AsyncOpenAI(api_key=api_key.get_secret_value())
 
 
@@ -162,17 +147,24 @@ def _is_transient_embedding_error(exc: Exception) -> bool:
     return isinstance(exc, asyncio.TimeoutError)
 
 
-async def embed_text(text: str) -> list[float]:
-    client = _openai_client_from_settings()
+async def embed_texts(texts: Sequence[str]) -> list[list[float]]:
+    if not texts:
+        return []
+    client = _client()
     for attempt in range(2):
         try:
             response = await client.embeddings.create(
                 model=EMBEDDING_MODEL,
-                input=text,
+                input=list(texts),
             )
-            return [float(value) for value in response.data[0].embedding]
+            return [list(item.embedding) for item in response.data]
         except Exception as exc:
             if not _is_transient_embedding_error(exc) or attempt == 1:
                 raise
             await asyncio.sleep(0.5)
     raise AssertionError("unreachable")
+
+
+async def embed_text(text: str) -> list[float]:
+    vectors = await embed_texts([text])
+    return vectors[0]

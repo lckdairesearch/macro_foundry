@@ -6,7 +6,7 @@ from typing import Annotated
 
 import typer
 
-from macro_foundry.db import EnvTarget, database_url_for_env_target
+from macro_foundry.db import EnvTarget, app_url_for_target
 
 from ._app import serve_app
 
@@ -52,7 +52,7 @@ def serve_api(
     from macro_foundry.backend.main import create_app
 
     uvicorn.run(
-        create_app(database_url=database_url_for_env_target(target)),
+        create_app(database_url=app_url_for_target(target)),
         host=host,
         port=port,
         reload=False,
@@ -79,7 +79,7 @@ def serve_mcp(
     from macro_foundry.mcp.server import build_read_only_server, build_write_enabled_server
 
     try:
-        url = database_url or database_url_for_env_target(target)
+        url = database_url or app_url_for_target(target)
     except ValueError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=2) from exc

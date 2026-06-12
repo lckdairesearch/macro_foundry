@@ -16,12 +16,14 @@ import questionary
 import openai
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from macro_foundry.agent.credential_gap import CredentialProbeOutcome, make_credential_gap_wait_node
 from macro_foundry.agent.llm_openai import (
     make_openai_llm_callable,
     make_openai_reviewer_callable,
 )
 from macro_foundry.agent.llm_schemas import (
     DraftOutput,
+    ExtractionModeOutput,
     ResearchOutput,
     ReviewerOutput,
     TestReviewOutput,
@@ -29,11 +31,13 @@ from macro_foundry.agent.llm_schemas import (
 from macro_foundry.agent.onboarding import OnboardingGraphDependencies
 from macro_foundry.agent.roles import AgentRole, RoleConfig
 from macro_foundry.agent.skills import SkillRegistry
+from macro_foundry.config import settings
 from macro_foundry.mcp.read_tools import (
     FindSiblingSeriesArgs,
     ListProviderSeriesForConceptArgs,
     ListSeriesForConceptArgs,
     MacrodbReadTools,
+    SelectorSchemaArgs,
 )
 
 _SKILLS_DIR = Path(__file__).resolve().parents[3] / "docs" / "skills"
@@ -41,6 +45,14 @@ _SKILLS_DIR = Path(__file__).resolve().parents[3] / "docs" / "skills"
 _CUSTOM_PYTHON_KEYWORDS: frozenset[str] = frozenset(
     {"python", "script", "custom", "sdk", "client", "parse", "scrape"}
 )
+_KNOWN_CREDENTIAL_REFS: tuple[str, ...] = ("FRED_API_KEY",)
+
+
+def _openai_client_from_settings() -> openai.AsyncOpenAI:
+    api_key = settings.llm.openai_api_key
+    return openai.AsyncOpenAI(
+        api_key=api_key.get_secret_value() if api_key is not None else None,
+    )
 
 
 async def _questionary_picker(options: list[str], *_args: Any) -> str:
@@ -51,26 +63,56 @@ async def _questionary_picker(options: list[str], *_args: Any) -> str:
 def _make_extraction_mode_classifier(
     *,
     session: AsyncSession,
+    ambiguous_classifier: Callable[[list[dict[str, str]]], Awaitable[dict[str, Any]]] | None = None,
 ) -> Callable[[str], Awaitable[str]]:
     read_tools = MacrodbReadTools(session)
 
     async def _classify_extraction_mode(source_summary: str) -> str:
         lower = source_summary.lower()
         selector_types = await read_tools.list_selector_types()
-        if _matches_registered_selector(lower, selector_types):
+        selector_schemas = {
+            selector_type: await read_tools.get_selector_schema(
+                SelectorSchemaArgs(selector_type=selector_type)
+            )
+            for selector_type in selector_types
+        }
+        if _matches_registered_selector(lower, selector_types, selector_schemas):
             return "config_only"
         if any(kw in lower for kw in _CUSTOM_PYTHON_KEYWORDS):
             return "custom_python"
+        if ambiguous_classifier is not None:
+            result = await ambiguous_classifier(
+                [
+                    {
+                        "role": "user",
+                        "content": (
+                            "Classify whether this provider extraction can use an existing "
+                            "selector configuration or needs custom Python.\n"
+                            f"source_summary: {source_summary}\n"
+                            f"selector_schemas: {json.dumps(selector_schemas, sort_keys=True)}"
+                        ),
+                    }
+                ]
+            )
+            mode = result.get("extraction_mode")
+            if mode in {"config_only", "custom_python"}:
+                return str(mode)
         return "config_only"
 
     return _classify_extraction_mode
 
 
-def _matches_registered_selector(source_summary: str, selector_types: list[str]) -> bool:
+def _matches_registered_selector(
+    source_summary: str,
+    selector_types: list[str],
+    selector_schemas: dict[str, dict[str, Any]],
+) -> bool:
     for selector_type in selector_types:
         selector_phrase = selector_type.lower().replace("_", " ")
         selector_token = selector_type.lower()
         if selector_token in source_summary or selector_phrase in source_summary:
+            return True
+        if _matches_selector_schema(source_summary, selector_schemas.get(selector_type, {})):
             return True
 
     registry_shape_terms = {
@@ -79,6 +121,7 @@ def _matches_registered_selector(source_summary: str, selector_types: list[str])
             "period_anchor_field",
             "value_field",
             "json array",
+            "json api",
             "record path",
         ),
         "csv_column": ("period_column", "value_column", "csv column"),
@@ -92,6 +135,26 @@ def _matches_registered_selector(source_summary: str, selector_types: list[str])
     return False
 
 
+def _matches_selector_schema(source_summary: str, schema: dict[str, Any]) -> bool:
+    required_fields = schema.get("required")
+    if not isinstance(required_fields, list):
+        return False
+    matched = 0
+    for field in required_fields:
+        phrase = str(field).lower().replace("_", " ")
+        if phrase in source_summary:
+            matched += 1
+            continue
+        meaningful_tokens = [
+            token
+            for token in phrase.split()
+            if token not in {"field", "fields", "path", "column", "columns"}
+        ]
+        if meaningful_tokens and all(token in source_summary for token in meaningful_tokens):
+            matched += 1
+    return matched >= 2
+
+
 def _make_cohort_lookup(
     *,
     session: AsyncSession,
@@ -102,25 +165,46 @@ def _make_cohort_lookup(
         cohort_a: list[dict[str, Any]] = []
         cohort_b: list[dict[str, Any]] = []
         cohort_c: list[dict[str, Any]] = []
+        family_ids: list[Any] = []
+        concept_ids: list[Any] = []
+        provider_ids: list[Any] = []
 
         for hit in catalog_hits:
             family_id = _first_present(hit, "family_id", "series_family_id")
             concept_id = _first_present(hit, "concept_id")
             provider_id = _first_present(hit, "provider_id")
+            kind = str(hit.get("kind") or "").lower()
+            entity_id = hit.get("id")
 
             if family_id is not None:
-                siblings = await read_tools.find_sibling_series(
-                    FindSiblingSeriesArgs(family_id=family_id)
-                )
-                cohort_a.extend(_dump_tool_rows(siblings))
+                family_ids.append(family_id)
+            elif kind in {"family", "series_family"} and entity_id is not None:
+                family_ids.append(entity_id)
 
             if concept_id is not None:
-                concept_series = await read_tools.list_series_for_concept(
-                    ListSeriesForConceptArgs(concept_id=concept_id)
-                )
-                cohort_b.extend(_dump_tool_rows(concept_series))
+                concept_ids.append(concept_id)
+            elif kind == "concept" and entity_id is not None:
+                concept_ids.append(entity_id)
 
-            if provider_id is not None and concept_id is not None:
+            if provider_id is not None:
+                provider_ids.append(provider_id)
+            elif kind == "provider" and entity_id is not None:
+                provider_ids.append(entity_id)
+
+        for family_id in _dedupe_values(family_ids):
+            siblings = await read_tools.find_sibling_series(
+                FindSiblingSeriesArgs(family_id=family_id)
+            )
+            cohort_a.extend(_dump_tool_rows(siblings))
+
+        for concept_id in _dedupe_values(concept_ids):
+            concept_series = await read_tools.list_series_for_concept(
+                ListSeriesForConceptArgs(concept_id=concept_id)
+            )
+            cohort_b.extend(_dump_tool_rows(concept_series))
+
+        for provider_id in _dedupe_values(provider_ids):
+            for concept_id in _dedupe_values(concept_ids):
                 provider_series = await read_tools.list_provider_series_for_concept(
                     ListProviderSeriesForConceptArgs(
                         provider_id=provider_id,
@@ -156,6 +240,18 @@ def _dump_tool_rows(rows: list[Any]) -> list[dict[str, Any]]:
         else:
             dumped.append(dict(row))
     return dumped
+
+
+def _dedupe_values(values: list[Any]) -> list[Any]:
+    seen: set[str] = set()
+    deduped: list[Any] = []
+    for value in values:
+        key = str(value)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(value)
+    return deduped
 
 
 def _dedupe_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -199,6 +295,21 @@ def _make_test_reviewer(
         return await reviewer(messages)
 
     return _test_reviewer
+
+
+async def _credential_probe_ok(_env_var_name: str, _credential: str) -> CredentialProbeOutcome:
+    """Placeholder probe until provider-specific credential checks are wired."""
+    return CredentialProbeOutcome.OK
+
+
+def _settings_credential_environ() -> dict[str, str]:
+    """Resolve known provider credential refs through Settings/.env.local."""
+    resolved: dict[str, str] = {}
+    for credential_ref in _KNOWN_CREDENTIAL_REFS:
+        value = settings.resolve_credential_ref(credential_ref)
+        if value:
+            resolved[credential_ref] = value
+    return resolved
 
 
 class _DbRunLogReader:
@@ -269,7 +380,7 @@ def build_production_dependencies(
     """
     from macro_foundry.mcp.write_tools import MacrodbWriteTools
 
-    effective_client = client or openai.AsyncOpenAI()
+    effective_client = client or _openai_client_from_settings()
 
     research_llm = make_openai_llm_callable(
         role_configs[AgentRole.RESEARCHER], ResearchOutput, client=effective_client
@@ -282,6 +393,9 @@ def build_production_dependencies(
     )
     data_correctness_llm = make_openai_reviewer_callable(
         role_configs[AgentRole.DATA_CORRECTNESS_REVIEWER], ReviewerOutput, client=effective_client
+    )
+    extraction_mode_llm = make_openai_llm_callable(
+        role_configs[AgentRole.APPROVAL_PARSER], ExtractionModeOutput, client=effective_client
     )
     approval_llm = _make_approval_llm(
         role_configs[AgentRole.APPROVAL_PARSER], client=effective_client
@@ -299,7 +413,10 @@ def build_production_dependencies(
     return OnboardingGraphDependencies(
         research_llm=research_llm,
         cohort_lookup=_make_cohort_lookup(session=session),
-        extraction_mode_classifier=_make_extraction_mode_classifier(session=session),
+        extraction_mode_classifier=_make_extraction_mode_classifier(
+            session=session,
+            ambiguous_classifier=extraction_mode_llm,
+        ),
         draft_llm=draft_llm,
         governance_llm=governance_llm,
         data_correctness_llm=data_correctness_llm,
@@ -310,6 +427,11 @@ def build_production_dependencies(
         test_reviewer=test_reviewer,
         package_store=package_store,
         registry=registry,
+        credential_gap_wait_node=make_credential_gap_wait_node(
+            write_tools=write_tools,
+            environ=_settings_credential_environ(),
+            probe=_credential_probe_ok,
+        ),
     )
 
 

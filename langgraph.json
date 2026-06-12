@@ -1,0 +1,11 @@
+{
+  "dockerfile_lines": [],
+  "graphs": {
+    "scope_series_onboarding": "./src/macro_foundry/onboarding_agent/onboarding_scope.py:scope_series_onboarding"
+  },
+  "python_version": "3.14",
+  "env": ".env.local",
+  "dependencies": [
+    "."
+  ]
+}

@@ -50,7 +50,14 @@ from macro_foundry.models import (
     SeriesHierarchyEdge,
     SeriesSource,
 )
+from macro_foundry.schemas import ConceptCreate, SeriesCreate, SeriesFamilyCreate
 from macro_foundry.schemas._base import SchemaModel
+from macro_foundry.services.registration import (
+    ensure_series_embedding_current,
+    register_concept,
+    register_family,
+    register_series,
+)
 
 
 class ProposeCreateSeriesArgs(SchemaModel):
@@ -144,13 +151,14 @@ class MacrodbWriteTools:
         if concept is None:
             if draft.concept.action != "new":
                 raise ValueError(f"Concept {draft.concept.code!r} not found")
-            concept = Concept(
-                code=draft.concept.code,
-                name=draft.concept.name,
-                description=draft.concept.description,
+            concept = await register_concept(
+                self._session,
+                ConceptCreate(
+                    code=draft.concept.code,
+                    name=draft.concept.name,
+                    description=draft.concept.description,
+                ),
             )
-            self._session.add(concept)
-            await self._session.flush()
 
         # Get or create SeriesFamily
         family = (
@@ -161,43 +169,46 @@ class MacrodbWriteTools:
         if family is None:
             if draft.family.action != "new":
                 raise ValueError(f"SeriesFamily {draft.family.code!r} not found")
-            family = SeriesFamily(
-                code=draft.family.code,
-                name=draft.family.name,
-                description=draft.family.description,
-                concept_id=concept.id,
-                geography_id=geography.id,
+            family = await register_family(
+                self._session,
+                SeriesFamilyCreate(
+                    code=draft.family.code,
+                    name=draft.family.name,
+                    description=draft.family.description,
+                    concept_id=concept.id,
+                    geography_id=geography.id,
+                ),
             )
-            self._session.add(family)
-            await self._session.flush()
 
         # Create Series
-        series = Series(
-            code=draft.series.code,
-            name=draft.series.name,
-            alt_name=draft.series.alt_name,
-            description=draft.series.description,
-            origin_type=OriginType(draft.series.origin_type),
-            geography_id=geography.id,
-            frequency=Frequency(draft.series.frequency),
-            temporal_stock_flow=TemporalStockFlow(draft.series.temporal_stock_flow),
-            unit_kind=UnitKind(draft.series.unit_kind),
-            unit_scale=UnitScale(draft.series.unit_scale),
-            measure=Measure(draft.series.measure),
-            measure_horizon=MeasureHorizon(draft.series.measure_horizon) if draft.series.measure_horizon else None,
-            price_basis=PriceBasis(draft.series.price_basis) if draft.series.price_basis else None,
-            currency_code=draft.series.currency_code,
-            reference_kind=ReferenceKind(draft.series.reference_kind) if draft.series.reference_kind else None,
-            reference_year=draft.series.reference_year,
-            reference_label=draft.series.reference_label,
-            seasonal_adjustment=SeasonalAdjustment(draft.series.seasonal_adjustment),
-            annualized=draft.series.annualized,
-            is_active=draft.series.is_active,
-            start_date=date_type.fromisoformat(draft.series.start_date) if draft.series.start_date else None,
-            end_date=date_type.fromisoformat(draft.series.end_date) if draft.series.end_date else None,
+        series = await register_series(
+            self._session,
+            SeriesCreate(
+                code=draft.series.code,
+                name=draft.series.name,
+                alt_name=getattr(draft.series, "alt_name", None),
+                description=draft.series.description,
+                origin_type=OriginType(draft.series.origin_type),
+                geography_id=geography.id,
+                frequency=Frequency(draft.series.frequency),
+                temporal_stock_flow=TemporalStockFlow(draft.series.temporal_stock_flow),
+                unit_kind=UnitKind(draft.series.unit_kind),
+                unit_scale=UnitScale(draft.series.unit_scale),
+                unit_label=getattr(draft.series, "unit_label", None),
+                price_basis=PriceBasis(draft.series.price_basis) if draft.series.price_basis else None,
+                currency_code=draft.series.currency_code,
+                measure=Measure(draft.series.measure),
+                measure_horizon=MeasureHorizon(draft.series.measure_horizon) if draft.series.measure_horizon else None,
+                annualized=draft.series.annualized,
+                seasonal_adjustment=SeasonalAdjustment(draft.series.seasonal_adjustment),
+                reference_kind=ReferenceKind(draft.series.reference_kind) if draft.series.reference_kind else None,
+                reference_year=draft.series.reference_year,
+                reference_label=draft.series.reference_label,
+                start_date=date_type.fromisoformat(draft.series.start_date) if draft.series.start_date else None,
+                end_date=date_type.fromisoformat(draft.series.end_date) if draft.series.end_date else None,
+                is_active=draft.series.is_active,
+            ),
         )
-        self._session.add(series)
-        await self._session.flush()
 
         # Create SeriesFamilyMember
         family_member = SeriesFamilyMember(
@@ -208,6 +219,7 @@ class MacrodbWriteTools:
         )
         self._session.add(family_member)
         await self._session.flush()
+        series = await ensure_series_embedding_current(self._session, series)
 
         # Resolve Provider → ProviderCatalog by provider name
         provider = (
@@ -346,10 +358,180 @@ class MacrodbWriteTools:
             raise ValueError(
                 f"Proposal {args.approved_proposal_id} is not approved (status={proposal.status.value})"
             )
-        proposal.status = ProposalStatus.APPLIED
-        proposal.applied_at = datetime.now(timezone.utc)
-        await self._session.flush()
+        items = (
+            await self._session.execute(
+                select(ChangeProposalItem)
+                .where(ChangeProposalItem.proposal_id == proposal.id)
+                .order_by(ChangeProposalItem.created_at, ChangeProposalItem.id)
+            )
+        ).scalars().all()
+
+        try:
+            async with self._session.begin_nested():
+                for item in self._ordered_materialization_items(items):
+                    await self._materialize_approved_item(item)
+                proposal.status = ProposalStatus.APPLIED
+                proposal.applied_at = datetime.now(timezone.utc)
+                await self._session.flush()
+        except Exception:
+            await self._session.refresh(proposal)
+            raise
+
         return {"proposal_id": str(proposal.id), "status": proposal.status.value}
+
+    def _ordered_materialization_items(
+        self,
+        items: list[ChangeProposalItem],
+    ) -> list[ChangeProposalItem]:
+        priority = {
+            TargetType.CONCEPTS: 0,
+            TargetType.SERIES_FAMILIES: 1,
+            TargetType.SERIES: 2,
+            TargetType.SERIES_FAMILY_MEMBERS: 3,
+        }
+        return sorted(
+            items,
+            key=lambda item: (
+                priority.get(item.target_type, 99),
+                item.created_at,
+                item.id,
+            ),
+        )
+
+    async def _materialize_approved_item(self, item: ChangeProposalItem) -> None:
+        if item.item_type != ItemType.DB_ROW or item.action != Action.INSERT:
+            return
+
+        data = dict(item.proposed_data or {})
+        if item.target_type == TargetType.CONCEPTS:
+            concept = await register_concept(
+                self._session,
+                ConceptCreate.model_validate(
+                    {field: data[field] for field in ConceptCreate.model_fields if field in data}
+                ),
+            )
+            item.target_id = concept.id
+            item.target_ref = concept.code
+        elif item.target_type == TargetType.SERIES_FAMILIES:
+            family = await register_family(
+                self._session,
+                SeriesFamilyCreate.model_validate(
+                    {
+                        "code": data["code"],
+                        "name": data["name"],
+                        "description": data.get("description"),
+                        "concept_id": await self._resolve_concept_id(data),
+                        "geography_id": await self._resolve_geography_id(data),
+                    }
+                ),
+            )
+            item.target_id = family.id
+            item.target_ref = family.code
+        elif item.target_type == TargetType.SERIES:
+            series_payload = {
+                field: data[field]
+                for field in SeriesCreate.model_fields
+                if field in data and field != "geography_id"
+            }
+            series_payload["geography_id"] = await self._resolve_geography_id(data)
+            series = await register_series(
+                self._session,
+                SeriesCreate.model_validate(series_payload),
+            )
+            item.target_id = series.id
+            item.target_ref = series.code
+        elif item.target_type == TargetType.SERIES_FAMILY_MEMBERS:
+            family = await self._resolve_family(data)
+            series = await self._resolve_series(data)
+            family_member = SeriesFamilyMember(
+                family_id=family.id,
+                series_id=series.id,
+                variant=data.get("variant"),
+                is_primary=data.get("is_primary", True),
+            )
+            self._session.add(family_member)
+            await self._session.flush()
+            refreshed_series = await ensure_series_embedding_current(self._session, series)
+            item.target_ref = f"{family.code}:{refreshed_series.code}"
+        else:
+            raise ValueError(
+                "apply_approved_proposal does not support DB-row inserts for "
+                f"{item.target_type.value}"
+            )
+
+        await self._session.flush()
+
+    async def _resolve_geography_id(self, data: dict[str, Any]) -> UUID:
+        if geography_id := data.get("geography_id"):
+            geography = await self._session.get(Geography, UUID(str(geography_id)))
+            if geography is None:
+                raise ValueError(f"Geography {geography_id!r} not found")
+            return geography.id
+
+        geography_code = data.get("geography_code")
+        if not geography_code:
+            raise ValueError("geography_id or geography_code is required")
+        geography = (
+            await self._session.execute(
+                select(Geography).where(Geography.code == geography_code)
+            )
+        ).scalar_one_or_none()
+        if geography is None:
+            raise ValueError(f"Geography {geography_code!r} not found")
+        return geography.id
+
+    async def _resolve_concept_id(self, data: dict[str, Any]) -> UUID:
+        if concept_id := data.get("concept_id"):
+            concept = await self._session.get(Concept, UUID(str(concept_id)))
+            if concept is None:
+                raise ValueError(f"Concept {concept_id!r} not found")
+            return concept.id
+
+        concept_code = data.get("concept_code")
+        if not concept_code:
+            raise ValueError("concept_id or concept_code is required")
+        concept = (
+            await self._session.execute(select(Concept).where(Concept.code == concept_code))
+        ).scalar_one_or_none()
+        if concept is None:
+            raise ValueError(f"Concept {concept_code!r} not found")
+        return concept.id
+
+    async def _resolve_family(self, data: dict[str, Any]) -> SeriesFamily:
+        if family_id := data.get("family_id"):
+            family = await self._session.get(SeriesFamily, UUID(str(family_id)))
+            if family is None:
+                raise ValueError(f"SeriesFamily {family_id!r} not found")
+            return family
+
+        family_code = data.get("family_code")
+        if not family_code:
+            raise ValueError("family_id or family_code is required")
+        family = (
+            await self._session.execute(
+                select(SeriesFamily).where(SeriesFamily.code == family_code)
+            )
+        ).scalar_one_or_none()
+        if family is None:
+            raise ValueError(f"SeriesFamily {family_code!r} not found")
+        return family
+
+    async def _resolve_series(self, data: dict[str, Any]) -> Series:
+        if series_id := data.get("series_id"):
+            series = await self._session.get(Series, UUID(str(series_id)))
+            if series is None:
+                raise ValueError(f"Series {series_id!r} not found")
+            return series
+
+        series_code = data.get("series_code")
+        if not series_code:
+            raise ValueError("series_id or series_code is required")
+        series = (
+            await self._session.execute(select(Series).where(Series.code == series_code))
+        ).scalar_one_or_none()
+        if series is None:
+            raise ValueError(f"Series {series_code!r} not found")
+        return series
 
     async def trigger_feed_execution(self, args: TriggerFeedExecutionArgs) -> dict[str, Any]:
         from macro_foundry.ingestion.runtime.runner import execute_feed

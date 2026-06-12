@@ -12,9 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from macro_foundry.db import (
     EnvTarget,
+    app_url_for_target,
     create_async_engine_for_url,
     create_session_factory,
-    database_url_for_env_target,
 )
 from macro_foundry.enums import (
     FeedMethod,
@@ -46,6 +46,13 @@ from macro_foundry.models import (
     SeriesHierarchyEdge,
     SeriesSource,
 )
+from macro_foundry.schemas import ConceptCreate, SeriesCreate, SeriesFamilyCreate
+from macro_foundry.services.registration import (
+    ensure_series_embedding_current,
+    register_concept,
+    register_family,
+    register_series,
+)
 
 _PROVIDER_NAME = "Macro Foundry Debug Provider"
 _CATALOG_NAME = "Debug smoke catalog"
@@ -59,7 +66,7 @@ _SERIES_CODES = ("DEBUG_TOTAL_INDEX", "DEBUG_COMPONENT_A_INDEX")
 class DebugSmokeBootstrapResult:
     """Summary of the request-centric debug bootstrap."""
 
-    database: EnvTarget
+    target: EnvTarget
     run_date: date
     feed_members: int
     member_logs: int
@@ -69,7 +76,7 @@ class DebugSmokeBootstrapResult:
 
 async def run_debug_smoke_bootstrap(
     *,
-    database: EnvTarget = EnvTarget.DEV,
+    target: EnvTarget = EnvTarget.DEV,
     session_factory: async_sessionmaker[AsyncSession] | None = None,
     run_date: date | None = None,
 ) -> DebugSmokeBootstrapResult:
@@ -79,7 +86,7 @@ async def run_debug_smoke_bootstrap(
     managed_engine = None
 
     if session_factory is None:
-        managed_engine = create_async_engine_for_url(database_url_for_env_target(database))
+        managed_engine = create_async_engine_for_url(app_url_for_target(target))
         session_factory = create_session_factory(managed_engine)
 
     try:
@@ -87,7 +94,7 @@ async def run_debug_smoke_bootstrap(
             try:
                 result = await _run_debug_smoke_transaction(
                     session,
-                    database=database,
+                    target=target,
                     run_date=resolved_run_date,
                 )
                 await session.commit()
@@ -103,7 +110,7 @@ async def run_debug_smoke_bootstrap(
 async def _run_debug_smoke_transaction(
     session: AsyncSession,
     *,
-    database: EnvTarget,
+    target: EnvTarget,
     run_date: date,
 ) -> DebugSmokeBootstrapResult:
     geography = await session.scalar(select(Geography).where(Geography.code == "USA"))
@@ -120,6 +127,10 @@ async def _run_debug_smoke_transaction(
     ]
     for item in series:
         await _get_or_create_family_member(session, family=family, series=item)
+    series = [
+        await ensure_series_embedding_current(session, item)
+        for item in series
+    ]
 
     sources = [
         await _get_or_create_source(session, catalog=catalog, series=item, order=order)
@@ -198,7 +209,7 @@ async def _run_debug_smoke_transaction(
     await session.execute(statement)
 
     return DebugSmokeBootstrapResult(
-        database=database,
+        target=target,
         run_date=run_date,
         feed_members=len(members),
         member_logs=len(member_logs),
@@ -242,13 +253,14 @@ async def _get_or_create_catalog(session: AsyncSession, provider: Provider) -> P
 async def _get_or_create_concept(session: AsyncSession) -> Concept:
     concept = await session.scalar(select(Concept).where(Concept.code == _CONCEPT_CODE))
     if concept is None:
-        concept = Concept(
-            code=_CONCEPT_CODE,
-            name="Debug index",
-            description="Synthetic concept for request-centric debug bootstrap inspection.",
+        concept = await register_concept(
+            session,
+            ConceptCreate(
+                code=_CONCEPT_CODE,
+                name="Debug index",
+                description="Synthetic concept for request-centric debug bootstrap inspection.",
+            ),
         )
-        session.add(concept)
-        await session.flush()
     return concept
 
 
@@ -260,14 +272,15 @@ async def _get_or_create_family(
 ) -> SeriesFamily:
     family = await session.scalar(select(SeriesFamily).where(SeriesFamily.code == _FAMILY_CODE))
     if family is None:
-        family = SeriesFamily(
-            code=_FAMILY_CODE,
-            name="United States debug index",
-            concept_id=concept.id,
-            geography_id=geography.id,
+        family = await register_family(
+            session,
+            SeriesFamilyCreate(
+                code=_FAMILY_CODE,
+                name="United States debug index",
+                concept_id=concept.id,
+                geography_id=geography.id,
+            ),
         )
-        session.add(family)
-        await session.flush()
     return family
 
 
@@ -279,22 +292,23 @@ async def _get_or_create_series(
 ) -> Series:
     series = await session.scalar(select(Series).where(Series.code == code))
     if series is None:
-        series = Series(
-            code=code,
-            name=code.replace("_", " ").title(),
-            origin_type=OriginType.INGESTED,
-            geography_id=geography.id,
-            frequency=Frequency.DAILY,
-            temporal_stock_flow=TemporalStockFlow.INDEX,
-            unit_kind=UnitKind.INDEX,
-            unit_scale=UnitScale.ONE,
-            measure=Measure.LEVEL,
-            annualized=False,
-            seasonal_adjustment=SeasonalAdjustment.NSA,
-            is_active=True,
+        series = await register_series(
+            session,
+            SeriesCreate(
+                code=code,
+                name=code.replace("_", " ").title(),
+                origin_type=OriginType.INGESTED,
+                geography_id=geography.id,
+                frequency=Frequency.DAILY,
+                temporal_stock_flow=TemporalStockFlow.INDEX,
+                unit_kind=UnitKind.INDEX,
+                unit_scale=UnitScale.ONE,
+                measure=Measure.LEVEL,
+                annualized=False,
+                seasonal_adjustment=SeasonalAdjustment.NSA,
+                is_active=True,
+            ),
         )
-        session.add(series)
-        await session.flush()
     return series
 
 

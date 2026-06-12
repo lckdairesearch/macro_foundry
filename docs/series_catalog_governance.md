@@ -38,7 +38,7 @@ when the same series is sourced from different providers or redistributors.
 
 Canonical `series.code` values use this ordered grammar:
 
-`<geo>_<concept>_<variant?>_<freq>_<sa>_<measure>`
+`<geo>_<concept>_<variant?>_<freq>_<sa>_<measure?>`
 
 Slot definitions:
 
@@ -49,9 +49,9 @@ Slot definitions:
   tokens when one qualifier is not enough.
 - `<freq>`: frequency token such as `Q` or `M`
 - `<sa>`: seasonal-adjustment token such as `SAAR`, `SA`, or `NSA`
-- `<measure>`:
-  - raw levels use `LEVEL`
-  - derived year-over-year growth uses `YOY`
+- `<measure?>`: omitted for level series; explicit token for derived
+  measures, such as `YOY` for year-over-year growth. Level is the default,
+  so a code with no trailing measure token denotes a level.
 
 Rules:
 
@@ -60,6 +60,8 @@ Rules:
 - A family may also omit a qualifier for its curated default variant when the
   project has intentionally decided that one scope is the baseline reading for
   that family.
+- Omit the measure slot for level series. Only add a measure token when the
+  series is a non-level transformation (for example `YOY`).
 - Keep slots in this order. Do not invent ad hoc reorderings.
 - Prefer short, stable tokens over prose.
 - Compound variants are allowed. When a series needs more than one qualifier,
@@ -76,7 +78,8 @@ parsing must respect the actual domain model.
 
 Parsing guidance:
 
-- treat `<freq>_<sa>_<measure>` as the fixed suffix and parse that from the right
+- the fixed suffix is `<freq>_<sa>` for level series and
+  `<freq>_<sa>_<measure>` for non-level measures; parse it from the right
 - treat `<geo>` as the leftmost token
 - resolve `<concept>` by matching the longest known `concept.code`
 - treat any tokens between the resolved concept and the fixed suffix as the
@@ -102,7 +105,7 @@ siblings explicitly if they are later curated.
 Example shape:
 
 - if the project treats one CPI population basis as the default reading for a
-  family, the default series may remain `..._CORE_M_NSA_LEVEL`
+  family, the default series may remain `..._CORE_M_NSA`
 - a non-default sibling added later should carry explicit qualifier tokens
 
 Use this sparingly. If omitting the qualifier is likely to confuse a future
@@ -134,8 +137,8 @@ Examples:
 For compound variant cases, use explicit tokens in the code and a readable
 label in the family membership row. Example pair:
 
-- `JP_CPI_CORE_1P_HH_M_NSA_LEVEL`
-- `JP_CPI_CORE_2PPLUS_HH_M_NSA_LEVEL`
+- `JP_CPI_CORE_1P_HH_M_NSA`
+- `JP_CPI_CORE_2PPLUS_HH_M_NSA`
 
 Matching `series_family_members.variant` values might be:
 
@@ -177,9 +180,9 @@ Canonical identity and provider mapping must stay separate:
 This means:
 
 - FRED `GDP` maps to a semantic canonical code such as
-  `US_GDP_NOMINAL_Q_SAAR_LEVEL`
+  `US_GDP_NOMINAL_Q_SAAR`
 - FRED `GDPC1` maps to a semantic canonical code such as
-  `US_GDP_REAL_Q_SAAR_LEVEL`
+  `US_GDP_REAL_Q_SAAR`
 - the FRED ticker never becomes the canonical code just because it is the first
   provider wired up
 
@@ -226,26 +229,22 @@ Series families:
 - `US_GDP`
 - `US_CPI`
 
-Raw ingested series:
+Raw ingested series (level; no measure suffix):
 
-- `US_GDP_NOMINAL_Q_SAAR_LEVEL`
-- `US_GDP_REAL_Q_SAAR_LEVEL`
-- `US_CPI_HEADLINE_M_NSA_LEVEL`
-- `US_CPI_CORE_M_SA_LEVEL`
+- `US_GDP_NOMINAL_Q_SAAR`
+- `US_GDP_REAL_Q_SAAR`
+- `US_CPI_HEADLINE_M_NSA`
+- `US_CPI_CORE_M_SA`
 
-Derived series:
-
-- `US_GDP_NOMINAL_Q_SAAR_YOY`
-- `US_GDP_REAL_Q_SAAR_YOY`
-- `US_CPI_HEADLINE_M_NSA_YOY`
-- `US_CPI_CORE_M_SA_YOY`
+The first FRED preset does not register derived series; that is deferred to
+a later workflow.
 
 Provider mappings for the first preset:
 
-- `GDP` -> `US_GDP_NOMINAL_Q_SAAR_LEVEL`
-- `GDPC1` -> `US_GDP_REAL_Q_SAAR_LEVEL`
-- `CPIAUCNS` -> `US_CPI_HEADLINE_M_NSA_LEVEL`
-- `CPILFESL` -> `US_CPI_CORE_M_SA_LEVEL`
+- `GDP` -> `US_GDP_NOMINAL_Q_SAAR`
+- `GDPC1` -> `US_GDP_REAL_Q_SAAR`
+- `CPIAUCNS` -> `US_CPI_HEADLINE_M_NSA`
+- `CPILFESL` -> `US_CPI_CORE_M_SA`
 
 ## Human-readable naming expectations
 

@@ -21,7 +21,7 @@ class EnvTarget(str, Enum):
     STAGING = "staging"
 
 
-def database_url_for_env_target(target: EnvTarget) -> str:
+def app_url_for_target(target: EnvTarget) -> str:
     """Resolve the app-role database URL for an environment target."""
 
     if target is EnvTarget.TEST:
@@ -33,7 +33,7 @@ def database_url_for_env_target(target: EnvTarget) -> str:
     return settings.db.app_url
 
 
-def owner_url_for_env_target(target: EnvTarget) -> str:
+def owner_url_for_target(target: EnvTarget) -> str:
     """Resolve the owner-role database URL for an environment target.
 
     Reuses MACRODB_OWNER_URL's host/credentials but substitutes the
@@ -45,10 +45,10 @@ def owner_url_for_env_target(target: EnvTarget) -> str:
     owner = make_url(settings.db.owner_url)
     if target is EnvTarget.DEV:
         return owner.render_as_string(hide_password=False)
-    target_db = make_url(database_url_for_env_target(target)).database
+    target_db = make_url(app_url_for_target(target)).database
     if target_db is None:
         raise ValueError(f"Cannot resolve database name for target {target.value!r}")
     return owner.set(database=target_db).render_as_string(hide_password=False)
 
 
-__all__ = ["EnvTarget", "database_url_for_env_target", "owner_url_for_env_target"]
+__all__ = ["EnvTarget", "app_url_for_target", "owner_url_for_target"]

@@ -166,6 +166,211 @@ Verification:
   `uv run ruff check src/macro_foundry tests` and applying migration
   `0011` on dev as `macrodb_owner` before merging.
 
+### [2026-06-12] Issue 66 — routed MCP approval-time catalog writes through registration helpers
+
+Refactored the MCP write-tool approval path in
+`src/macro_foundry/mcp/write_tools.py` so approved catalog-row inserts for
+`concepts`, `series_families`, and `series` materialize through
+`register_concept`, `register_family`, and `register_series` instead of
+direct ORM construction.
+
+`apply_approved_proposal(...)` now:
+
+- loads proposal items explicitly and applies them in dependency order
+  (`concept` → `series_family` → `series` → `series_family_member`);
+- resolves foreign keys by either `*_id` or `*_code` in
+  `proposed_data`, so same-proposal inserts can refer to earlier rows by
+  code;
+- creates `series_family_members` after the series row exists and then
+  calls `ensure_series_embedding_current(...)` so the stored
+  `embedding_input_hash` already reflects live family/concept context;
+- wraps the entire approval-time materialization step in a savepoint so
+  an embedding failure rolls back all partial writes and leaves the
+  proposal in `approved` status.
+
+`src/macro_foundry/services/registration.py` also now reloads series with
+`populate_existing=True` inside `ensure_series_embedding_current(...)` so
+same-session refreshes do not reuse a stale `Series` identity that still
+has `family_member=None`.
+
+Test updates in `tests/macrodb/test_write_mcp.py`:
+
+- mocked `macro_foundry.services.registration.embed_text` for the full
+  write-tool suite;
+- asserted the existing `apply_catalog` integration path writes embedded
+  `Concept`, `SeriesFamily`, and `Series` rows;
+- added approval-path coverage for embedded `concept`, `series_family`,
+  and `series` materialization;
+- added a `series_family_member` approval case that proves the series
+  embedding hash is current after family attachment;
+- added a rollback case where the second embed call fails and verified no
+  partial catalog rows persist and the proposal remains `approved`.
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_write_mcp.py tests/macrodb/test_registration_services.py tests/macrodb/test_fred_bootstrap.py tests/macrodb/test_debug_bootstrap.py tests/macrodb/test_mcp_read_tools.py -q`
+  exited 0 with `39 passed`.
+- `uv run ruff check src/macro_foundry/mcp/write_tools.py src/macro_foundry/services/registration.py tests/macrodb/test_write_mcp.py`
+  exited 0.
+- `rg -nP "(?<![A-Za-z])(Concept|SeriesFamily|Series)\(" src/macro_foundry/mcp/write_tools.py`
+  returned no matches.
+
+### [2026-06-12] Issue 65 — routed bootstrap catalog writes through registration helpers
+
+Refactored the embedded catalog creation paths in the bootstrap layer to
+use the ADR 0020 registration service instead of direct ORM
+construction:
+
+- `src/macro_foundry/bootstrap/fred_us_macro.py`
+- `src/macro_foundry/bootstrap/debug_smoke.py`
+
+For FRED bootstrap, the create branches of `_upsert_concept`,
+`_upsert_series_family`, and `_upsert_series` now call
+`register_concept`, `register_family`, and `register_series`
+respectively. After the family membership row is created, bootstrap now
+calls `ensure_series_embedding_current(...)` so a newly created series
+is immediately re-embedded with family/concept context and the live
+compose/hash predicate is already true without running
+`macrodb embeddings backfill`.
+
+`debug_smoke` now follows the same pattern for `Concept`,
+`SeriesFamily`, and `Series` creation, and likewise refreshes each
+series embedding after the family-member link exists.
+
+Test updates:
+
+- `tests/macrodb/test_fred_bootstrap.py` now mocks
+  `macro_foundry.services.registration.embed_text`, asserts all created
+  `concepts`, `series_families`, and `series` rows have populated
+  embedding columns, and verifies the composed-hash predicate is already
+  current after bootstrap.
+- `tests/macrodb/test_debug_bootstrap.py` now mocks the registration
+  embedding call and asserts the debug bootstrap's embedded catalog rows
+  are populated.
+- `tests/macrodb/test_mcp_read_tools.py` now mocks the registration
+  embedding call so its bootstrap-backed semantic-search tests remain
+  hermetic.
+- `tests/macrodb/test_registration_services.py` now cleans up the
+  committed concept in the transaction-boundary test so later files do
+  not observe leaked catalog state.
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_registration_services.py tests/macrodb/test_fred_bootstrap.py tests/macrodb/test_debug_bootstrap.py tests/macrodb/test_mcp_read_tools.py -q`
+  exited 0 with `26 passed`.
+- `uv run ruff check src/macro_foundry/bootstrap/fred_us_macro.py src/macro_foundry/bootstrap/debug_smoke.py src/macro_foundry/services/registration.py src/macro_foundry/services/__init__.py tests/macrodb/test_registration_services.py tests/macrodb/test_fred_bootstrap.py tests/macrodb/test_debug_bootstrap.py tests/macrodb/test_mcp_read_tools.py`
+  exited 0.
+- `rg -nP "(?<![A-Za-z])(Concept|SeriesFamily|Series)\(" src/macro_foundry/bootstrap/fred_us_macro.py src/macro_foundry/bootstrap/debug_smoke.py`
+  returned no matches.
+
+### [2026-06-12] Issue 64 — added embed-on-write registration helpers
+
+Implemented the ADR 0020 registration chokepoint in
+`src/macro_foundry/services/registration.py`:
+
+- `register_concept(session, payload)`
+- `register_family(session, payload)`
+- `register_series(session, payload)`
+
+Each helper now composes the row's embedding input through the existing
+`services.embeddings.compose_*_embedding_input` functions, calls
+`embed_text`, stores `embedding`, `embedding_model`, and
+`embedding_input_hash`, flushes the row, and returns it without
+committing. A session-scoped async lock serializes ORM mutation so
+same-session concurrent registration calls do not corrupt one another.
+
+Scope note: this issue landed only the helpers and their tests. No
+bootstrap, MCP write-tool, or other caller refactors were included in
+this slice.
+
+Test coverage added in `tests/macrodb/test_registration_services.py`
+for:
+
+- populated embedding fields on returned `Concept`, `SeriesFamily`, and
+  `Series` rows;
+- parent-context composition for family registration;
+- caller-owned transaction boundaries (helper does not commit);
+- failed embeddings leaving no pending ORM object and no persisted row
+  after caller rollback;
+- basic same-session concurrent-call safety.
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_registration_services.py tests/macrodb/test_embeddings_backfill.py -q`
+  exited 0 with `11 passed`.
+- `uv run ruff check src/macro_foundry/services/registration.py src/macro_foundry/services/__init__.py tests/macrodb/test_registration_services.py`
+  exited 0.
+
+### [2026-06-12] Issue 63 — added MCP semantic-search read tools
+
+Implemented the ADR 0020 read surface on `macrodb-mcp`:
+
+- `search_concepts(query, limit)` returning `ConceptSearchHit`
+  wrapper rows.
+- `search_series_families(query, limit)` returning
+  `SeriesFamilySearchHit` wrapper rows with family members hydrated via
+  `SeriesFamilyReadDetail`.
+- `search_series(query, limit)` returning `SeriesSearchHit` wrapper
+  rows.
+
+All three tools now embed the natural-language query via
+`services.embeddings.embed_text`, rank only rows with non-null
+embeddings using pgvector cosine distance (`1 - (embedding <=> query)`
+clamped into `[0, 1]`), hydrate through the existing `*Read` schemas,
+and are registered on the read-only MCP server via
+`READ_ONLY_TOOL_NAMES` and `_register_read_tools`.
+
+Test coverage added for:
+
+- ranked `search_concepts`, `search_series_families`, and
+  `search_series` results with wrapper payloads and bounded similarity
+  scores;
+- exclusion of rows where `embedding IS NULL`;
+- empty-catalog behavior (`[]`);
+- the two ADR 0020/FRED probe queries:
+  `headline inflation monthly United States` →
+  `US_CPI_HEADLINE_M_NSA` top hit, and
+  `real GDP growth quarterly US` → `US_GDP_REAL_Q_SAAR` top hit;
+- MCP read-only server tool registration including the three new tool
+  names.
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_mcp_read_tools.py tests/macrodb/test_mcp_server.py -q`
+  exited 0 with `17 passed`.
+- `uv run ruff check src/macro_foundry/mcp/read_tools.py src/macro_foundry/mcp/server.py src/macro_foundry/schemas/concept.py src/macro_foundry/schemas/series.py src/macro_foundry/schemas/__init__.py tests/macrodb/test_mcp_read_tools.py tests/macrodb/test_mcp_server.py`
+  exited 0.
+
+### [2026-06-12] Issue 62 — added `macrodb embeddings backfill` CLI
+
+Landed the ADR 0020 repair path as `macrodb embeddings backfill --target {dev|staging}`.
+The command rejects `test`, fails fast when `OPENAI_API_KEY` is absent, scans
+`concepts`, `series_families`, and `series` for stale rows using the locked
+predicate (`embedding` present, current `embedding_model`, matching
+`embedding_input_hash`), and re-embeds stale rows in batches of 50 using a
+single OpenAI embeddings call per batch. Added the embedding service module
+locally as required groundwork because the branch was missing the closed issue
+61 implementation, plus the `0012` Alembic migration and ORM columns needed for
+the command to run against real databases.
+
+One-time dev backfill note:
+
+- `uv run macrodb db migrate --target dev` upgraded `macrodb_dev` from `0011`
+  to `0012`.
+- `uv run macrodb embeddings backfill --target dev` completed successfully on
+  2026-06-12 and was a no-op: `concepts: 0 stale`, `series_families: 0 stale`,
+  `series: 0 stale`.
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_embeddings_backfill.py -q` exited 0 with
+  `5 passed`.
+- `uv run ruff check src/macro_foundry/cli/embeddings.py src/macro_foundry/cli/_app.py src/macro_foundry/cli/__init__.py src/macro_foundry/models/concept.py src/macro_foundry/models/series.py src/macro_foundry/models/_vector.py src/macro_foundry/services/__init__.py src/macro_foundry/services/embeddings.py tests/macrodb/test_embeddings_backfill.py alembic/versions/0012_catalog_embedding_columns.py`
+  exited 0.
+- `uv run macrodb db migrate --target test` reported `before=0012 after=0012`.
+- `uv run macrodb embeddings backfill --target dev` reported `0 stale` for all
+  three embedded tables; rerunnable no-op confirmed on the live command path.
+
 ### [2026-06-12] Onboarding — designed `check_db` node for catalog-duplicate detection and embeddings
 
 Two Proposed ADRs and one prompt landed as the design anchor for the
@@ -345,6 +550,7 @@ Verification:
   `342 passed, 1 failed`; the failure was the pre-existing flaky
   `test_concurrency_advisory_warns_when_another_session_exists`, which passed
   immediately in isolation.
+
 ### [2026-06-11] Issue 59 — MCP-backed cohorts and selector-registry extraction classification
 
 Replaced the two production dependency placeholders from issue 59:
@@ -2233,5 +2439,79 @@ Deviation note:
 
 - this is design and documentation work; no LangGraph, MCP, runtime, or
   agent code has been implemented yet
+
+### [2026-06-12] Scoping subgraph refactor — three-node split
+
+Restructured the onboarding scoping prototype in
+`src/macro_foundry/onboarding_agent/1_scoping.ipynb` from a two-node graph
+(`clarify_with_user` -> `write_series_brief`, with a back-edge where the brief
+writer also voted on `needs_clarification`) into a three-node graph with
+single-responsibility nodes:
+
+```
+START -> clarify_with_user -> verify_identifier -> write_series_brief -> END
+              ^                       |
+              |_______________________|
+                (bounded retry, MAX_VERIFICATION_ATTEMPTS = 2)
+```
+
+Motivation: a user requesting "headline inflation FRED CPILFESL" passes the
+clarifier (provider + ticker is unambiguous on its face) but `CPILFESL` is
+core CPI, not headline. The old brief writer caught this only as a side
+effect of authoring, which meant two prompts were voting on the same
+`needs_clarification` decision with no shared definition.
+
+Updated:
+
+- `src/macro_foundry/onboarding_agent/1_scoping.ipynb` — cells `57f0bb17`
+  (`%%writefile state_scope.py`) and `f9da056d`
+  (`%%writefile onboarding_scope.py`) rewritten to match the new topology
+- `src/macro_foundry/onboarding_agent/state_scope.py` (regenerated):
+  - `AgentState` namespaced per node (`clarification_*`, `verification_*`,
+    `series_brief`)
+  - new `VerificationFindings` schema (canonical_name, source_url, notes) as
+    a byproduct passed forward to the brief writer
+  - new `VerifyIdentifier` schema (has_conflict, conflict_description,
+    findings) for the verification node
+  - `SeriesBrief` shrunk to a pure author output; the
+    `needs_clarification` / `clarification_question` / `clarification_reasons`
+    fields are removed
+- `src/macro_foundry/onboarding_agent/onboarding_scope.py` (regenerated):
+  - `clarify_with_user` now accepts a `verification_conflict` placeholder
+    and constrains its question to that conflict when set
+  - new `verify_identifier` node, web-verifies the identifier against the
+    user's description, routes back to clarify on mismatch with bounded
+    retries, otherwise proceeds to the brief writer
+  - `write_series_brief` simplified to a pure author that reads
+    `verification_findings` as authoritative and fills gaps via targeted
+    `web_search`; no gating
+- `src/macro_foundry/onboarding_agent/prompts.py`:
+  - `clarify_with_user_instructions`: criteria 5 (acronym handling) and 6
+    (identifier/description conflict) removed; new `<VerificationConflict>`
+    block with an "if non-empty, ask only about this" branch; "out of scope"
+    note that points conflict-detection to `verify_identifier`
+  - new `verify_identifier_instructions` prompt with hard rules to keep it
+    focused on conflict detection (findings are a byproduct, not a goal)
+  - `transform_messages_into_series_brief_prompt`: trailing
+    `needs_clarification` gating block removed; new
+    `<VerificationFindings>` block with "treat as authoritative, do not
+    redo verification" framing
+
+New:
+
+- `docs/adr/0018-scoping-three-node-split.md` — ADR documenting the SRP
+  rationale, CPILFESL/headline failure case, loop bound, prompt-boundary
+  rules, and alternatives considered (collapse, beefed-up clarifier,
+  self-revise loop, no cap)
+- `docs/adr/README.md` index updated for ADR 0018
+
+Deviation note:
+
+- this is prototype work in the `onboarding_agent/` notebook directory; it
+  is upstream of the gated onboarding graph in ADR 0011 and does not yet
+  touch the production `macrodb-mcp` seam or LangGraph checkpointer
+- no test run was executed as part of this commit; verification cases
+  (`FRED CPIAUCSL`, `headline inflation FRED CPILFESL`, `give me CPI`) are
+  listed in the notebook for manual run by the developer
 
 ### [Future entries go above this line]

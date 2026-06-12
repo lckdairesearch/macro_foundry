@@ -10,14 +10,13 @@ import typer
 from macro_foundry.agent.onboarding import OnboardingResult, SessionRuntimeConfig, run_onboarding_session
 from macro_foundry.agent.production_deps import build_production_dependencies
 from macro_foundry.agent.roles import AgentRole, RoleOverride, apply_role_overrides, default_role_configs
-from macro_foundry.db import EnvTarget
-from macro_foundry.db.env_target import database_url_for_env_target
+from macro_foundry.db import EnvTarget, app_url_for_target
 from macro_foundry.db.session import create_async_engine_for_url, create_session_factory
 
 from . import _helpers
 from ._app import app
 
-_ONBOARDING_TARGETS = {EnvTarget.DEV, EnvTarget.STAGING}
+_ONBOARDING_TARGETS = {EnvTarget.DEV, EnvTarget.TEST, EnvTarget.STAGING}
 
 
 @app.command("onboard")
@@ -28,7 +27,7 @@ def onboard(
         typer.Option(
             "--target",
             case_sensitive=False,
-            help="Target dev or staging. Defaults to staging.",
+            help="Target dev, test, or staging. Defaults to staging.",
         ),
     ] = EnvTarget.STAGING,
     resume_session_id: Annotated[
@@ -61,8 +60,14 @@ def onboard(
     """Open the gated onboarding chat shell."""
 
     if target not in _ONBOARDING_TARGETS:
-        typer.echo(f"onboard does not support --target {target.value} (allowed: dev, staging)", err=True)
+        typer.echo(f"onboard does not support --target {target.value} (allowed: dev, test, staging)", err=True)
         raise typer.Exit(code=2)
+    if target is EnvTarget.TEST:
+        typer.echo(
+            "note: --target test is for local test-environment onboarding only; "
+            "do not treat it as a durable onboarding workflow target.",
+            err=True,
+        )
 
     role_config_overrides = _parse_role_overrides(model or [], deep_model or [])
 
@@ -90,7 +95,7 @@ async def _async_onboard(
 ) -> OnboardingResult:
     """Open a DB session, build production dependencies, then run the onboarding loop."""
     role_configs = apply_role_overrides(default_role_configs(), role_config_overrides or {})
-    url = database_url_for_env_target(target)
+    url = app_url_for_target(target)
     engine = create_async_engine_for_url(url)
     session_factory = create_session_factory(engine)
 

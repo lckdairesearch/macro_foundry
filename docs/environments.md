@@ -14,7 +14,7 @@ the onboarding target.
 | DB | Hosted on | Role | Lifecycle | Onboarding role |
 |---|---|---|---|---|
 | `macrodb_dev` | Local Docker | Developer playground | Reset whenever the developer wants; no durability guarantees | Used for dry-run onboarding sessions (`macrodb onboard --target dev`) |
-| `macrodb_test` | Local Docker | Pytest target | Reset by `conftest.py` fixtures; never durable | Never an onboarding target. The CLI refuses `--target test` |
+| `macrodb_test` | Local Docker | Pytest target | Reset by `conftest.py` fixtures; never durable | Allowed only for local test-environment onboarding runs; never a durable onboarding workflow target |
 | `macrodb_staging` | Neon | Durable pre-prod environment | Long-lived; reset only by deliberate ops action | Default target for `macrodb onboard`; where first ingestion runs execute and where onboarding packages land |
 | `macrodb_prod` | Neon | Production | Long-lived; mutated only via the separate promotion workflow | The CLI cannot target prod. Promotion is handled by an outer workflow |
 
@@ -54,11 +54,11 @@ A possible future direction: stand `macrodb_staging` up as a Neon *branch* of
 recent copy of real production data. Not built today, but the fact that the
 option is available is part of why staging belongs on Neon.
 
-## Why pytest is not an onboarding target
+## Why pytest is not a durable onboarding target
 
 `macrodb_test` is the pytest target. Its schema is up-to-date with
 migrations, and its data is wiped frequently by test fixtures. Both
-properties are incompatible with onboarding:
+properties are incompatible with durable onboarding:
 
 - onboarding sessions persist catalog rows that the operator wants to
   inspect across days, not seconds
@@ -69,8 +69,9 @@ Conflating the two would produce a workflow where reviewers cannot trust
 that the rows they reviewed last week still exist. Keeping them separate is
 the simpler safety property.
 
-The CLI enforces this: `macrodb onboard --target test` is rejected at
-argument parsing.
+The CLI allows `macrodb onboard --target test` only for local test-environment
+onboarding runs and prints a warning when it is used. A test-targeted session
+must not be treated as part of the durable onboarding workflow.
 
 ## Agent process targeting
 
@@ -81,8 +82,8 @@ Resuming a session reuses its original target. A session that began against
 `staging` cannot finish against `dev`. Retargeting requires aborting the
 session and starting a new one.
 
-The CLI default is `--target staging`. The only other accepted value today is
-`dev`.
+The CLI default is `--target staging`. The other accepted values today are
+`dev` and `test`; `test` remains local and non-durable only.
 
 The custom `macrodb-mcp` server is process-agnostic: the same server binary
 serves any environment, connected by a different connection string. The

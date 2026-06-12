@@ -28,6 +28,9 @@ references and supersedes the old one — don't edit the old one.
 | [0015](0015-reviewer-role-consolidation.md) | Reviewer role consolidation in the gated onboarding workflow | Accepted (partially amends ADR 0011) |
 | [0016](0016-credential-gap-escalation.md) | Credential-gap escalation in the gated onboarding workflow | Accepted |
 | [0017](0017-cli-interface-standardisation.md) | `macrodb` CLI interface standardisation | Accepted |
+| [0018](0018-scoping-three-node-split.md) | Scoping subgraph splits clarify, verify, and brief authoring into separate nodes | Accepted |
+| [0019](0019-check-db-node-for-onboarding.md) | `check_db` node for catalog-duplicate detection in onboarding | Proposed |
+| [0020](0020-catalog-embeddings-for-semantic-search.md) | Catalog embeddings for semantic search | Proposed |
 
 ## Format
 

@@ -24,6 +24,9 @@ from macro_foundry.enums import (
     UnitScale,
 )
 from macro_foundry.models._schema_policy import enum_column, fk_uuid
+from macro_foundry.models._vector import Vector
+
+_EMBEDDING_DIMENSIONS = 1536
 
 if TYPE_CHECKING:
     from macro_foundry.models.concept import Concept
@@ -55,6 +58,9 @@ class Series(TimestampedBase):
     name: Mapped[str] = mapped_column(String(), nullable=False)
     alt_name: Mapped[list[str] | None] = mapped_column(ARRAY(Text()), nullable=True)
     description: Mapped[str | None] = mapped_column(String(), nullable=True)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(_EMBEDDING_DIMENSIONS), nullable=True)
+    embedding_model: Mapped[str | None] = mapped_column(String(), nullable=True)
+    embedding_input_hash: Mapped[str | None] = mapped_column(String(), nullable=True)
     origin_type: Mapped[OriginType] = enum_column(
         "series",
         "origin_type",
@@ -257,6 +263,9 @@ class SeriesFamily(TimestampedBase):
     code: Mapped[str] = mapped_column(String(), nullable=False)
     name: Mapped[str] = mapped_column(String(), nullable=False)
     description: Mapped[str | None] = mapped_column(String(), nullable=True)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(_EMBEDDING_DIMENSIONS), nullable=True)
+    embedding_model: Mapped[str | None] = mapped_column(String(), nullable=True)
+    embedding_input_hash: Mapped[str | None] = mapped_column(String(), nullable=True)
     concept_id: Mapped[uuid.UUID] = fk_uuid(
         "concepts.id",
         ondelete="RESTRICT",

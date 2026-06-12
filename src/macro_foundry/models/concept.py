@@ -8,6 +8,9 @@ from sqlalchemy import String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from macro_foundry.db.base import TimestampedBase
+from macro_foundry.models._vector import Vector
+
+_EMBEDDING_DIMENSIONS = 1536
 
 if TYPE_CHECKING:
     from macro_foundry.models.series import SeriesFamily
@@ -22,6 +25,9 @@ class Concept(TimestampedBase):
     code: Mapped[str] = mapped_column(String(), nullable=False)
     name: Mapped[str] = mapped_column(String(), nullable=False)
     description: Mapped[str | None] = mapped_column(String(), nullable=True)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(_EMBEDDING_DIMENSIONS), nullable=True)
+    embedding_model: Mapped[str | None] = mapped_column(String(), nullable=True)
+    embedding_input_hash: Mapped[str | None] = mapped_column(String(), nullable=True)
 
     series_families: Mapped[list["SeriesFamily"]] = relationship(
         "SeriesFamily",

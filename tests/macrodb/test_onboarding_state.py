@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 import pytest
 from pydantic import ValidationError
 
-from macro_foundry.agent.onboarding import OnboardingTarget
 from macro_foundry.agent.onboarding_state import (
     LLMCallRecord,
     LoadedSkill,
@@ -18,6 +17,7 @@ from macro_foundry.agent.onboarding_state import (
     SessionMetadata,
     TranscriptEntry,
 )
+from macro_foundry.db import EnvTarget
 
 
 @pytest.mark.no_db
@@ -25,7 +25,7 @@ def test_onboarding_checkpoint_state_enforces_append_only_fields() -> None:
     created_at = datetime(2026, 6, 10, tzinfo=timezone.utc)
     metadata = SessionMetadata(
         session_id="friendly-session",
-        target_environment=OnboardingTarget.DEV.value,
+        target_environment=EnvTarget.DEV.value,
         created_at=created_at,
         created_by="macrodb-cli",
         cli_version="0.1.0",
@@ -91,7 +91,7 @@ def test_onboarding_checkpoint_state_enforces_append_only_fields() -> None:
             context={"previous_state": base},
         )
 
-    changed_metadata = metadata.model_copy(update={"target_environment": OnboardingTarget.STAGING.value})
+    changed_metadata = metadata.model_copy(update={"target_environment": EnvTarget.STAGING.value})
     with pytest.raises(ValidationError, match="session_metadata is immutable"):
         OnboardingCheckpointState.model_validate(
             {
@@ -122,7 +122,7 @@ def test_onboarding_checkpoint_state_records_llm_calls() -> None:
     created_at = datetime(2026, 6, 10, tzinfo=timezone.utc)
     metadata = SessionMetadata(
         session_id="friendly-session",
-        target_environment=OnboardingTarget.DEV.value,
+        target_environment=EnvTarget.DEV.value,
         created_at=created_at,
         created_by="macrodb-cli",
         cli_version="0.1.0",

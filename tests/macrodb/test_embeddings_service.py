@@ -232,9 +232,9 @@ async def test_embed_text_uses_settings_key_and_returns_embedding(
 
     captured: dict[str, str | None] = {}
 
-    async def _create(*, model: str, input: str) -> SimpleNamespace:
+    async def _create(*, model: str, input: list[str]) -> SimpleNamespace:
         assert model == embeddings.EMBEDDING_MODEL
-        assert input == "hello world"
+        assert input == ["hello world"]
         return SimpleNamespace(
             data=[SimpleNamespace(embedding=[0.1, 0.2, 0.3])],
         )
