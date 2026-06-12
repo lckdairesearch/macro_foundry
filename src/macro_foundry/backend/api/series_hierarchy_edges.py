@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from macro_foundry.backend.deps import get_session, verify_token
-from macro_foundry.models import Series, SeriesFamily, SeriesFamilyMember, SeriesHierarchyEdge
+from macro_foundry.models import Series, Indicator, IndicatorVariant, SeriesHierarchyEdge
 from macro_foundry.schemas import SeriesHierarchyEdgeCreate, SeriesHierarchyEdgeRead, SeriesHierarchyEdgeUpdate
 
 router = APIRouter(prefix="/series-hierarchy-edges", tags=["series-hierarchy-edges"])
@@ -22,9 +22,9 @@ async def _fetch_edge(session: AsyncSession, edge_id: UUID) -> SeriesHierarchyEd
 
 async def _concept_id_for_series(session: AsyncSession, series_id: UUID) -> UUID | None:
     statement = (
-        select(SeriesFamily.concept_id)
-        .join(SeriesFamilyMember, SeriesFamilyMember.family_id == SeriesFamily.id)
-        .where(SeriesFamilyMember.series_id == series_id)
+        select(Indicator.concept_id)
+        .join(IndicatorVariant, IndicatorVariant.indicator_id == Indicator.id)
+        .where(IndicatorVariant.series_id == series_id)
     )
     return await session.scalar(statement)
 
@@ -46,7 +46,7 @@ async def _validate_same_concept_edge(session: AsyncSession, parent_series_id: U
     if parent_concept_id is None or child_concept_id is None:
         raise HTTPException(
             status_code=422,
-            detail="Both hierarchy endpoints must belong to a series family",
+            detail="Both hierarchy endpoints must belong to an indicator",
         )
     if parent_concept_id != child_concept_id:
         raise HTTPException(

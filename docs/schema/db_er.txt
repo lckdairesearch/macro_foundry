@@ -5,8 +5,8 @@
 //
 // Dependency levels:
 //   L0 (roots):   geographies, concepts, tags, providers, ingestion_feeds
-//   L1:           series, series_families, provider_catalogs
-//   L2:           series_tags, series_family_members, series_hierarchy_edges, series_sources, derived_series
+//   L1:           series, indicators, provider_catalogs
+//   L2:           series_tags, indicator_variants, series_hierarchy_edges, series_sources, derived_series
 //   L3:           ingestion_feed_members, derivation_inputs
 //   L4:           ingestion_run_logs, computation_run_logs
 //   L5:           ingestion_run_log_members
@@ -19,7 +19,7 @@
 //
 // Intentionally NOT enforced (decisions to keep, not gaps):
 //   - No `reference_kind IS NOT NULL → reference_year IS NOT NULL` CHECK
-//   - No partial unique on series_family_members(family_id) WHERE is_primary=true
+//   - No partial unique on indicator_variants(indicator_id) WHERE is_default=true
 // =============================================================
 
 // =======================
@@ -129,7 +129,7 @@ series [icon: activity, color: green] {
   updated_at timestamp
 }
 
-series_families [icon: layers, color: purple] {
+indicators [icon: layers, color: purple] {
   id uuid pk
   code string unique              // e.g. JP_CPI, US_CPI, JP_HOUSEHOLD_CONSUMPTION
   name string
@@ -161,11 +161,11 @@ series_tags [icon: tag, color: orange] {
   tag_id uuid pk fk               // FK -> tags.id
 }
 
-series_family_members [icon: list, color: purple] {
-  family_id uuid pk fk            // FK -> series_families.id
+indicator_variants [icon: list, color: purple] {
+  indicator_id uuid pk fk         // FK -> indicators.id
   series_id uuid pk fk           // FK -> series.id
-  variant string                  // nullable; human-readable variant e.g. "Core ex fresh food", "Two-or-more-person households"
-  is_primary boolean
+  label string                    // nullable; human-readable variant label e.g. "Core ex fresh food", "Two-or-more-person households"
+  is_default boolean
   created_at timestamp
   updated_at timestamp
 }
@@ -343,7 +343,7 @@ change_proposal_items [icon: list-checks, color: purple] {
   id uuid pk
   proposal_id uuid fk             // FK -> change_proposals.id
   item_type string                // ENUM: db_row | code_change | migration | test | validation | documentation
-  target_type string              // ENUM: concepts | series | series_families | series_sources | ingestion_feeds | file | function | test | providers | provider_catalogs | derived_series | derivation_inputs | geographies | tags | series_family_members | geography_memberships
+  target_type string              // ENUM: concepts | series | indicators | series_sources | ingestion_feeds | file | function | test | providers | provider_catalogs | derived_series | derivation_inputs | geographies | tags | indicator_variants | geography_memberships
   action string                   // ENUM: insert | update | deactivate | create_file | modify_file | run_test | validate
   target_id uuid                  // nullable; existing DB row if update or deactivate; polymorphic, no FK enforcement
   target_ref string               // nullable; file path, function path, artifact path
@@ -373,11 +373,11 @@ series.replaced_by_series_id - series.id // ON DELETE RESTRICT
 series_tags.series_id > series.id // ON DELETE CASCADE
 series_tags.tag_id > tags.id // ON DELETE CASCADE
 
-// ---- Concept / family cluster ----
-series_families.concept_id > concepts.id // ON DELETE RESTRICT
-series_families.geography_id > geographies.id // ON DELETE RESTRICT
-series_family_members.family_id > series_families.id // ON DELETE CASCADE
-series_family_members.series_id - series.id // ON DELETE CASCADE
+// ---- Concept / indicator cluster ----
+indicators.concept_id > concepts.id // ON DELETE RESTRICT
+indicators.geography_id > geographies.id // ON DELETE RESTRICT
+indicator_variants.indicator_id > indicators.id // ON DELETE CASCADE
+indicator_variants.series_id - series.id // ON DELETE CASCADE
 series_hierarchy_edges.parent_series_id > series.id // ON DELETE RESTRICT
 series_hierarchy_edges.child_series_id > series.id // ON DELETE RESTRICT
 

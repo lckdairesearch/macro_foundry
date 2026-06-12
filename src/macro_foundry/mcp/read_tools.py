@@ -15,15 +15,15 @@ from macro_foundry.models import (
     Concept,
     ProviderCatalog,
     Series,
-    SeriesFamily,
-    SeriesFamilyMember,
+    Indicator,
+    IndicatorVariant,
     SeriesSource,
 )
 from macro_foundry.schemas import (
     ConceptRead,
     ConceptSearchHit,
-    SeriesFamilySearchHit,
-    SeriesFamilyReadDetail,
+    IndicatorSearchHit,
+    IndicatorReadDetail,
     SeriesRead,
     SeriesSearchHit,
 )
@@ -160,28 +160,28 @@ class MacrodbReadTools:
 
     async def lookup_family(
         self, args: LookupFamilyArgs
-    ) -> SeriesFamilyReadDetail | None:
-        """Return the series family with its member rows, or None."""
+    ) -> IndicatorReadDetail | None:
+        """Return the indicator with its variant rows, or None."""
 
-        family = await self._session.scalar(
-            select(SeriesFamily)
-            .where(SeriesFamily.code == args.code)
-            .options(selectinload(SeriesFamily.members)),
+        indicator = await self._session.scalar(
+            select(Indicator)
+            .where(Indicator.code == args.code)
+            .options(selectinload(Indicator.variants)),
         )
-        if family is None:
+        if indicator is None:
             return None
-        return SeriesFamilyReadDetail.model_validate(family)
+        return IndicatorReadDetail.model_validate(indicator)
 
     async def find_sibling_series(
         self, args: FindSiblingSeriesArgs
     ) -> list[SeriesRead]:
-        """Return series rows attached to a family."""
+        """Return series rows attached to an indicator."""
 
         result = await self._session.execute(
             select(Series)
-            .join(SeriesFamilyMember, SeriesFamilyMember.series_id == Series.id)
-            .where(SeriesFamilyMember.family_id == args.family_id)
-            .order_by(SeriesFamilyMember.is_primary.desc(), Series.code),
+            .join(IndicatorVariant, IndicatorVariant.series_id == Series.id)
+            .where(IndicatorVariant.indicator_id == args.family_id)
+            .order_by(IndicatorVariant.is_default.desc(), Series.code),
         )
         return [SeriesRead.model_validate(series) for series in result.scalars().all()]
 
@@ -251,14 +251,14 @@ class MacrodbReadTools:
 
         result = await self._session.execute(
             select(Series)
-            .join(SeriesFamilyMember, SeriesFamilyMember.series_id == Series.id)
-            .join(SeriesFamily, SeriesFamily.id == SeriesFamilyMember.family_id)
+            .join(IndicatorVariant, IndicatorVariant.series_id == Series.id)
+            .join(Indicator, Indicator.id == IndicatorVariant.indicator_id)
             .join(SeriesSource, SeriesSource.series_id == Series.id)
             .join(
                 ProviderCatalog, ProviderCatalog.id == SeriesSource.provider_catalog_id
             )
             .where(
-                SeriesFamily.concept_id == args.concept_id,
+                Indicator.concept_id == args.concept_id,
                 ProviderCatalog.provider_id == args.provider_id,
             )
             .order_by(Series.code),
@@ -268,13 +268,13 @@ class MacrodbReadTools:
     async def list_series_for_concept(
         self, args: ListSeriesForConceptArgs
     ) -> list[SeriesRead]:
-        """Return series belonging to any family for a concept."""
+        """Return series belonging to any indicator for a concept."""
 
         result = await self._session.execute(
             select(Series)
-            .join(SeriesFamilyMember, SeriesFamilyMember.series_id == Series.id)
-            .join(SeriesFamily, SeriesFamily.id == SeriesFamilyMember.family_id)
-            .where(SeriesFamily.concept_id == args.concept_id)
+            .join(IndicatorVariant, IndicatorVariant.series_id == Series.id)
+            .join(Indicator, Indicator.id == IndicatorVariant.indicator_id)
+            .where(Indicator.concept_id == args.concept_id)
             .order_by(Series.code),
         )
         return [SeriesRead.model_validate(series) for series in result.scalars().all()]
@@ -326,8 +326,8 @@ class MacrodbReadTools:
         self,
         query: str,
         limit: int = 10,
-    ) -> list[SeriesFamilySearchHit]:
-        """Return ranked semantic-search hits for series-family rows."""
+    ) -> list[IndicatorSearchHit]:
+        """Return ranked semantic-search hits for indicator rows."""
 
         query_vector = await embed_text(query)
         ranking_rows = (
@@ -335,7 +335,7 @@ class MacrodbReadTools:
                 text(
                     """
                     SELECT id, 1 - (embedding <=> CAST(:query_vec AS vector)) AS similarity
-                    FROM series_families
+                    FROM indicators
                     WHERE embedding IS NOT NULL
                     ORDER BY embedding <=> CAST(:query_vec AS vector)
                     LIMIT :limit
@@ -351,17 +351,17 @@ class MacrodbReadTools:
             return []
 
         ranked_ids = [row["id"] for row in ranking_rows]
-        family_rows = (
+        indicator_rows = (
             await self._session.execute(
-                select(SeriesFamily)
-                .where(SeriesFamily.id.in_(ranked_ids))
-                .options(selectinload(SeriesFamily.members)),
+                select(Indicator)
+                .where(Indicator.id.in_(ranked_ids))
+                .options(selectinload(Indicator.variants)),
             )
         ).scalars().all()
-        families_by_id = {family.id: family for family in family_rows}
+        indicators_by_id = {indicator.id: indicator for indicator in indicator_rows}
         return [
-            SeriesFamilySearchHit(
-                family=SeriesFamilyReadDetail.model_validate(families_by_id[row["id"]]),
+            IndicatorSearchHit(
+                indicator=IndicatorReadDetail.model_validate(indicators_by_id[row["id"]]),
                 similarity=_clamp_similarity(float(row["similarity"])),
             )
             for row in ranking_rows

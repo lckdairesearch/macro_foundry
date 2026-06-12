@@ -45,17 +45,17 @@ from macro_foundry.models import (
     Provider,
     ProviderCatalog,
     Series,
-    SeriesFamily,
-    SeriesFamilyMember,
+    Indicator,
+    IndicatorVariant,
     SeriesHierarchyEdge,
     SeriesSource,
 )
-from macro_foundry.schemas import ConceptCreate, SeriesCreate, SeriesFamilyCreate
+from macro_foundry.schemas import ConceptCreate, SeriesCreate, IndicatorCreate
 from macro_foundry.schemas._base import SchemaModel
 from macro_foundry.services.registration import (
     ensure_series_embedding_current,
     register_concept,
-    register_family,
+    register_indicator,
     register_series,
 )
 
@@ -160,18 +160,18 @@ class MacrodbWriteTools:
                 ),
             )
 
-        # Get or create SeriesFamily
+        # Get or create Indicator
         family = (
             await self._session.execute(
-                select(SeriesFamily).where(SeriesFamily.code == draft.family.code)
+                select(Indicator).where(Indicator.code == draft.family.code)
             )
         ).scalar_one_or_none()
         if family is None:
             if draft.family.action != "new":
-                raise ValueError(f"SeriesFamily {draft.family.code!r} not found")
-            family = await register_family(
+                raise ValueError(f"Indicator {draft.family.code!r} not found")
+            family = await register_indicator(
                 self._session,
-                SeriesFamilyCreate(
+                IndicatorCreate(
                     code=draft.family.code,
                     name=draft.family.name,
                     description=draft.family.description,
@@ -210,12 +210,12 @@ class MacrodbWriteTools:
             ),
         )
 
-        # Create SeriesFamilyMember
-        family_member = SeriesFamilyMember(
-            family_id=family.id,
+        # Create IndicatorVariant
+        family_member = IndicatorVariant(
+            indicator_id=family.id,
             series_id=series.id,
-            variant=draft.family_member.variant,
-            is_primary=draft.family_member.is_primary,
+            label=draft.family_member.variant,
+            is_default=draft.family_member.is_primary,
         )
         self._session.add(family_member)
         await self._session.flush()
@@ -413,9 +413,9 @@ class MacrodbWriteTools:
             item.target_id = concept.id
             item.target_ref = concept.code
         elif item.target_type == TargetType.SERIES_FAMILIES:
-            family = await register_family(
+            family = await register_indicator(
                 self._session,
-                SeriesFamilyCreate.model_validate(
+                IndicatorCreate.model_validate(
                     {
                         "code": data["code"],
                         "name": data["name"],
@@ -443,11 +443,11 @@ class MacrodbWriteTools:
         elif item.target_type == TargetType.SERIES_FAMILY_MEMBERS:
             family = await self._resolve_family(data)
             series = await self._resolve_series(data)
-            family_member = SeriesFamilyMember(
-                family_id=family.id,
+            family_member = IndicatorVariant(
+                indicator_id=family.id,
                 series_id=series.id,
-                variant=data.get("variant"),
-                is_primary=data.get("is_primary", True),
+                label=data.get("variant"),
+                is_default=data.get("is_primary", True),
             )
             self._session.add(family_member)
             await self._session.flush()
@@ -497,11 +497,11 @@ class MacrodbWriteTools:
             raise ValueError(f"Concept {concept_code!r} not found")
         return concept.id
 
-    async def _resolve_family(self, data: dict[str, Any]) -> SeriesFamily:
+    async def _resolve_family(self, data: dict[str, Any]) -> Indicator:
         if family_id := data.get("family_id"):
-            family = await self._session.get(SeriesFamily, UUID(str(family_id)))
+            family = await self._session.get(Indicator, UUID(str(family_id)))
             if family is None:
-                raise ValueError(f"SeriesFamily {family_id!r} not found")
+                raise ValueError(f"Indicator {family_id!r} not found")
             return family
 
         family_code = data.get("family_code")
@@ -509,11 +509,11 @@ class MacrodbWriteTools:
             raise ValueError("family_id or family_code is required")
         family = (
             await self._session.execute(
-                select(SeriesFamily).where(SeriesFamily.code == family_code)
+                select(Indicator).where(Indicator.code == family_code)
             )
         ).scalar_one_or_none()
         if family is None:
-            raise ValueError(f"SeriesFamily {family_code!r} not found")
+            raise ValueError(f"Indicator {family_code!r} not found")
         return family
 
     async def _resolve_series(self, data: dict[str, Any]) -> Series:

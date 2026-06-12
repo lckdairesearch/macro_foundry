@@ -20,7 +20,7 @@ from macro_foundry.enums import (
     UnitKind,
     UnitScale,
 )
-from macro_foundry.models import Concept, Geography, Observation, Series, SeriesFamily, SeriesFamilyMember
+from macro_foundry.models import Concept, Geography, Observation, Series, Indicator, IndicatorVariant
 
 
 async def _seeded_country(session: AsyncSession, *, code: str = "USA") -> Geography:
@@ -68,7 +68,7 @@ async def _create_family_member(
         session.add(concept)
         await session.flush()
 
-    family = SeriesFamily(
+    family = Indicator(
         code=family_code,
         name=f"{family_code} family",
         concept_id=concept.id,
@@ -78,11 +78,11 @@ async def _create_family_member(
     await session.flush()
 
     session.add(
-        SeriesFamilyMember(
-            family_id=family.id,
+        IndicatorVariant(
+            indicator_id=family.id,
             series_id=series.id,
-            variant=series.code,
-            is_primary=False,
+            label=series.code,
+            is_default=False,
         ),
     )
 

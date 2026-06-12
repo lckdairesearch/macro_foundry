@@ -166,8 +166,8 @@ class Series(TimestampedBase):
         lazy="selectin",
         passive_deletes=True,
     )
-    family_member: Mapped["SeriesFamilyMember | None"] = relationship(
-        "SeriesFamilyMember",
+    indicator_variant: Mapped["IndicatorVariant | None"] = relationship(
+        "IndicatorVariant",
         back_populates="series",
         lazy="selectin",
         passive_deletes=True,
@@ -254,11 +254,11 @@ class SeriesHierarchyEdge(TimestampedBase):
     )
 
 
-class SeriesFamily(TimestampedBase):
-    """Series family grouping one concept and one geography."""
+class Indicator(TimestampedBase):
+    """Operationalized, unit-bearing measure of one concept for one geography."""
 
-    __tablename__ = "series_families"
-    __table_args__ = (UniqueConstraint("code", name="uq_series_families_code"),)
+    __tablename__ = "indicators"
+    __table_args__ = (UniqueConstraint("code", name="uq_indicators_code"),)
 
     code: Mapped[str] = mapped_column(String(), nullable=False)
     name: Mapped[str] = mapped_column(String(), nullable=False)
@@ -279,31 +279,31 @@ class SeriesFamily(TimestampedBase):
 
     concept: Mapped["Concept"] = relationship(
         "Concept",
-        back_populates="series_families",
+        back_populates="indicators",
         lazy="selectin",
     )
     geography: Mapped["Geography"] = relationship(
         "Geography",
-        back_populates="series_families",
+        back_populates="indicators",
         lazy="selectin",
     )
-    members: Mapped[list["SeriesFamilyMember"]] = relationship(
-        "SeriesFamilyMember",
-        back_populates="family",
+    variants: Mapped[list["IndicatorVariant"]] = relationship(
+        "IndicatorVariant",
+        back_populates="indicator",
         lazy="selectin",
         passive_deletes=True,
     )
 
 
-class SeriesFamilyMember(Base):
+class IndicatorVariant(Base):
     """V3 association row with a composite primary key and timestamps."""
 
-    __tablename__ = "series_family_members"
-    __table_args__ = (UniqueConstraint("series_id", name="uq_series_family_members_series_id"),)
+    __tablename__ = "indicator_variants"
+    __table_args__ = (UniqueConstraint("series_id", name="uq_indicator_variants_series_id"),)
 
-    family_id: Mapped[uuid.UUID] = mapped_column(
+    indicator_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("series_families.id", ondelete="CASCADE"),
+        ForeignKey("indicators.id", ondelete="CASCADE"),
         primary_key=True,
     )
     series_id: Mapped[uuid.UUID] = mapped_column(
@@ -311,8 +311,8 @@ class SeriesFamilyMember(Base):
         ForeignKey("series.id", ondelete="CASCADE"),
         primary_key=True,
     )
-    variant: Mapped[str | None] = mapped_column(String(), nullable=True)
-    is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    label: Mapped[str | None] = mapped_column(String(), nullable=True)
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -325,16 +325,16 @@ class SeriesFamilyMember(Base):
         onupdate=func.now(),
     )
 
-    family: Mapped["SeriesFamily"] = relationship(
-        "SeriesFamily",
-        back_populates="members",
+    indicator: Mapped["Indicator"] = relationship(
+        "Indicator",
+        back_populates="variants",
         lazy="selectin",
     )
     series: Mapped["Series"] = relationship(
         "Series",
-        back_populates="family_member",
+        back_populates="indicator_variant",
         lazy="selectin",
     )
 
 
-__all__ = ["Series", "SeriesFamily", "SeriesFamilyMember", "SeriesHierarchyEdge"]
+__all__ = ["Indicator", "IndicatorVariant", "Series", "SeriesHierarchyEdge"]

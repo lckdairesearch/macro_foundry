@@ -14,8 +14,8 @@ from macro_foundry.backend.admin.views.run_log import (
 )
 from macro_foundry.backend.admin.views.series import (
     SeriesAdmin,
-    SeriesFamilyAdmin,
-    SeriesFamilyMemberAdmin,
+    IndicatorAdmin,
+    IndicatorVariantAdmin,
     SeriesHierarchyEdgeAdmin,
 )
 from macro_foundry.backend.admin.views.tag import SeriesTagAdmin, TagAdmin
@@ -31,8 +31,8 @@ ADMIN_VIEWS = (
     IngestionFeedAdmin,
     IngestionFeedMemberAdmin,
     SeriesAdmin,
-    SeriesFamilyAdmin,
-    SeriesFamilyMemberAdmin,
+    IndicatorAdmin,
+    IndicatorVariantAdmin,
     SeriesHierarchyEdgeAdmin,
     SeriesTagAdmin,
     DerivedSeriesAdmin,

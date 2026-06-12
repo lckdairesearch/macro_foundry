@@ -16,7 +16,7 @@ async def test_admin_stats_returns_correct_shape(session: AsyncSession) -> None:
 
     assert isinstance(stats, AdminStats)
     assert stats.concept_count >= 0
-    assert stats.series_family_count >= 0
+    assert stats.indicator_count >= 0
     assert stats.observation_count >= 0
     assert stats.provider_count >= 0
     assert stats.ingestion_feed_count >= 0

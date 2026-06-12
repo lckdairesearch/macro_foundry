@@ -145,8 +145,8 @@ class SeriesReadDetail(SeriesRead):
     tags: list[TagRead] = Field(default_factory=list)
 
 
-class SeriesFamilyBase(SchemaModel):
-    """Shared series-family fields."""
+class IndicatorBase(SchemaModel):
+    """Shared indicator fields."""
 
     code: str
     name: str
@@ -155,12 +155,12 @@ class SeriesFamilyBase(SchemaModel):
     geography_id: UUID
 
 
-class SeriesFamilyCreate(SeriesFamilyBase):
-    """Payload for creating a series family."""
+class IndicatorCreate(IndicatorBase):
+    """Payload for creating an indicator."""
 
 
-class SeriesFamilyUpdate(SchemaModel):
-    """PATCH payload for a series family."""
+class IndicatorUpdate(SchemaModel):
+    """PATCH payload for an indicator."""
 
     code: str | None = None
     name: str | None = None
@@ -169,41 +169,41 @@ class SeriesFamilyUpdate(SchemaModel):
     geography_id: UUID | None = None
 
 
-class SeriesFamilyRead(TimestampedReadSchema, SeriesFamilyBase):
-    """API read model for a series family."""
+class IndicatorRead(TimestampedReadSchema, IndicatorBase):
+    """API read model for an indicator."""
 
 
-class SeriesFamilySearchHit(SchemaModel):
-    """Semantic-search wrapper for a series family hit."""
+class IndicatorSearchHit(SchemaModel):
+    """Semantic-search wrapper for an indicator hit."""
 
-    family: SeriesFamilyReadDetail
+    indicator: IndicatorReadDetail
     similarity: float
 
 
-class SeriesFamilyMemberBase(SchemaModel):
-    """Shared series-family-member fields."""
+class IndicatorVariantBase(SchemaModel):
+    """Shared indicator-variant fields."""
 
-    family_id: UUID
+    indicator_id: UUID
     series_id: UUID
-    variant: str | None = None
-    is_primary: bool
+    label: str | None = None
+    is_default: bool
 
 
-class SeriesFamilyMemberCreate(SeriesFamilyMemberBase):
-    """Payload for creating a family membership."""
+class IndicatorVariantCreate(IndicatorVariantBase):
+    """Payload for creating an indicator variant."""
 
 
-class SeriesFamilyMemberUpdate(SchemaModel):
-    """PATCH payload for a family membership."""
+class IndicatorVariantUpdate(SchemaModel):
+    """PATCH payload for an indicator variant."""
 
-    family_id: UUID | None = None
+    indicator_id: UUID | None = None
     series_id: UUID | None = None
-    variant: str | None = None
-    is_primary: bool | None = None
+    label: str | None = None
+    is_default: bool | None = None
 
 
-class SeriesFamilyMemberRead(ReadSchema, SeriesFamilyMemberBase):
-    """API read model for a family membership."""
+class IndicatorVariantRead(ReadSchema, IndicatorVariantBase):
+    """API read model for an indicator variant."""
 
     created_at: datetime
     updated_at: datetime
@@ -241,25 +241,25 @@ class SeriesHierarchyEdgeRead(TimestampedReadSchema, SeriesHierarchyEdgeBase):
     """API read model for a canonical series hierarchy edge."""
 
 
-class SeriesFamilyReadDetail(SeriesFamilyRead):
-    """Read model including same-domain family members."""
+class IndicatorReadDetail(IndicatorRead):
+    """Read model including same-domain indicator variants."""
 
-    members: list[SeriesFamilyMemberRead] = Field(default_factory=list)
+    variants: list[IndicatorVariantRead] = Field(default_factory=list)
 
 
 __all__ = [
     "SeriesBase",
     "SeriesCreate",
-    "SeriesFamilyBase",
-    "SeriesFamilyCreate",
-    "SeriesFamilyMemberBase",
-    "SeriesFamilyMemberCreate",
-    "SeriesFamilyMemberRead",
-    "SeriesFamilySearchHit",
-    "SeriesFamilyMemberUpdate",
-    "SeriesFamilyRead",
-    "SeriesFamilyReadDetail",
-    "SeriesFamilyUpdate",
+    "IndicatorBase",
+    "IndicatorCreate",
+    "IndicatorVariantBase",
+    "IndicatorVariantCreate",
+    "IndicatorVariantRead",
+    "IndicatorSearchHit",
+    "IndicatorVariantUpdate",
+    "IndicatorRead",
+    "IndicatorReadDetail",
+    "IndicatorUpdate",
     "SeriesHierarchyEdgeBase",
     "SeriesHierarchyEdgeCreate",
     "SeriesHierarchyEdgeRead",

@@ -21,7 +21,7 @@ from macro_foundry.enums import (
     UnitKind,
     UnitScale,
 )
-from macro_foundry.models import Concept, Geography, Series, SeriesFamily, SeriesFamilyMember
+from macro_foundry.models import Concept, Geography, Series, Indicator, IndicatorVariant
 
 runner = CliRunner()
 
@@ -61,7 +61,7 @@ def test_embeddings_backfill_cli_prints_summary_and_forwards_batch_size(
     ) -> dict[str, int]:
         called["target"] = target
         called["batch_size"] = batch_size
-        return {"concepts": 2, "series_families": 1, "series": 0}
+        return {"concepts": 2, "indicators": 1, "series": 0}
 
     monkeypatch.setattr(
         "macro_foundry.cli.embeddings.run_embeddings_backfill",
@@ -76,7 +76,7 @@ def test_embeddings_backfill_cli_prints_summary_and_forwards_batch_size(
         "batch_size": 50,
     }
     assert "concepts: 2 stale -> embedded" in result.output
-    assert "series_families: 1 stale -> embedded" in result.output
+    assert "indicators: 1 stale -> embedded" in result.output
     assert "series: 0 stale -> embedded" in result.output
 
 
@@ -104,14 +104,14 @@ async def test_run_embeddings_backfill_repairs_stale_rows_and_is_idempotent(
 
     assert first == {
         "concepts": 1,
-        "series_families": 1,
+        "indicators": 1,
         "series": 1,
     }
     assert batch_sizes == [1, 1, 1]
 
     async with test_session_factory() as session:
         concept = await session.get(Concept, concept_id)
-        family = await session.get(SeriesFamily, family_id)
+        family = await session.get(Indicator, family_id)
         series = await session.get(Series, series_id)
         assert concept is not None
         assert family is not None
@@ -134,7 +134,7 @@ async def test_run_embeddings_backfill_repairs_stale_rows_and_is_idempotent(
 
     assert second == {
         "concepts": 0,
-        "series_families": 0,
+        "indicators": 0,
         "series": 1,
     }
     assert batch_sizes == [1]
@@ -147,7 +147,7 @@ async def test_run_embeddings_backfill_repairs_stale_rows_and_is_idempotent(
 
     assert third == {
         "concepts": 0,
-        "series_families": 0,
+        "indicators": 0,
         "series": 0,
     }
     assert batch_sizes == []
@@ -192,7 +192,7 @@ async def _seed_embedded_catalog_slice(
             name="Embedding Test Concept",
             description="Initial concept description",
         )
-        family = SeriesFamily(
+        family = Indicator(
             code="EMBED_TEST_FAMILY",
             name="Embedding Test Family",
             description="Initial family description",
@@ -216,11 +216,11 @@ async def _seed_embedded_catalog_slice(
             seasonal_adjustment=SeasonalAdjustment.NSA,
             is_active=True,
         )
-        member = SeriesFamilyMember(
-            family=family,
+        member = IndicatorVariant(
+            indicator=family,
             series=series,
-            variant="Headline",
-            is_primary=True,
+            label="Headline",
+            is_default=True,
         )
 
         session.add_all([concept, family, series, member])

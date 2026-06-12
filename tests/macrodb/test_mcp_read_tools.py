@@ -40,8 +40,8 @@ from macro_foundry.models import (
     Provider,
     ProviderCatalog,
     Series,
-    SeriesFamily,
-    SeriesFamilyMember,
+    Indicator,
+    IndicatorVariant,
     SeriesSource,
 )
 from macro_foundry.services.embeddings import EMBEDDING_DIMENSIONS
@@ -88,7 +88,7 @@ async def test_lookup_family_returns_family_with_members(session: AsyncSession) 
     geography = await _get_geography(session, "USA")
     session.add(concept)
     await session.flush()
-    family = SeriesFamily(
+    family = Indicator(
         code="MCP_US_CPI",
         name="US consumer price index",
         concept_id=concept.id,
@@ -98,11 +98,11 @@ async def test_lookup_family_returns_family_with_members(session: AsyncSession) 
     session.add_all([family, series])
     await session.flush()
     session.add(
-        SeriesFamilyMember(
-            family_id=family.id,
+        IndicatorVariant(
+            indicator_id=family.id,
             series_id=series.id,
-            variant="Headline NSA",
-            is_primary=True,
+            label="Headline NSA",
+            is_default=True,
         ),
     )
     await session.flush()
@@ -114,8 +114,8 @@ async def test_lookup_family_returns_family_with_members(session: AsyncSession) 
     assert result is not None
     assert result.code == "MCP_US_CPI"
     assert [
-        (member.series_id, member.variant, member.is_primary)
-        for member in result.members
+        (member.series_id, member.label, member.is_default)
+        for member in result.variants
     ] == [
         (series.id, "Headline NSA", True),
     ]
@@ -128,7 +128,7 @@ async def test_find_sibling_series_returns_family_series(session: AsyncSession) 
     geography = await _get_geography(session, "USA")
     session.add(concept)
     await session.flush()
-    family = SeriesFamily(
+    family = Indicator(
         code="MCP_US_CPI_SIBLING",
         name="US consumer price index",
         concept_id=concept.id,
@@ -140,17 +140,17 @@ async def test_find_sibling_series_returns_family_series(session: AsyncSession) 
     await session.flush()
     session.add_all(
         [
-            SeriesFamilyMember(
-                family_id=family.id,
+            IndicatorVariant(
+                indicator_id=family.id,
                 series_id=first.id,
-                variant="Headline NSA",
-                is_primary=True,
+                label="Headline NSA",
+                is_default=True,
             ),
-            SeriesFamilyMember(
-                family_id=family.id,
+            IndicatorVariant(
+                indicator_id=family.id,
                 series_id=second.id,
-                variant="Core NSA",
-                is_primary=False,
+                label="Core NSA",
+                is_default=False,
             ),
         ],
     )
@@ -174,13 +174,13 @@ async def test_list_series_for_concept_returns_cross_geography_series(
     jpn = await _get_geography(session, "JPN")
     session.add(concept)
     await session.flush()
-    usa_family = SeriesFamily(
+    usa_family = Indicator(
         code="MCP_US_GDP",
         name="US GDP",
         concept_id=concept.id,
         geography_id=usa.id,
     )
-    jpn_family = SeriesFamily(
+    jpn_family = Indicator(
         code="MCP_JP_GDP",
         name="Japan GDP",
         concept_id=concept.id,
@@ -192,15 +192,15 @@ async def test_list_series_for_concept_returns_cross_geography_series(
     await session.flush()
     session.add_all(
         [
-            SeriesFamilyMember(
-                family_id=usa_family.id,
+            IndicatorVariant(
+                indicator_id=usa_family.id,
                 series_id=usa_series.id,
-                is_primary=True,
+                is_default=True,
             ),
-            SeriesFamilyMember(
-                family_id=jpn_family.id,
+            IndicatorVariant(
+                indicator_id=jpn_family.id,
                 series_id=jpn_series.id,
-                is_primary=True,
+                is_default=True,
             ),
         ],
     )
@@ -245,7 +245,7 @@ async def test_list_provider_series_for_concept_returns_provider_cohort(
         name="Main",
         is_placeholder=True,
     )
-    family = SeriesFamily(
+    family = Indicator(
         code="MCP_PROVIDER_US_CPI",
         name="US CPI",
         concept_id=concept.id,
@@ -259,15 +259,15 @@ async def test_list_provider_series_for_concept_returns_provider_cohort(
     await session.flush()
     session.add_all(
         [
-            SeriesFamilyMember(
-                family_id=family.id,
+            IndicatorVariant(
+                indicator_id=family.id,
                 series_id=provider_series.id,
-                is_primary=True,
+                is_default=True,
             ),
-            SeriesFamilyMember(
-                family_id=family.id,
+            IndicatorVariant(
+                indicator_id=family.id,
                 series_id=other_series.id,
-                is_primary=False,
+                is_default=False,
             ),
             SeriesSource(
                 series_id=provider_series.id,
@@ -354,7 +354,7 @@ async def test_search_series_returns_ranked_hits_for_semantic_query(
 ) -> None:
     concept = Concept(code="CPI", name="Consumer Price Index")
     geography = await _get_geography(session, "USA")
-    family = SeriesFamily(
+    family = Indicator(
         code="US_CPI",
         name="United States Consumer Price Index",
         concept=concept,
@@ -385,20 +385,20 @@ async def test_search_series_returns_ranked_hits_for_semantic_query(
     await session.flush()
     session.add_all(
         [
-            SeriesFamilyMember(
-                family=family,
+            IndicatorVariant(
+                indicator=family,
                 series=headline,
-                is_primary=True,
+                is_default=True,
             ),
-            SeriesFamilyMember(
-                family=family,
+            IndicatorVariant(
+                indicator=family,
                 series=core,
-                is_primary=False,
+                is_default=False,
             ),
-            SeriesFamilyMember(
-                family=family,
+            IndicatorVariant(
+                indicator=family,
                 series=null_embedding,
-                is_primary=False,
+                is_default=False,
             ),
         ],
     )
@@ -465,7 +465,7 @@ async def test_search_series_families_returns_ranked_hits_with_members(
 ) -> None:
     concept = Concept(code="CPI", name="Consumer Price Index")
     geography = await _get_geography(session, "USA")
-    family = SeriesFamily(
+    family = Indicator(
         code="US_CPI",
         name="United States Consumer Price Index",
         concept=concept,
@@ -474,7 +474,7 @@ async def test_search_series_families_returns_ranked_hits_with_members(
         embedding_model="text-embedding-3-small",
         embedding_input_hash="us-cpi",
     )
-    other_family = SeriesFamily(
+    other_family = Indicator(
         code="US_GDP",
         name="United States Gross Domestic Product",
         concept=concept,
@@ -487,11 +487,11 @@ async def test_search_series_families_returns_ranked_hits_with_members(
     session.add_all([concept, family, other_family, headline])
     await session.flush()
     session.add(
-        SeriesFamilyMember(
-            family=family,
+        IndicatorVariant(
+            indicator=family,
             series=headline,
-            variant="Headline",
-            is_primary=True,
+            label="Headline",
+            is_default=True,
         ),
     )
     await session.flush()
@@ -503,11 +503,11 @@ async def test_search_series_families_returns_ranked_hits_with_members(
 
     result = await tools.search_series_families("us inflation family")
 
-    assert result[0].family.code == "US_CPI"
+    assert result[0].indicator.code == "US_CPI"
     assert result[0].similarity > 0.5
     assert [
-        (member.series_id, member.variant, member.is_primary)
-        for member in result[0].family.members
+        (member.series_id, member.label, member.is_default)
+        for member in result[0].indicator.variants
     ] == [
         (headline.id, "Headline", True),
     ]

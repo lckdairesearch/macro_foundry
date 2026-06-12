@@ -133,9 +133,9 @@ def bootstrap_fred_us_macro(
             "ingestion_run_logs_deleted": summary.ingestion_run_logs_deleted,
             "ingestion_feeds_deleted": summary.ingestion_feeds_deleted,
             "series_sources_deleted": summary.series_sources_deleted,
-            "family_members_deleted": summary.family_members_deleted,
+            "indicator_variants_deleted": summary.indicator_variants_deleted,
             "series_deleted": summary.series_deleted,
-            "families_deleted": summary.families_deleted,
+            "indicators_deleted": summary.indicators_deleted,
             "concepts_deleted": summary.concepts_deleted,
         }
         _helpers.print_result(result, as_json=output_json)

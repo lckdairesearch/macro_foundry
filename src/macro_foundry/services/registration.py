@@ -8,12 +8,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from macro_foundry.models import Concept, Geography, Series, SeriesFamily, SeriesFamilyMember
-from macro_foundry.schemas import ConceptCreate, SeriesCreate, SeriesFamilyCreate
+from macro_foundry.models import Concept, Geography, Series, Indicator, IndicatorVariant
+from macro_foundry.schemas import ConceptCreate, SeriesCreate, IndicatorCreate
 from macro_foundry.services.embeddings import (
     EMBEDDING_MODEL,
     compose_concept_embedding_input,
-    compose_family_embedding_input,
+    compose_indicator_embedding_input,
     compose_series_embedding_input,
     embed_text,
     hash_embedding_input,
@@ -41,9 +41,9 @@ async def ensure_series_embedding_current(
             .execution_options(populate_existing=True)
             .options(
                 selectinload(Series.geography),
-                selectinload(Series.family_member)
-                .selectinload(SeriesFamilyMember.family)
-                .selectinload(SeriesFamily.concept),
+                selectinload(Series.indicator_variant)
+                .selectinload(IndicatorVariant.indicator)
+                .selectinload(Indicator.concept),
             )
             .where(Series.id == series.id),
         )
@@ -85,27 +85,27 @@ async def register_concept(
     return concept
 
 
-async def register_family(
+async def register_indicator(
     session: AsyncSession,
-    payload: SeriesFamilyCreate,
-) -> SeriesFamily:
-    """Create a family row with embedding metadata populated."""
+    payload: IndicatorCreate,
+) -> Indicator:
+    """Create an indicator row with embedding metadata populated."""
 
     async with _registration_lock(session):
         concept = await session.get(Concept, payload.concept_id)
         geography = await session.get(Geography, payload.geography_id)
 
-    family = SeriesFamily(**payload.model_dump())
-    family.concept = concept
-    family.geography = geography
-    text = compose_family_embedding_input(family)
-    family.embedding = await embed_text(text)
-    family.embedding_model = EMBEDDING_MODEL
-    family.embedding_input_hash = hash_embedding_input(text)
+    indicator = Indicator(**payload.model_dump())
+    indicator.concept = concept
+    indicator.geography = geography
+    text = compose_indicator_embedding_input(indicator)
+    indicator.embedding = await embed_text(text)
+    indicator.embedding_model = EMBEDDING_MODEL
+    indicator.embedding_input_hash = hash_embedding_input(text)
     async with _registration_lock(session):
-        session.add(family)
+        session.add(indicator)
         await session.flush()
-    return family
+    return indicator
 
 
 async def register_series(
@@ -132,6 +132,6 @@ async def register_series(
 __all__ = [
     "ensure_series_embedding_current",
     "register_concept",
-    "register_family",
+    "register_indicator",
     "register_series",
 ]

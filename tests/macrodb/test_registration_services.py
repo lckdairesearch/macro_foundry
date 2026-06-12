@@ -18,9 +18,9 @@ from macro_foundry.enums import (
     UnitScale,
 )
 from macro_foundry.models import Concept, Geography
-from macro_foundry.schemas import ConceptCreate, SeriesCreate, SeriesFamilyCreate
+from macro_foundry.schemas import ConceptCreate, SeriesCreate, IndicatorCreate
 from macro_foundry.services.embeddings import EMBEDDING_DIMENSIONS, EMBEDDING_MODEL, hash_embedding_input
-from macro_foundry.services.registration import register_concept, register_family, register_series
+from macro_foundry.services.registration import register_concept, register_indicator, register_series
 
 
 @pytest.mark.asyncio
@@ -291,7 +291,7 @@ async def test_register_concept_serializes_same_session_concurrent_calls(
 
 
 @pytest.mark.asyncio
-async def test_register_family_populates_embedding_fields_from_parent_context(
+async def test_register_indicator_populates_embedding_fields_from_parent_context(
     session: AsyncSession,
 ) -> None:
     geography = await session.scalar(select(Geography).where(Geography.code == "USA"))
@@ -329,9 +329,9 @@ async def test_register_family_populates_embedding_fields_from_parent_context(
         fake_embed_text,
     )
     try:
-        family = await register_family(
+        family = await register_indicator(
             session,
-            SeriesFamilyCreate(
+            IndicatorCreate(
                 code="TEST_FAMILY",
                 name="Test family",
                 description="Test family description",

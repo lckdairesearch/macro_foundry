@@ -75,7 +75,7 @@ async def test_admin_landing_contains_count_card_labels(
         response = await client.get("/admin/")
 
     assert "Concepts" in response.text
-    assert "Series Families" in response.text
+    assert "Indicators" in response.text
     assert "Series" in response.text
     assert "Observations" in response.text
     assert "Providers" in response.text
