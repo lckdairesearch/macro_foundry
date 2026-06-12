@@ -12,6 +12,268 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-12] Issue 61 — added pure embedding service module
+
+Added `src/macro_foundry/services/embeddings.py` as the ADR 0020 text-composition
+and OpenAI client layer used by later registration/search slices.
+
+- locked constants: `EMBEDDING_MODEL = "text-embedding-3-small"` and
+  `EMBEDDING_DIMENSIONS = 1536`
+- locked humanization maps for `Frequency`, `UnitKind`, `Measure`, and
+  `SeasonalAdjustment`
+- pure recipe functions:
+  `compose_concept_embedding_input`,
+  `compose_family_embedding_input`,
+  `compose_series_embedding_input`
+- `hash_embedding_input(text)` as SHA-256 hex prefix (16 chars)
+- async `embed_text(text)` reading `OPENAI_API_KEY` through
+  `settings.llm.openai_api_key`, retrying exactly once on transient
+  connection/rate-limit/5xx failures, and failing immediately on auth or
+  insufficient-quota errors
+
+Added `tests/macrodb/test_embeddings_service.py` covering the locked recipe
+strings, omit-empty rule, exact humanization maps, hash determinism, and the
+mockable `embed_text` retry/error behavior.
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_embeddings_service.py -q -m no_db` exited 0
+  with `10 passed`
+- `uv run ruff check src/macro_foundry/services/embeddings.py tests/macrodb/test_embeddings_service.py`
+  exited 0
+- live OpenAI probe through `embed_text("headline inflation rate, monthly, United States")`
+  returned a `list[float]` of length `1536`
+### [2026-06-12] Onboarding — designed `check_db` node and catalog embeddings
+
+Two Proposed ADRs and one prompt landed as the design anchor for the
+next onboarding-graph node, slotted between brief authoring and
+proposal drafting.
+
+- ADR 0019 (`docs/adr/0019-check-db-node-for-onboarding.md`) — read-only
+  `check_db` node that detects catalog duplicates from a descriptive
+  brief carrying no canonical code, classifies the relationship into a
+  closed set (`no_match`, `duplicate`, `same_concept_other_feed`,
+  `transformation_overlap`, `adjacent_supersede_candidate`,
+  `distinct_with_related`), and emits a structured verdict consumed by
+  a downstream router.
+- ADR 0020 (`docs/adr/0020-catalog-embeddings-for-semantic-search.md`)
+  — pgvector columns on `concepts`, `series_families`, `series`;
+  `text-embedding-3-small` at 1536 dimensions; service-function
+  registration path (`register_concept`, `register_family`,
+  `register_series`) shared by the bootstrap, the MCP write tool, and
+  any future ingestion runner; `embedding_model` +
+  `embedding_input_hash` versioning columns for mechanical staleness
+  detection; and `macrodb embeddings backfill` as the only repair
+  path. The read-only MCP gains `search_concepts`,
+  `search_series_families`, and `search_series` backed by tag prefilter
+  plus cosine similarity.
+- `check_db_instructions` prompt added to
+  `src/macro_foundry/onboarding_agent/prompts.py` as the agent-facing
+  contract for the new node.
+
+Deviation note: this is design only. No Alembic migration, no service
+module, no MCP-tool extension, no graph wiring landed. Follow-up
+issues to track: (a) Alembic migration for `pgvector` extension +
+embedding columns + HNSW indexes; (b) `services/embeddings.py` and
+`services/registration.py`; (c) refactor of
+`src/macro_foundry/bootstrap/fred_us_macro.py` and the MCP write tool
+to use the registration helpers; (d) MCP read-tool extension for the
+three search tools; (e) `check_db` node wired into the graph in
+`src/macro_foundry/onboarding_agent/1_scoping.ipynb`; (f) backfill
+CLI command.
+
+Committed as `6679fb5`.
+
+### [2026-06-12] CLI/DB naming — standardized target vs role vocabulary
+
+Breaking cleanup to keep environment targets separate from database roles:
+
+- `EnvTarget` remains the single environment-target enum (`dev`, `test`,
+  `staging`), while `macrodb_app` / `macrodb_owner` remain role names.
+- Replaced the resolver surface with `app_url_for_target(target)` and
+  `owner_url_for_target(target)`. Removed the previous resolver and
+  onboarding-target alias paths rather than keeping compatibility shims.
+- Renamed bootstrap result/parameter surfaces from `database` to `target`
+  where the value is an `EnvTarget`; raw `database_url` remains only for
+  explicit connection strings such as MCP serving.
+- Updated current docs/examples away from `--database app|test`; historical
+  tracker entries below still describe the surface as it existed when those
+  entries were written.
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_onboard_cli.py tests/macrodb/test_debug_bootstrap.py tests/macrodb/test_fred_bootstrap.py -q -m no_db`
+  exited 0 with `12 passed, 5 deselected`.
+- `uv run pytest tests/shared/test_config.py -q` exited 0 with `2 passed`
+  after the planned `-m no_db` variant deselected both tests.
+- `uv run ruff check` on the refactor-touched source and test files passed.
+  Full `uv run ruff check src/macro_foundry tests` still fails on unrelated
+  lint in the vendored `onboarding_agent/reference/deep_research_from_scratch`
+  copy and pre-existing unrelated test lint.
+
+### [2026-06-12] CLI — added `macrodb db migrate --target {dev|test}`
+
+Plugged the ergonomic gap surfaced by the `series.alt_name` rollout:
+`uv run alembic upgrade head` only ever touched `MACRODB_OWNER_URL`
+(= `macrodb_dev`), so the test database silently drifted behind the
+model whenever a migration landed locally, and `macrodb serve api
+--target test` would 500 on any table the migration added a column to.
+
+New surface:
+
+```
+macrodb db migrate --target {dev|test} [--revision REV] [--downgrade] [--json]
+```
+
+`--target` defaults to `dev`, matching the rest of the CLI. The
+command resolves the owner-role URL for the selected target via a new
+`owner_url_for_target` helper (reuses the database-name swap
+pattern from `tests/conftest.py:_owner_test_url`), then runs Alembic
+programmatically. Output is key=value (or JSON) and includes
+before/after revisions so a no-op upgrade is obvious from a glance.
+
+`alembic/env.py` now respects a pre-set `sqlalchemy.url` on the
+Alembic Config and only falls back to `settings.db.owner_url` when
+nothing is set, so terminal `uv run alembic upgrade head` continues to
+work unchanged.
+
+Verification:
+
+- `uv run macrodb db migrate --target dev` → `before=0011 after=0011`
+  (no-op, dev already at head).
+- `uv run macrodb db migrate --target test --downgrade --revision 0010` →
+  `before=0011 after=0010`.
+- `uv run macrodb db migrate --target test --json` →
+  `{"target":"test","direction":"upgrade","revision":"head","before":"0010","after":"0011"}`.
+- Direct SQL probe against both URLs confirms `macrodb_dev` and
+  `macrodb_test` are distinct physical databases and both carry the
+  `series.alt_name` column.
+- `uv run ruff check` clean across all touched files.
+
+### [2026-06-12] Series — added `alt_name` column and brought FRED bootstrap prose to skill
+
+Added `alt_name text[]` (nullable) to `series`, mirroring the existing
+column on `geographies` and `providers`. Curated, provider-agnostic
+search aid; distinct from `series_sources.external_name` (per-provider,
+for audit/reconciliation). Surfaces updated end-to-end: V3 schema source
+(`docs/schema/db_er.txt`), SQLAlchemy `Series` model, Alembic migration
+`0011_series_alt_name.py`, Pydantic `SeriesBase`/`SeriesUpdate`,
+SQLAdmin `SeriesAdmin.form_columns`, `DraftSeriesOutput` (so the
+onboarding drafter can populate it), and the MCP `apply_catalog` write
+path. Mutation matrix in ADR 0013 and skill-metadata-standardisation
+extended with the new row (agent-mutable, same tier as `series.name`).
+
+Audited `bootstrap/fred_us_macro.py` against
+`docs/skills/skill-metadata-standardisation.md` and fixed three hard-rule
+violations across all four raw + four derived FRED specs:
+
+1. Geography-prefix rule — renamed `series_name` and
+   `derived_series_name` from `"United States ..."` to `"USA – ..."`
+   form (en-dash U+2013), matching skill exemplars 1–5.
+2. Runtime-implementation detail rule — rewrote `series_description`
+   to drop `"imported from FRED ticker GDP/CPIAUCNS/..."` leakage. The
+   FRED tickers stay where they belong, in
+   `series_sources.external_code`.
+3. Structural-disclosure rule — descriptions now spell out SA vs NSA,
+   SAAR, real vs nominal, base year, and U.S. city average scope in
+   prose rather than letting them hide in the row's structural columns.
+
+Each spec now also carries a curated `series_alt_name` /
+`derived_series_alt_name` tuple including the publisher's full title
+(e.g. `"Consumer Price Index for All Urban Consumers: All Items in U.S.
+City Average"`) and common informal aliases (`"Headline CPI"`,
+`"CPI-U All Items"`, etc.). FRED's runtime `metadata.title` continues
+to flow only into `series_sources.external_name` — `series.alt_name`
+stays curated, single-writer.
+
+`series_family.name` and `series_family.description` are propose-only
+in the mutation matrix and were left alone in this pass; flagged in
+the audit for a separate operator-driven sweep.
+
+Verification:
+
+- Manual review of all eight rewritten name/description pairs against
+  exemplars 1–5 of `skill-metadata-standardisation.md`.
+- No code or test runs yet — recommend running
+  `uv run pytest tests/macrodb/ -q -m no_db` plus
+  `uv run ruff check src/macro_foundry tests` and applying migration
+  `0011` on dev as `macrodb_owner` before merging.
+
+### [2026-06-11] Onboard CLI — GPT-5.4 OpenAI compatibility and FRED credential detection fixed
+
+Updated the OpenAI-backed onboarding LLM wrapper so GPT-5/reasoning-model
+chat completion calls send `max_completion_tokens` instead of the legacy
+`max_tokens` parameter while preserving `max_tokens` for older chat models
+such as `gpt-4o`. Replaced open `dict[str, Any]` structured-output fields
+with closed DTOs so GPT-5.4 accepts the response schemas. Wired the production
+credential-gap node through `settings.resolve_credential_ref("FRED_API_KEY")`
+so a key present in `.env.local` resolves the FRED credential gap instead of
+prompting the operator.
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_llm_openai.py -q -m no_db` exited 0
+  with `17 passed`
+- `uv run ruff check src/macro_foundry/agent/llm_openai.py tests/macrodb/test_llm_openai.py`
+  exited 0
+- `uv run pytest tests/macrodb/ -q -m no_db` exited 0 with
+  `225 passed, 85 deselected`
+- `uv run macrodb onboard --target test`, input
+  `onboard US FRED's M2 (M2SL)`, reached Gate 1 without rendering the
+  `FRED_API_KEY` credential-required picker; diagnostic session saved as
+  `onboard-c219e0bab780`
+
+### [2026-06-11] Onboard CLI — test target allowed for local test-environment runs
+
+Adjusted `macrodb onboard --target test` to run against the local test
+environment while warning that it is non-durable and must not be treated as
+the normal onboarding workflow target. Updated the CLI target docs and ADR
+0017 command summary to match.
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_onboard_cli.py -q -m no_db` exited 0
+  with `11 passed`
+- `uv run ruff check src/macro_foundry/cli/onboard.py tests/macrodb/test_onboard_cli.py`
+  exited 0
+
+### [2026-06-11] Issue 59 follow-up — Cohort contract, metadata skill trigger, and selector schema classification corrected
+
+Closed the last-mile wiring gaps found in the post-completion review of issue 59:
+
+- production `cohort_lookup` now normalizes both explicit FK hits
+  (`family_id`, `concept_id`, `provider_id`) and researcher-style
+  `{"kind": ..., "id": ...}` catalog hits before calling the MCP read tools,
+  so empty cohort A is a genuine observation rather than a shape mismatch.
+- the draft-proposal metadata skill trigger now uses graph-owned state:
+  metadata rules load for the drafter before prose is generated, and seed
+  exemplars load from `is_first_in_family == true` instead of the stale
+  `reference_metadata.cohort_A_empty` key.
+- `extraction_mode_classifier` now reads selector schemas through
+  `get_selector_schema` as well as `list_selector_types`; ambiguous shapes route
+  through the classifier-grade OpenAI path while clear registry matches remain
+  deterministic.
+- added a production-deps graph test proving a non-empty MCP cohort reaches the
+  drafter prompt.
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_production_deps.py -q -m no_db` exited 0
+  with `12 passed`
+- `uv run pytest tests/macrodb/test_skill_wiring.py tests/macrodb/test_skill_loader.py -q -m no_db`
+  exited 0 with `14 passed`
+- `uv run pytest tests/macrodb/test_reference_metadata_nodes.py -q -m no_db`
+  exited 0 with `27 passed`
+- `uv run ruff check src/macro_foundry/agent/production_deps.py src/macro_foundry/agent/llm_schemas.py src/macro_foundry/agent/graph.py src/macro_foundry/agent/skills.py tests/macrodb/test_production_deps.py tests/macrodb/test_skill_wiring.py tests/macrodb/test_skill_loader.py`
+  exited 0
+- `uv run pytest tests/macrodb/ -q -m no_db` exited 0 with
+  `222 passed, 85 deselected`
+- `uv run pytest tests/macrodb/ tests/shared/ -q` exited with
+  `342 passed, 1 failed`; the failure was the pre-existing flaky
+  `test_concurrency_advisory_warns_when_another_session_exists`, which passed
+  immediately in isolation.
+
+>>>>>>> f5d656d (feat(services): add ADR 0020 embedding service module)
 ### [2026-06-11] Issue 59 — MCP-backed cohorts and selector-registry extraction classification
 
 Replaced the two production dependency placeholders from issue 59:
