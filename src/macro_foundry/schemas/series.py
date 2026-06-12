@@ -131,6 +131,13 @@ class SeriesRead(TimestampedReadSchema, SeriesBase):
     """API read model for a series."""
 
 
+class SeriesSearchHit(SchemaModel):
+    """Semantic-search wrapper for a series hit."""
+
+    series: SeriesRead
+    similarity: float
+
+
 class SeriesReadDetail(SeriesRead):
     """Series read model including selected cross-domain relationships."""
 
@@ -164,6 +171,13 @@ class SeriesFamilyUpdate(SchemaModel):
 
 class SeriesFamilyRead(TimestampedReadSchema, SeriesFamilyBase):
     """API read model for a series family."""
+
+
+class SeriesFamilySearchHit(SchemaModel):
+    """Semantic-search wrapper for a series family hit."""
+
+    family: SeriesFamilyReadDetail
+    similarity: float
 
 
 class SeriesFamilyMemberBase(SchemaModel):
@@ -241,6 +255,7 @@ __all__ = [
     "SeriesFamilyMemberBase",
     "SeriesFamilyMemberCreate",
     "SeriesFamilyMemberRead",
+    "SeriesFamilySearchHit",
     "SeriesFamilyMemberUpdate",
     "SeriesFamilyRead",
     "SeriesFamilyReadDetail",
@@ -251,5 +266,6 @@ __all__ = [
     "SeriesHierarchyEdgeUpdate",
     "SeriesRead",
     "SeriesReadDetail",
+    "SeriesSearchHit",
     "SeriesUpdate",
 ]

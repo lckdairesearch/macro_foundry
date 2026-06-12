@@ -12,6 +12,46 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-12] Issue 63 — added MCP semantic-search read tools
+
+Implemented the ADR 0020 read surface on `macrodb-mcp`:
+
+- `search_concepts(query, limit)` returning `ConceptSearchHit`
+  wrapper rows.
+- `search_series_families(query, limit)` returning
+  `SeriesFamilySearchHit` wrapper rows with family members hydrated via
+  `SeriesFamilyReadDetail`.
+- `search_series(query, limit)` returning `SeriesSearchHit` wrapper
+  rows.
+
+All three tools now embed the natural-language query via
+`services.embeddings.embed_text`, rank only rows with non-null
+embeddings using pgvector cosine distance (`1 - (embedding <=> query)`
+clamped into `[0, 1]`), hydrate through the existing `*Read` schemas,
+and are registered on the read-only MCP server via
+`READ_ONLY_TOOL_NAMES` and `_register_read_tools`.
+
+Test coverage added for:
+
+- ranked `search_concepts`, `search_series_families`, and
+  `search_series` results with wrapper payloads and bounded similarity
+  scores;
+- exclusion of rows where `embedding IS NULL`;
+- empty-catalog behavior (`[]`);
+- the two ADR 0020/FRED probe queries:
+  `headline inflation monthly United States` →
+  `US_CPI_HEADLINE_M_NSA` top hit, and
+  `real GDP growth quarterly US` → `US_GDP_REAL_Q_SAAR` top hit;
+- MCP read-only server tool registration including the three new tool
+  names.
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_mcp_read_tools.py tests/macrodb/test_mcp_server.py -q`
+  exited 0 with `17 passed`.
+- `uv run ruff check src/macro_foundry/mcp/read_tools.py src/macro_foundry/mcp/server.py src/macro_foundry/schemas/concept.py src/macro_foundry/schemas/series.py src/macro_foundry/schemas/__init__.py tests/macrodb/test_mcp_read_tools.py tests/macrodb/test_mcp_server.py`
+  exited 0.
+
 ### [2026-06-12] Issue 62 — added `macrodb embeddings backfill` CLI
 
 Landed the ADR 0020 repair path as `macrodb embeddings backfill --target {dev|staging}`.

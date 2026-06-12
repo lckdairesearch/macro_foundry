@@ -40,6 +40,9 @@ READ_ONLY_TOOL_NAMES = {
     "find_sibling_series",
     "list_series_for_concept",
     "list_provider_series_for_concept",
+    "search_concepts",
+    "search_series_families",
+    "search_series",
     "list_selector_types",
     "get_selector_schema",
     "validate_selector_config",
@@ -131,6 +134,26 @@ def _register_read_tools(
             ),
         )
         return [series.model_dump(mode="json") for series in result]
+
+    @server.tool(name="search_concepts")
+    async def search_concepts(query: str, limit: int = 10) -> list[dict[str, Any]]:
+        result = await with_read(lambda tools: tools.search_concepts(query, limit))
+        return [hit.model_dump(mode="json") for hit in result]
+
+    @server.tool(name="search_series_families")
+    async def search_series_families(
+        query: str,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        result = await with_read(
+            lambda tools: tools.search_series_families(query, limit),
+        )
+        return [hit.model_dump(mode="json") for hit in result]
+
+    @server.tool(name="search_series")
+    async def search_series(query: str, limit: int = 10) -> list[dict[str, Any]]:
+        result = await with_read(lambda tools: tools.search_series(query, limit))
+        return [hit.model_dump(mode="json") for hit in result]
 
     @server.tool(name="list_selector_types")
     async def list_selector_types() -> list[str]:

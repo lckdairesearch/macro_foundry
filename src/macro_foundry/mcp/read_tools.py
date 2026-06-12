@@ -19,8 +19,16 @@ from macro_foundry.models import (
     SeriesFamilyMember,
     SeriesSource,
 )
-from macro_foundry.schemas import ConceptRead, SeriesFamilyReadDetail, SeriesRead
+from macro_foundry.schemas import (
+    ConceptRead,
+    ConceptSearchHit,
+    SeriesFamilySearchHit,
+    SeriesFamilyReadDetail,
+    SeriesRead,
+    SeriesSearchHit,
+)
 from macro_foundry.schemas._base import SchemaModel
+from macro_foundry.services.embeddings import embed_text
 
 
 class LookupConceptArgs(SchemaModel):
@@ -106,6 +114,49 @@ class MacrodbReadTools:
         if concept is None:
             return None
         return ConceptRead.model_validate(concept)
+
+    async def search_concepts(
+        self,
+        query: str,
+        limit: int = 10,
+    ) -> list[ConceptSearchHit]:
+        """Return ranked semantic-search hits for concept rows."""
+
+        query_vector = await embed_text(query)
+        ranking_rows = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT id, 1 - (embedding <=> CAST(:query_vec AS vector)) AS similarity
+                    FROM concepts
+                    WHERE embedding IS NOT NULL
+                    ORDER BY embedding <=> CAST(:query_vec AS vector)
+                    LIMIT :limit
+                    """,
+                ),
+                {
+                    "query_vec": _vector_literal(query_vector),
+                    "limit": limit,
+                },
+            )
+        ).mappings().all()
+        if not ranking_rows:
+            return []
+
+        ranked_ids = [row["id"] for row in ranking_rows]
+        concept_rows = (
+            await self._session.execute(
+                select(Concept).where(Concept.id.in_(ranked_ids)),
+            )
+        ).scalars().all()
+        concepts_by_id = {concept.id: concept for concept in concept_rows}
+        return [
+            ConceptSearchHit(
+                concept=ConceptRead.model_validate(concepts_by_id[row["id"]]),
+                similarity=_clamp_similarity(float(row["similarity"])),
+            )
+            for row in ranking_rows
+        ]
 
     async def lookup_family(
         self, args: LookupFamilyArgs
@@ -228,6 +279,94 @@ class MacrodbReadTools:
         )
         return [SeriesRead.model_validate(series) for series in result.scalars().all()]
 
+    async def search_series(
+        self,
+        query: str,
+        limit: int = 10,
+    ) -> list[SeriesSearchHit]:
+        """Return ranked semantic-search hits for canonical series rows."""
+
+        query_vector = await embed_text(query)
+        ranking_rows = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT id, 1 - (embedding <=> CAST(:query_vec AS vector)) AS similarity
+                    FROM series
+                    WHERE embedding IS NOT NULL
+                    ORDER BY embedding <=> CAST(:query_vec AS vector)
+                    LIMIT :limit
+                    """,
+                ),
+                {
+                    "query_vec": _vector_literal(query_vector),
+                    "limit": limit,
+                },
+            )
+        ).mappings().all()
+        if not ranking_rows:
+            return []
+
+        ranked_ids = [row["id"] for row in ranking_rows]
+        series_rows = (
+            await self._session.execute(
+                select(Series).where(Series.id.in_(ranked_ids)),
+            )
+        ).scalars().all()
+        series_by_id = {series.id: series for series in series_rows}
+        return [
+            SeriesSearchHit(
+                series=SeriesRead.model_validate(series_by_id[row["id"]]),
+                similarity=_clamp_similarity(float(row["similarity"])),
+            )
+            for row in ranking_rows
+        ]
+
+    async def search_series_families(
+        self,
+        query: str,
+        limit: int = 10,
+    ) -> list[SeriesFamilySearchHit]:
+        """Return ranked semantic-search hits for series-family rows."""
+
+        query_vector = await embed_text(query)
+        ranking_rows = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT id, 1 - (embedding <=> CAST(:query_vec AS vector)) AS similarity
+                    FROM series_families
+                    WHERE embedding IS NOT NULL
+                    ORDER BY embedding <=> CAST(:query_vec AS vector)
+                    LIMIT :limit
+                    """,
+                ),
+                {
+                    "query_vec": _vector_literal(query_vector),
+                    "limit": limit,
+                },
+            )
+        ).mappings().all()
+        if not ranking_rows:
+            return []
+
+        ranked_ids = [row["id"] for row in ranking_rows]
+        family_rows = (
+            await self._session.execute(
+                select(SeriesFamily)
+                .where(SeriesFamily.id.in_(ranked_ids))
+                .options(selectinload(SeriesFamily.members)),
+            )
+        ).scalars().all()
+        families_by_id = {family.id: family for family in family_rows}
+        return [
+            SeriesFamilySearchHit(
+                family=SeriesFamilyReadDetail.model_validate(families_by_id[row["id"]]),
+                similarity=_clamp_similarity(float(row["similarity"])),
+            )
+            for row in ranking_rows
+        ]
+
 
 def _parse_check_constraint_values(constraint_definition: str) -> list[str]:
     values = [
@@ -241,6 +380,14 @@ def _parse_check_constraint_values(constraint_definition: str) -> list[str]:
             f"No enum values found in constraint definition {constraint_definition!r}"
         )
     return values
+
+
+def _vector_literal(values: list[float]) -> str:
+    return "[" + ",".join(str(float(value)) for value in values) + "]"
+
+
+def _clamp_similarity(value: float) -> float:
+    return max(0.0, min(1.0, value))
 
 
 __all__ = [
