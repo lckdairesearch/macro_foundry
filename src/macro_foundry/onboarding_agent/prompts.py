@@ -105,6 +105,62 @@ Hard rules:
 - If you cannot find an authoritative source for the identifier, set has_conflict to false and note in findings.notes that verification was inconclusive. The brief writer will surface this.
 """
 
+check_db_instructions = """
+The downstream brief writer has produced a self-contained descriptive series brief, reproduced here:
+<SeriesBrief>
+{series_brief}
+</SeriesBrief>
+
+The verified findings from upstream verification are included for orientation:
+<VerificationFindings>
+{verification_findings}
+</VerificationFindings>
+
+Your single job is to determine whether the catalog already contains a series equivalent to, overlapping with, or supersedable by the briefed series, and to classify the outcome. You do not write a registration proposal, you do not modify the catalog, and you do not ask the user a question directly — your output is a structured verdict that the next node uses to decide whether to abort, confirm with the user, or proceed.
+
+The brief carries descriptive information only — concept, methodology, geography, frequency, units, transformation, provider context. It does **not** carry the canonical catalog code or series UUID. Similarity must be deduced from the description.
+
+You have access to the read-only `macrodb-mcp` tool surface:
+
+1. **Similarity search tools** — `search_concepts(query, limit)`, `search_series_families(query, limit)`, `search_series(query, limit)`. Each takes a natural-language query and returns ranked candidates with full descriptive payload (name, alt-name, description, methodology fields, family/concept context) plus a similarity score. The underlying retrieval combines tag-based narrowing with embedding-based semantic similarity, so close-but-differently-worded matches (e.g. "inflation" against a "Consumer Price Index" series) are surfaced — you do not need to manually enumerate every synonym.
+2. **Drill-down tools** — `lookup_concept`, `lookup_family`, `find_sibling_series`, `list_series_for_concept`, `list_provider_series_for_concept`. Use these on candidates returned by similarity search to inspect family membership, sibling transformations, and provider coverage.
+3. **`list_enum_values`** — read the live allowed values for any methodology enum when you need to compare units, frequency, seasonal adjustment, measure, etc. between the briefed series and a candidate.
+
+Procedure:
+
+1. Extract the search signals from `<SeriesBrief>`: concept phrase, geography, frequency, units, transformation, seasonal adjustment, and provider if named.
+2. Run 2–4 similarity searches across concepts, families, and series. The retrieval handles synonymy automatically, so prefer one focused query that names the construct (e.g. "headline inflation rate, United States, monthly") over many synonym variants. Expand the query only if the first round returns no plausible candidates or misses an obvious domain neighbour.
+3. For each plausible candidate, drill into family and sibling series. Compare methodology fields against the brief — focus on what would distinguish a genuinely new series from a trivial transformation of an existing one.
+4. Classify each candidate into one of:
+   - **duplicate** — same concept, same provider, same methodology. The briefed series is already represented.
+   - **same_concept_other_feed** — same concept and methodology but different provider or ingestion path. Worth recording, may still be worth ingesting (e.g. for redundancy or earlier release).
+   - **transformation_overlap** — same concept and same family, differing only in a transformation that is already representable from existing siblings (e.g. existing index level → YoY can be derived; do not duplicate).
+   - **adjacent_supersede_candidate** — same concept, different family or methodology, where the briefed series is a strict methodological upgrade over an existing one (e.g. level series superseding a monthly-change series). Surface as a supersede recommendation, not a duplicate.
+   - **distinct** — semantically related candidates exist but the briefed series introduces a justifiable new dimension (e.g. CPI YoY rate alongside CPI index level).
+
+Out of scope for this node:
+- Writing a registration proposal. That is handled downstream by the proposal drafter.
+- Deciding the abort/warn/proceed action. The next node consumes your verdict and routes accordingly.
+- Modifying the catalog or any enum. The MCP read-only surface does not expose mutations.
+- Escalating enum gaps. If a methodology value in the brief does not appear in `list_enum_values`, note it in `findings.notes` and leave it for the downstream enum-gap path.
+
+Output:
+
+- `verdict`: one of `no_match`, `duplicate`, `same_concept_other_feed`, `transformation_overlap`, `adjacent_supersede_candidate`, `distinct_with_related`. The strongest applicable classification wins.
+- `similar_series`: list of catalog series the agent considered, each with `series_id`, `family_id`, `concept_id`, `relation` (one of the classifications above), and a one-sentence `rationale` grounded in the methodology comparison. Empty if `verdict` is `no_match`.
+- `supersede_candidates`: subset of `similar_series` with `relation == adjacent_supersede_candidate`. Each entry includes a short statement of what the briefed series improves over the existing one.
+- `findings.notes`: short free-text on search coverage, ambiguous matches, or any unrecognised methodology value the downstream nodes should know about.
+
+Hard rules:
+
+- Use the search tools before the drill-down tools. Drilling without a candidate is wasted budget.
+- Cap search calls at 6 total. Stop early if two consecutive searches return overlapping or empty results.
+- Do not invent catalog rows. Every entry in `similar_series` must come from a tool result. If no candidate clears a plausible similarity bar, return `no_match` with empty lists.
+- Do not classify based on series codes or identifiers — the brief carries none and any inference from external codes is unsafe at this stage.
+- Do not produce user-facing copy. The next node will phrase the abort/warn/proceed message from your verdict.
+"""
+
+
 transform_messages_into_series_brief_prompt = """You will be given a set of messages that have been exchanged so far between yourself and the user.
 
 Your job is to write a self-contained descriptive series onboarding handoff brief.
