@@ -30,6 +30,7 @@ class SeriesAdmin(BaseModelView, model=Series):
     form_columns = [
         Series.code,
         Series.name,
+        Series.alt_name,
         Series.description,
         Series.origin_type,
         Series.geography,

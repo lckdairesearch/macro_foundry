@@ -227,6 +227,7 @@ Different prose-adjacent fields are touched differently by the agent:
 | Field | Agent can mutate after Gate 1 approval | Agent can only propose; human applies via SQLAdmin |
 |---|---|---|
 | `series.name` | ✅ | — |
+| `series.alt_name` | ✅ | — |
 | `series.description` | ✅ | — |
 | `series_family.description` | ✅ | — |
 | `concept.description` | ✅ | — |

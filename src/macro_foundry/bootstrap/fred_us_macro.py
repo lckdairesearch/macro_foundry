@@ -108,6 +108,7 @@ class RawSeriesSpec:
     family_description: str
     series_code: str
     series_name: str
+    series_alt_name: tuple[str, ...]
     series_description: str
     family_variant: str
     is_primary_family_member: bool
@@ -128,6 +129,7 @@ class RawSeriesSpec:
     reference_label: str | None
     derived_series_code: str
     derived_series_name: str
+    derived_series_alt_name: tuple[str, ...]
     derived_series_description: str
     derived_family_variant: str
 
@@ -221,8 +223,13 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
         family_name="United States Gross Domestic Product",
         family_description="Curated United States GDP variants.",
         series_code="US_GDP_NOMINAL_Q_SAAR_LEVEL",
-        series_name="United States Gross Domestic Product, Nominal Level",
-        series_description="Quarterly nominal GDP level imported from FRED ticker GDP.",
+        series_name="USA – Gross Domestic Product, Nominal, Seasonally Adjusted Annual Rate, Billions of Dollars",
+        series_alt_name=(
+            "United States Gross Domestic Product, Nominal Level",
+            "Gross Domestic Product",
+            "Nominal GDP",
+        ),
+        series_description="Quarterly level of nominal gross domestic product for the United States, expressed at a seasonally adjusted annual rate in billions of current U.S. dollars. Published by the U.S. Bureau of Economic Analysis as part of the National Income and Product Accounts. Nominal GDP measures the total market value of goods and services produced in the United States without adjusting for changes in prices.",
         family_variant="Nominal",
         is_primary_family_member=True,
         external_code="GDP",
@@ -241,8 +248,12 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
         reference_year=None,
         reference_label=None,
         derived_series_code="US_GDP_NOMINAL_Q_SAAR_YOY",
-        derived_series_name="United States Gross Domestic Product, Nominal YoY",
-        derived_series_description="Year-over-year percent growth computed from nominal GDP levels.",
+        derived_series_name="USA – Gross Domestic Product, Nominal, Year-over-Year Percent Change",
+        derived_series_alt_name=(
+            "United States Gross Domestic Product, Nominal YoY",
+            "Nominal GDP YoY",
+        ),
+        derived_series_description="Year-over-year percent change in nominal gross domestic product for the United States. Derived from the quarterly nominal GDP level by comparing each period to the same quarter one year earlier.",
         derived_family_variant="Nominal YoY",
     ),
     RawSeriesSpec(
@@ -253,8 +264,13 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
         family_name="United States Gross Domestic Product",
         family_description="Curated United States GDP variants.",
         series_code="US_GDP_REAL_Q_SAAR_LEVEL",
-        series_name="United States Gross Domestic Product, Real Level",
-        series_description="Quarterly real GDP level imported from FRED ticker GDPC1.",
+        series_name="USA – Gross Domestic Product, Real, Seasonally Adjusted Annual Rate, Billions of Chained 2017 Dollars",
+        series_alt_name=(
+            "United States Gross Domestic Product, Real Level",
+            "Real Gross Domestic Product",
+            "Real GDP",
+        ),
+        series_description="Quarterly level of real gross domestic product for the United States, expressed at a seasonally adjusted annual rate in billions of chained 2017 dollars. Published by the U.S. Bureau of Economic Analysis as part of the National Income and Product Accounts. Real GDP measures the total value of goods and services produced in the United States after adjusting for changes in prices.",
         family_variant="Real",
         is_primary_family_member=False,
         external_code="GDPC1",
@@ -273,8 +289,12 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
         reference_year=2017,
         reference_label="Chained 2017 dollars",
         derived_series_code="US_GDP_REAL_Q_SAAR_YOY",
-        derived_series_name="United States Gross Domestic Product, Real YoY",
-        derived_series_description="Year-over-year percent growth computed from real GDP levels.",
+        derived_series_name="USA – Gross Domestic Product, Real, Year-over-Year Percent Change",
+        derived_series_alt_name=(
+            "United States Gross Domestic Product, Real YoY",
+            "Real GDP YoY",
+        ),
+        derived_series_description="Year-over-year percent change in real gross domestic product for the United States. Derived from the quarterly real GDP level by comparing each period to the same quarter one year earlier.",
         derived_family_variant="Real YoY",
     ),
     RawSeriesSpec(
@@ -285,8 +305,14 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
         family_name="United States Consumer Price Index",
         family_description="Curated United States CPI variants.",
         series_code="US_CPI_HEADLINE_M_NSA_LEVEL",
-        series_name="United States CPI Headline, Level",
-        series_description="Monthly headline CPI level imported from FRED ticker CPIAUCNS.",
+        series_name="USA – Consumer Price Index for All Urban Consumers: All Items in U.S. City Average",
+        series_alt_name=(
+            "Consumer Price Index for All Urban Consumers: All Items in U.S. City Average",
+            "United States CPI Headline, Level",
+            "CPI-U All Items",
+            "Headline CPI",
+        ),
+        series_description="Monthly index level of the Consumer Price Index for All Urban Consumers (CPI-U) covering all items, U.S. city average. Published by the U.S. Bureau of Labor Statistics. Not seasonally adjusted. Reference base period 1982-84 = 100.",
         family_variant="Headline",
         is_primary_family_member=True,
         external_code="CPIAUCNS",
@@ -305,8 +331,13 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
         reference_year=None,
         reference_label="1982-1984=100",
         derived_series_code="US_CPI_HEADLINE_M_NSA_YOY",
-        derived_series_name="United States CPI Headline, YoY",
-        derived_series_description="Year-over-year percent growth computed from headline CPI levels.",
+        derived_series_name="USA – Consumer Price Index for All Urban Consumers: All Items, 12-Month Percent Change in U.S. City Average",
+        derived_series_alt_name=(
+            "United States CPI Headline, YoY",
+            "Headline CPI Inflation",
+            "CPI-U All Items YoY",
+        ),
+        derived_series_description="Twelve-month percent change in the Consumer Price Index for All Urban Consumers (CPI-U) covering all items, U.S. city average. Not seasonally adjusted. Derived from the monthly CPI-U all-items index level.",
         derived_family_variant="Headline YoY",
     ),
     RawSeriesSpec(
@@ -317,8 +348,14 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
         family_name="United States Consumer Price Index",
         family_description="Curated United States CPI variants.",
         series_code="US_CPI_CORE_M_SA_LEVEL",
-        series_name="United States CPI Core, Level",
-        series_description="Monthly core CPI level imported from FRED ticker CPILFESL.",
+        series_name="USA – Consumer Price Index for All Urban Consumers: All Items Less Food and Energy in U.S. City Average",
+        series_alt_name=(
+            "Consumer Price Index for All Urban Consumers: All Items Less Food and Energy in U.S. City Average",
+            "United States CPI Core, Level",
+            "Core CPI",
+            "CPI-U Less Food and Energy",
+        ),
+        series_description="Monthly index level of the Consumer Price Index for All Urban Consumers (CPI-U) covering all items excluding food and energy (\"core CPI\"), U.S. city average. Seasonally adjusted. Reference base period 1982-84 = 100. Core CPI tracks underlying inflation by removing the most volatile components of the headline basket.",
         family_variant="Core",
         is_primary_family_member=False,
         external_code="CPILFESL",
@@ -337,8 +374,13 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
         reference_year=None,
         reference_label="1982-1984=100",
         derived_series_code="US_CPI_CORE_M_SA_YOY",
-        derived_series_name="United States CPI Core, YoY",
-        derived_series_description="Year-over-year percent growth computed from core CPI levels.",
+        derived_series_name="USA – Consumer Price Index for All Urban Consumers: All Items Less Food and Energy, 12-Month Percent Change in U.S. City Average",
+        derived_series_alt_name=(
+            "United States CPI Core, YoY",
+            "Core CPI Inflation",
+            "CPI-U Less Food and Energy YoY",
+        ),
+        derived_series_description="Twelve-month percent change in the Consumer Price Index for All Urban Consumers (CPI-U) covering all items excluding food and energy (\"core CPI\"), U.S. city average. Seasonally adjusted. Derived from the monthly core CPI index level.",
         derived_family_variant="Core YoY",
     ),
 )
@@ -1201,6 +1243,7 @@ async def _upsert_series(
         payload,
         (
             "name",
+            "alt_name",
             "description",
             "origin_type",
             "geography_id",
@@ -1398,6 +1441,7 @@ def _raw_series_payload(spec: RawSeriesSpec, *, geography_id: Any) -> dict[str, 
     return SeriesCreate(
         code=spec.series_code,
         name=spec.series_name,
+        alt_name=list(spec.series_alt_name) if spec.series_alt_name else None,
         description=spec.series_description,
         origin_type=OriginType.INGESTED,
         geography_id=geography_id,
@@ -1423,6 +1467,7 @@ def _derived_series_payload(spec: RawSeriesSpec, *, geography_id: Any) -> dict[s
     return SeriesCreate(
         code=spec.derived_series_code,
         name=spec.derived_series_name,
+        alt_name=list(spec.derived_series_alt_name) if spec.derived_series_alt_name else None,
         description=spec.derived_series_description,
         origin_type=OriginType.DERIVED,
         geography_id=geography_id,

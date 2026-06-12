@@ -407,12 +407,23 @@ Always UNIQUE within its table. The user-facing identifier; the UUID is internal
 
 A field that carries human-readable narrative rather than identity or
 structural meaning. In macrodb the prose fields are `description` on
-`concept`, `series_family`, and `series`; `name` on the same three; and
-`variant` on `series_family_members`. Prose fields are read by humans
-navigating the catalog. They are distinct from identity fields (`code`),
+`concept`, `series_family`, and `series`; `name` on the same three;
+`alt_name` on `series`, `geographies`, and `providers`; and `variant`
+on `series_family_members`. Prose fields are read by humans navigating
+the catalog. They are distinct from identity fields (`code`),
 structural fields (enum-backed methodology columns like `frequency`,
 `seasonal_adjustment`, `unit_code`), and provider-mapping fields
 (`external_code`, `external_name` on `series_sources`).
+
+`alt_name` is a curated, provider-agnostic search aid: aliases by
+which a human or LLM might look up an entity (informal names,
+acronyms, the publisher's marketing title, native-script spellings).
+It is distinct from `series_sources.external_name`, which records what
+one specific provider calls the series for audit and reconciliation.
+The two will often overlap (the FRED title is both a useful alias and
+the FRED-side `external_name`), but they have different writers and
+different purposes — `alt_name` is curated on the canonical entity;
+`external_name` is one row per provider mapping.
 
 Prose fields do not carry cross-row dependencies the way identity does,
 so they are not protected by the publication boundary the way `code` is.

@@ -87,7 +87,7 @@ generated proposal.
 
 | Field | Agent can mutate after Gate 1 approval | Agent can only propose; human applies via SQLAdmin |
 |---|---|---|
-| `series.name`, `series.description`, `series_family.description`, `concept.description`, `series_family_members.variant` | ✅ | — |
+| `series.name`, `series.alt_name`, `series.description`, `series_family.description`, `concept.description`, `series_family_members.variant` | ✅ | — |
 | `concept.name`, `series_family.name` | — | ✅ |
 | `*.code` | — | ✅ (and only via Gate 2 if changing an existing code) |
 | Structural enum-backed fields | — | ✅ (may require enum-gap escalation, deferred to a separate ADR) |
