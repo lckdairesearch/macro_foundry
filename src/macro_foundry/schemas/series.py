@@ -42,6 +42,7 @@ class SeriesBase(SchemaModel):
 
     code: str
     name: str
+    alt_name: list[str] | None = None
     description: str | None = None
     origin_type: OriginType
     geography_id: UUID
@@ -84,6 +85,7 @@ class SeriesUpdate(SchemaModel):
 
     code: str | None = None
     name: str | None = None
+    alt_name: list[str] | None = None
     description: str | None = None
     origin_type: OriginType | None = None
     geography_id: UUID | None = None

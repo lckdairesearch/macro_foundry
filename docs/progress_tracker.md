@@ -12,6 +12,55 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-12] Series — added `alt_name` column and brought FRED bootstrap prose to skill
+
+Added `alt_name text[]` (nullable) to `series`, mirroring the existing
+column on `geographies` and `providers`. Curated, provider-agnostic
+search aid; distinct from `series_sources.external_name` (per-provider,
+for audit/reconciliation). Surfaces updated end-to-end: V3 schema source
+(`docs/schema/db_er.txt`), SQLAlchemy `Series` model, Alembic migration
+`0011_series_alt_name.py`, Pydantic `SeriesBase`/`SeriesUpdate`,
+SQLAdmin `SeriesAdmin.form_columns`, `DraftSeriesOutput` (so the
+onboarding drafter can populate it), and the MCP `apply_catalog` write
+path. Mutation matrix in ADR 0013 and skill-metadata-standardisation
+extended with the new row (agent-mutable, same tier as `series.name`).
+
+Audited `bootstrap/fred_us_macro.py` against
+`docs/skills/skill-metadata-standardisation.md` and fixed three hard-rule
+violations across all four raw + four derived FRED specs:
+
+1. Geography-prefix rule — renamed `series_name` and
+   `derived_series_name` from `"United States ..."` to `"USA – ..."`
+   form (en-dash U+2013), matching skill exemplars 1–5.
+2. Runtime-implementation detail rule — rewrote `series_description`
+   to drop `"imported from FRED ticker GDP/CPIAUCNS/..."` leakage. The
+   FRED tickers stay where they belong, in
+   `series_sources.external_code`.
+3. Structural-disclosure rule — descriptions now spell out SA vs NSA,
+   SAAR, real vs nominal, base year, and U.S. city average scope in
+   prose rather than letting them hide in the row's structural columns.
+
+Each spec now also carries a curated `series_alt_name` /
+`derived_series_alt_name` tuple including the publisher's full title
+(e.g. `"Consumer Price Index for All Urban Consumers: All Items in U.S.
+City Average"`) and common informal aliases (`"Headline CPI"`,
+`"CPI-U All Items"`, etc.). FRED's runtime `metadata.title` continues
+to flow only into `series_sources.external_name` — `series.alt_name`
+stays curated, single-writer.
+
+`series_family.name` and `series_family.description` are propose-only
+in the mutation matrix and were left alone in this pass; flagged in
+the audit for a separate operator-driven sweep.
+
+Verification:
+
+- Manual review of all eight rewritten name/description pairs against
+  exemplars 1–5 of `skill-metadata-standardisation.md`.
+- No code or test runs yet — recommend running
+  `uv run pytest tests/macrodb/ -q -m no_db` plus
+  `uv run ruff check src/macro_foundry tests` and applying migration
+  `0011` on dev as `macrodb_owner` before merging.
+
 ### [2026-06-11] Onboard CLI — GPT-5.4 OpenAI compatibility and FRED credential detection fixed
 
 Updated the OpenAI-backed onboarding LLM wrapper so GPT-5/reasoning-model

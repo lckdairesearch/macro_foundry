@@ -80,6 +80,7 @@ class DraftSeriesOutput(BaseModel):
     action: Literal["new", "existing"]
     code: str
     name: str
+    alt_name: list[str] | None = None
     description: str | None = None
     frequency: str
     measure: str

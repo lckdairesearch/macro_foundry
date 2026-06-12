@@ -175,6 +175,7 @@ class MacrodbWriteTools:
         series = Series(
             code=draft.series.code,
             name=draft.series.name,
+            alt_name=draft.series.alt_name,
             description=draft.series.description,
             origin_type=OriginType(draft.series.origin_type),
             geography_id=geography.id,

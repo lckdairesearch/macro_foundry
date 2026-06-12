@@ -103,6 +103,7 @@ series [icon: activity, color: green] {
   id uuid pk
   code string unique
   name string
+  alt_name text[]                 // nullable; curated aliases (provider title, informal names) used as a search aid; provider-agnostic, distinct from series_sources.external_name
   description string              // nullable but strongly encouraged
   origin_type string              // ENUM: ingested | derived | both
   geography_id uuid fk            // FK -> geographies.id
