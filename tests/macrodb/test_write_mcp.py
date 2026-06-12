@@ -30,8 +30,8 @@ from macro_foundry.models import (
     IngestionFeedMember,
     Provider,
     Series,
-    SeriesFamily,
-    SeriesFamilyMember,
+    Indicator,
+    IndicatorVariant,
     SeriesSource,
 )
 from macro_foundry.mcp.write_tools import (
@@ -403,7 +403,7 @@ async def test_apply_approved_proposal_materializes_family_with_embeddings(
 
     family = (
         await session.execute(
-            select(SeriesFamily).where(SeriesFamily.code == "APPLIED_FAMILY_66")
+            select(Indicator).where(Indicator.code == "APPLIED_FAMILY_66")
         )
     ).scalar_one()
     assert result["status"] == ProposalStatus.APPLIED.value
@@ -427,7 +427,7 @@ async def test_apply_approved_proposal_materializes_series_with_current_family_c
     )
     session.add(concept)
     await session.flush()
-    family = SeriesFamily(
+    family = Indicator(
         code="SERIES_PARENT_FAMILY_66",
         name="Series Parent Family 66",
         description="Parent family for approved series proposal.",
@@ -499,9 +499,9 @@ async def test_apply_approved_proposal_materializes_series_with_current_family_c
             select(Series)
             .options(
                 selectinload(Series.geography),
-                selectinload(Series.family_member)
-                .selectinload(SeriesFamilyMember.family)
-                .selectinload(SeriesFamily.concept),
+                selectinload(Series.indicator_variant)
+                .selectinload(IndicatorVariant.indicator)
+                .selectinload(Indicator.concept),
             )
             .where(Series.code == "APPLIED_SERIES_66")
         )
@@ -512,8 +512,8 @@ async def test_apply_approved_proposal_materializes_series_with_current_family_c
     assert series.embedding_input_hash == hash_embedding_input(
         compose_series_embedding_input(series)
     )
-    assert series.family_member is not None
-    assert series.family_member.family_id == family.id
+    assert series.indicator_variant is not None
+    assert series.indicator_variant.indicator_id == family.id
 
 
 @pytest.mark.asyncio
@@ -596,7 +596,7 @@ async def test_apply_approved_proposal_rolls_back_partial_writes_when_embedding_
     ).scalar_one_or_none()
     family = (
         await session.execute(
-            select(SeriesFamily).where(SeriesFamily.code == "ROLLBACK_FAMILY_66")
+            select(Indicator).where(Indicator.code == "ROLLBACK_FAMILY_66")
         )
     ).scalar_one_or_none()
     assert concept is None
@@ -782,7 +782,7 @@ async def test_apply_catalog_writes_catalog_rows_and_pending_sha_items(
         await session.execute(select(Concept).where(Concept.code == "TST_CONCEPT_AC6"))
     ).scalar_one()
     family = (
-        await session.execute(select(SeriesFamily).where(SeriesFamily.code == "TST_FAM_AC6"))
+        await session.execute(select(Indicator).where(Indicator.code == "TST_FAM_AC6"))
     ).scalar_one()
     series = (
         await session.execute(select(Series).where(Series.code == "TST_SERIES_AC6"))

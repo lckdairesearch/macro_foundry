@@ -46,8 +46,8 @@ from macro_foundry.models import (
     Provider,
     ProviderCatalog,
     Series,
-    SeriesFamily,
-    SeriesFamilyMember,
+    Indicator,
+    IndicatorVariant,
     SeriesSource,
 )
 from macro_foundry.schemas import (
@@ -57,15 +57,15 @@ from macro_foundry.schemas import (
     ProviderCatalogCreate,
     ProviderCreate,
     SeriesCreate,
-    SeriesFamilyCreate,
-    SeriesFamilyMemberCreate,
+    IndicatorCreate,
+    IndicatorVariantCreate,
     SeriesSourceCreate,
 )
 from macro_foundry.seed._shared import assign_if_changed
 from macro_foundry.services.registration import (
     ensure_series_embedding_current,
     register_concept,
-    register_family,
+    register_indicator,
     register_series,
 )
 
@@ -103,8 +103,8 @@ class RawSeriesSpec:
     series_name: str
     series_alt_name: tuple[str, ...]
     series_description: str
-    family_variant: str
-    is_primary_family_member: bool
+    variant_label: str
+    is_default_variant: bool
     external_code: str
     frequency: Frequency
     temporal_stock_flow: TemporalStockFlow
@@ -153,9 +153,9 @@ class FredUsMacroResetResult:
     ingestion_run_logs_deleted: int
     ingestion_feeds_deleted: int
     series_sources_deleted: int
-    family_members_deleted: int
+    indicator_variants_deleted: int
     series_deleted: int
-    families_deleted: int
+    indicators_deleted: int
     concepts_deleted: int
 
 
@@ -194,8 +194,8 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
             "Nominal GDP",
         ),
         series_description="Quarterly level of nominal gross domestic product for the United States, expressed at a seasonally adjusted annual rate in billions of current U.S. dollars. Published by the U.S. Bureau of Economic Analysis as part of the National Income and Product Accounts. Nominal GDP measures the total market value of goods and services produced in the United States without adjusting for changes in prices.",
-        family_variant="Nominal",
-        is_primary_family_member=True,
+        variant_label="Nominal",
+        is_default_variant=True,
         external_code="GDP",
         frequency=Frequency.QUARTERLY,
         temporal_stock_flow=TemporalStockFlow.FLOW,
@@ -227,8 +227,8 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
             "Real GDP",
         ),
         series_description="Quarterly level of real gross domestic product for the United States, expressed at a seasonally adjusted annual rate in billions of chained 2017 dollars. Published by the U.S. Bureau of Economic Analysis as part of the National Income and Product Accounts. Real GDP measures the total value of goods and services produced in the United States after adjusting for changes in prices.",
-        family_variant="Real",
-        is_primary_family_member=False,
+        variant_label="Real",
+        is_default_variant=False,
         external_code="GDPC1",
         frequency=Frequency.QUARTERLY,
         temporal_stock_flow=TemporalStockFlow.FLOW,
@@ -261,8 +261,8 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
             "Headline CPI",
         ),
         series_description="Monthly index level of the Consumer Price Index for All Urban Consumers (CPI-U) covering all items, U.S. city average. Published by the U.S. Bureau of Labor Statistics. Not seasonally adjusted. Reference base period 1982-84 = 100.",
-        family_variant="Headline",
-        is_primary_family_member=True,
+        variant_label="Headline",
+        is_default_variant=True,
         external_code="CPIAUCNS",
         frequency=Frequency.MONTHLY,
         temporal_stock_flow=TemporalStockFlow.INDEX,
@@ -295,8 +295,8 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
             "CPI-U Less Food and Energy",
         ),
         series_description="Monthly index level of the Consumer Price Index for All Urban Consumers (CPI-U) covering all items excluding food and energy (\"core CPI\"), U.S. city average. Seasonally adjusted. Reference base period 1982-84 = 100. Core CPI tracks underlying inflation by removing the most volatile components of the headline basket.",
-        family_variant="Core",
-        is_primary_family_member=False,
+        variant_label="Core",
+        is_default_variant=False,
         external_code="CPILFESL",
         frequency=Frequency.MONTHLY,
         temporal_stock_flow=TemporalStockFlow.INDEX,
@@ -455,9 +455,9 @@ async def _reset_bootstrap_transaction(
             ingestion_run_logs_deleted=0,
             ingestion_feeds_deleted=0,
             series_sources_deleted=0,
-            family_members_deleted=0,
+            indicator_variants_deleted=0,
             series_deleted=0,
-            families_deleted=0,
+            indicators_deleted=0,
             concepts_deleted=0,
         )
 
@@ -505,27 +505,27 @@ async def _reset_bootstrap_transaction(
         session,
         delete(SeriesSource).where(SeriesSource.id.in_(source_ids)),
     )
-    family_members_deleted = await _execute_delete(
+    indicator_variants_deleted = await _execute_delete(
         session,
-        delete(SeriesFamilyMember).where(SeriesFamilyMember.series_id.in_(series_ids)),
+        delete(IndicatorVariant).where(IndicatorVariant.series_id.in_(series_ids)),
     )
     series_deleted = await _execute_delete(
         session,
         delete(Series).where(Series.id.in_(series_ids)),
     )
 
-    families_deleted = 0
+    indicators_deleted = 0
     for family_code in _bootstrap_family_codes():
-        family = await session.scalar(select(SeriesFamily).where(SeriesFamily.code == family_code))
+        family = await session.scalar(select(Indicator).where(Indicator.code == family_code))
         if family is None:
             continue
         has_members = await session.scalar(
-            select(SeriesFamilyMember.series_id).where(SeriesFamilyMember.family_id == family.id).limit(1),
+            select(IndicatorVariant.series_id).where(IndicatorVariant.indicator_id == family.id).limit(1),
         )
         if has_members is None:
-            families_deleted += await _execute_delete(
+            indicators_deleted += await _execute_delete(
                 session,
-                delete(SeriesFamily).where(SeriesFamily.id == family.id),
+                delete(Indicator).where(Indicator.id == family.id),
             )
 
     concepts_deleted = 0
@@ -534,7 +534,7 @@ async def _reset_bootstrap_transaction(
         if concept is None:
             continue
         has_families = await session.scalar(
-            select(SeriesFamily.id).where(SeriesFamily.concept_id == concept.id).limit(1),
+            select(Indicator.id).where(Indicator.concept_id == concept.id).limit(1),
         )
         if has_families is None:
             concepts_deleted += await _execute_delete(
@@ -548,9 +548,9 @@ async def _reset_bootstrap_transaction(
         ingestion_run_logs_deleted=ingestion_run_logs_deleted,
         ingestion_feeds_deleted=ingestion_feeds_deleted,
         series_sources_deleted=series_sources_deleted,
-        family_members_deleted=family_members_deleted,
+        indicator_variants_deleted=indicator_variants_deleted,
         series_deleted=series_deleted,
-        families_deleted=families_deleted,
+        indicators_deleted=indicators_deleted,
         concepts_deleted=concepts_deleted,
     )
 
@@ -570,9 +570,9 @@ async def _prepare_series_catalog(
             description=spec.concept_description,
         ).model_dump(),
     )
-    family = await _upsert_series_family(
+    family = await _upsert_indicator(
         session,
-        payload=SeriesFamilyCreate(
+        payload=IndicatorCreate(
             code=spec.family_code,
             name=spec.family_name,
             description=spec.family_description,
@@ -585,13 +585,13 @@ async def _prepare_series_catalog(
         session,
         payload=_raw_series_payload(spec, geography_id=geography.id),
     )
-    await _upsert_series_family_member(
+    await _upsert_indicator_variant(
         session,
-        payload=SeriesFamilyMemberCreate(
-            family_id=family.id,
+        payload=IndicatorVariantCreate(
+            indicator_id=family.id,
             series_id=raw_series.id,
-            variant=spec.family_variant,
-            is_primary=spec.is_primary_family_member,
+            label=spec.variant_label,
+            is_default=spec.is_default_variant,
         ).model_dump(),
     )
     raw_series = await ensure_series_embedding_current(session, raw_series)
@@ -888,16 +888,16 @@ async def _upsert_concept(session: AsyncSession, *, payload: dict[str, Any]) -> 
     return concept
 
 
-async def _upsert_series_family(
+async def _upsert_indicator(
     session: AsyncSession,
     *,
     payload: dict[str, Any],
-) -> SeriesFamily:
-    family = await session.scalar(select(SeriesFamily).where(SeriesFamily.code == payload["code"]))
+) -> Indicator:
+    family = await session.scalar(select(Indicator).where(Indicator.code == payload["code"]))
     if family is None:
-        return await register_family(
+        return await register_indicator(
             session,
-            SeriesFamilyCreate.model_validate(payload),
+            IndicatorCreate.model_validate(payload),
         )
     assign_if_changed(
         family,
@@ -949,20 +949,20 @@ async def _upsert_series(
     return series
 
 
-async def _upsert_series_family_member(
+async def _upsert_indicator_variant(
     session: AsyncSession,
     *,
     payload: dict[str, Any],
-) -> SeriesFamilyMember:
+) -> IndicatorVariant:
     member = await session.scalar(
-        select(SeriesFamilyMember).where(SeriesFamilyMember.series_id == payload["series_id"]),
+        select(IndicatorVariant).where(IndicatorVariant.series_id == payload["series_id"]),
     )
     if member is None:
-        member = SeriesFamilyMember(**payload)
+        member = IndicatorVariant(**payload)
         session.add(member)
         await session.flush()
         return member
-    assign_if_changed(member, payload, ("family_id", "variant", "is_primary"))
+    assign_if_changed(member, payload, ("indicator_id", "label", "is_default"))
     await session.flush()
     return member
 

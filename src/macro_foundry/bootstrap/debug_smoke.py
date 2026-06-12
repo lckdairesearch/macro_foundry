@@ -41,16 +41,16 @@ from macro_foundry.models import (
     Provider,
     ProviderCatalog,
     Series,
-    SeriesFamily,
-    SeriesFamilyMember,
+    Indicator,
+    IndicatorVariant,
     SeriesHierarchyEdge,
     SeriesSource,
 )
-from macro_foundry.schemas import ConceptCreate, SeriesCreate, SeriesFamilyCreate
+from macro_foundry.schemas import ConceptCreate, SeriesCreate, IndicatorCreate
 from macro_foundry.services.registration import (
     ensure_series_embedding_current,
     register_concept,
-    register_family,
+    register_indicator,
     register_series,
 )
 
@@ -269,12 +269,12 @@ async def _get_or_create_family(
     *,
     concept: Concept,
     geography: Geography,
-) -> SeriesFamily:
-    family = await session.scalar(select(SeriesFamily).where(SeriesFamily.code == _FAMILY_CODE))
+) -> Indicator:
+    family = await session.scalar(select(Indicator).where(Indicator.code == _FAMILY_CODE))
     if family is None:
-        family = await register_family(
+        family = await register_indicator(
             session,
-            SeriesFamilyCreate(
+            IndicatorCreate(
                 code=_FAMILY_CODE,
                 name="United States debug index",
                 concept_id=concept.id,
@@ -315,18 +315,18 @@ async def _get_or_create_series(
 async def _get_or_create_family_member(
     session: AsyncSession,
     *,
-    family: SeriesFamily,
+    family: Indicator,
     series: Series,
-) -> SeriesFamilyMember:
+) -> IndicatorVariant:
     member = await session.scalar(
-        select(SeriesFamilyMember).where(SeriesFamilyMember.series_id == series.id),
+        select(IndicatorVariant).where(IndicatorVariant.series_id == series.id),
     )
     if member is None:
-        member = SeriesFamilyMember(
-            family_id=family.id,
+        member = IndicatorVariant(
+            indicator_id=family.id,
             series_id=series.id,
-            variant=series.name,
-            is_primary=series.code == "DEBUG_TOTAL_INDEX",
+            label=series.name,
+            is_default=series.code == "DEBUG_TOTAL_INDEX",
         )
         session.add(member)
         await session.flush()

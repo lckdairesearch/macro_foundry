@@ -16,7 +16,7 @@ import openai
 
 from macro_foundry.config import settings
 from macro_foundry.enums import Frequency, Measure, SeasonalAdjustment, UnitKind
-from macro_foundry.models import Concept, Series, SeriesFamily
+from macro_foundry.models import Concept, Indicator, Series
 
 EMBEDDING_MODEL = "text-embedding-3-small"
 EMBEDDING_DIMENSIONS = 1536
@@ -79,24 +79,32 @@ def compose_concept_embedding_input(concept: Concept) -> str:
     )
 
 
-def compose_family_embedding_input(family: SeriesFamily) -> str:
+def compose_indicator_embedding_input(indicator: Indicator) -> str:
+    # NOTE: the "Type" / "Family" label strings below are intentionally kept at
+    # their pre-rename wording. They are part of the text fed to the embedding
+    # model, so changing them would drift every stored embedding_input_hash and
+    # force a full backfill. ADR 0021 is a pure rename with embeddings behavior
+    # unchanged; only the code symbols move, not the embedded prose.
     return _compose(
         [
             _line("Type", "SeriesFamily"),
-            _line("Code", family.code),
-            _line("Name", family.name),
-            _line("Description", family.description),
-            _line("Geography", family.geography.name if family.geography else None),
-            _line("Concept", f"{family.concept.name} ({family.concept.code})" if family.concept else None),
-            _line("Concept description", family.concept.description if family.concept else None),
+            _line("Code", indicator.code),
+            _line("Name", indicator.name),
+            _line("Description", indicator.description),
+            _line("Geography", indicator.geography.name if indicator.geography else None),
+            _line(
+                "Concept",
+                f"{indicator.concept.name} ({indicator.concept.code})" if indicator.concept else None,
+            ),
+            _line("Concept description", indicator.concept.description if indicator.concept else None),
         ],
     )
 
 
 def compose_series_embedding_input(series: Series) -> str:
     alt_names = ", ".join(series.alt_name) if series.alt_name else None
-    family = series.family_member.family if series.family_member else None
-    concept = family.concept if family else None
+    indicator = series.indicator_variant.indicator if series.indicator_variant else None
+    concept = indicator.concept if indicator else None
     return _compose(
         [
             _line("Type", "Series"),
@@ -110,7 +118,7 @@ def compose_series_embedding_input(series: Series) -> str:
             _line("Unit label", series.unit_label),
             _line("Measure", MEASURE_HUMAN.get(series.measure)),
             _line("Seasonal adjustment", SEASONAL_ADJUSTMENT_HUMAN.get(series.seasonal_adjustment)),
-            _line("Family", f"{family.name} ({family.code})" if family else None),
+            _line("Family", f"{indicator.name} ({indicator.code})" if indicator else None),
             _line("Concept", f"{concept.name} ({concept.code})" if concept else None),
         ],
     )

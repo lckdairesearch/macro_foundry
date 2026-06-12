@@ -20,7 +20,7 @@ from macro_foundry.models import (
     IngestionRunLogMember,
     Observation,
     Series,
-    SeriesFamily,
+    Indicator,
     SeriesHierarchyEdge,
 )
 from macro_foundry.services.embeddings import EMBEDDING_DIMENSIONS, EMBEDDING_MODEL
@@ -113,7 +113,7 @@ async def test_debug_bootstrap_exercises_request_feed_provenance_and_hierarchy(
         assert parent is not None
         assert child is not None
         concept = await session.scalar(select(Concept).where(Concept.code == "DEBUG_INDEX"))
-        family = await session.scalar(select(SeriesFamily).where(SeriesFamily.code == "US_DEBUG_INDEX"))
+        family = await session.scalar(select(Indicator).where(Indicator.code == "US_DEBUG_INDEX"))
         assert concept is not None
         assert family is not None
         assert concept.embedding is not None

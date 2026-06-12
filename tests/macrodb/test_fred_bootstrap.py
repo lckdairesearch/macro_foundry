@@ -26,14 +26,14 @@ from macro_foundry.models import (
     IngestionRunLogMember,
     Observation,
     Series,
-    SeriesFamily,
-    SeriesFamilyMember,
+    Indicator,
+    IndicatorVariant,
     SeriesSource,
 )
 from macro_foundry.services.embeddings import EMBEDDING_DIMENSIONS, EMBEDDING_MODEL
 from macro_foundry.services.embeddings import (
     compose_concept_embedding_input,
-    compose_family_embedding_input,
+    compose_indicator_embedding_input,
     compose_series_embedding_input,
     hash_embedding_input,
 )
@@ -190,9 +190,9 @@ async def test_fred_bootstrap_creates_curated_rows_and_run_logs(
 
     async with test_session_factory() as session:
         assert await _count_rows(session, Concept) == 2
-        assert await _count_rows(session, SeriesFamily) == 2
+        assert await _count_rows(session, Indicator) == 2
         assert await _count_rows(session, Series) == 4
-        assert await _count_rows(session, SeriesFamilyMember) == 4
+        assert await _count_rows(session, IndicatorVariant) == 4
         assert await _count_rows(session, SeriesSource) == 4
         assert await _count_rows(session, IngestionFeed) == 4
         assert await _count_rows(session, IngestionFeedMember) == 4
@@ -200,7 +200,7 @@ async def test_fred_bootstrap_creates_curated_rows_and_run_logs(
         assert await _count_rows(session, IngestionRunLogMember) == 4
         assert await _count_rows(session, Observation) == 18
         concepts = list((await session.execute(select(Concept))).scalars().all())
-        families = list((await session.execute(select(SeriesFamily))).scalars().all())
+        families = list((await session.execute(select(Indicator))).scalars().all())
         series_rows = list((await session.execute(select(Series))).scalars().all())
         assert concepts
         assert families
@@ -326,9 +326,9 @@ async def test_fred_bootstrap_new_catalog_rows_are_immediately_up_to_date_for_em
         families = list(
             (
                 await session.execute(
-                    select(SeriesFamily).options(
-                        selectinload(SeriesFamily.concept),
-                        selectinload(SeriesFamily.geography),
+                    select(Indicator).options(
+                        selectinload(Indicator.concept),
+                        selectinload(Indicator.geography),
                     ),
                 )
             ).scalars().all(),
@@ -338,9 +338,9 @@ async def test_fred_bootstrap_new_catalog_rows_are_immediately_up_to_date_for_em
                 await session.execute(
                     select(Series).options(
                         selectinload(Series.geography),
-                        selectinload(Series.family_member)
-                        .selectinload(SeriesFamilyMember.family)
-                        .selectinload(SeriesFamily.concept),
+                        selectinload(Series.indicator_variant)
+                        .selectinload(IndicatorVariant.indicator)
+                        .selectinload(Indicator.concept),
                     ),
                 )
             ).scalars().all(),
@@ -351,7 +351,7 @@ async def test_fred_bootstrap_new_catalog_rows_are_immediately_up_to_date_for_em
             for row in concepts
         )
         assert all(
-            row.embedding_input_hash == hash_embedding_input(compose_family_embedding_input(row))
+            row.embedding_input_hash == hash_embedding_input(compose_indicator_embedding_input(row))
             for row in families
         )
         assert all(
@@ -450,5 +450,5 @@ async def test_fred_bootstrap_reset_removes_curated_preset_rows_only(
         assert await _count_rows(session, IngestionFeed) == 0
         assert await _count_rows(session, SeriesSource) == 0
         assert await _count_rows(session, Series) == 0
-        assert await _count_rows(session, SeriesFamily) == 0
+        assert await _count_rows(session, Indicator) == 0
         assert await _count_rows(session, Concept) == 0

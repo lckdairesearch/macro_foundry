@@ -13,7 +13,7 @@ from macro_foundry.models._vector import Vector
 _EMBEDDING_DIMENSIONS = 1536
 
 if TYPE_CHECKING:
-    from macro_foundry.models.series import SeriesFamily
+    from macro_foundry.models.series import Indicator
 
 
 class Concept(TimestampedBase):
@@ -29,8 +29,8 @@ class Concept(TimestampedBase):
     embedding_model: Mapped[str | None] = mapped_column(String(), nullable=True)
     embedding_input_hash: Mapped[str | None] = mapped_column(String(), nullable=True)
 
-    series_families: Mapped[list["SeriesFamily"]] = relationship(
-        "SeriesFamily",
+    indicators: Mapped[list["Indicator"]] = relationship(
+        "Indicator",
         back_populates="concept",
         lazy="selectin",
         passive_deletes=True,

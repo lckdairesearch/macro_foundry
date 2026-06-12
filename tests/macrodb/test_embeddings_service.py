@@ -22,13 +22,13 @@ from macro_foundry.enums.series import (
 )
 from macro_foundry.models.concept import Concept
 from macro_foundry.models.geography import Geography
-from macro_foundry.models.series import Series, SeriesFamily, SeriesFamilyMember
+from macro_foundry.models.series import Indicator, IndicatorVariant, Series
 from macro_foundry.services.embeddings import FREQUENCY_HUMAN
 from macro_foundry.services.embeddings import MEASURE_HUMAN
 from macro_foundry.services.embeddings import SEASONAL_ADJUSTMENT_HUMAN
 from macro_foundry.services.embeddings import UNIT_KIND_HUMAN
 from macro_foundry.services.embeddings import compose_concept_embedding_input
-from macro_foundry.services.embeddings import compose_family_embedding_input
+from macro_foundry.services.embeddings import compose_indicator_embedding_input
 from macro_foundry.services.embeddings import compose_series_embedding_input
 from macro_foundry.services.embeddings import embed_text
 from macro_foundry.services.embeddings import hash_embedding_input
@@ -51,7 +51,7 @@ def test_compose_concept_embedding_input_uses_locked_recipe_labels() -> None:
 
 
 @pytest.mark.no_db
-def test_compose_family_embedding_input_includes_parent_context() -> None:
+def test_compose_indicator_embedding_input_includes_parent_context() -> None:
     concept = Concept(
         code="CPI",
         name="Consumer Price Index",
@@ -63,7 +63,7 @@ def test_compose_family_embedding_input_includes_parent_context() -> None:
         type=GeographyType.COUNTRY,
         code_standard=CodeStandard.ISO_3166_1,
     )
-    family = SeriesFamily(
+    family = Indicator(
         code="USA_CPI",
         name="USA CPI",
         description="Consumer price index family for the United States.",
@@ -71,7 +71,7 @@ def test_compose_family_embedding_input_includes_parent_context() -> None:
         geography=geography,
     )
 
-    assert compose_family_embedding_input(family) == (
+    assert compose_indicator_embedding_input(family) == (
         "Type: SeriesFamily\n"
         "Code: USA_CPI\n"
         "Name: USA CPI\n"
@@ -95,7 +95,7 @@ def test_compose_series_embedding_input_humanizes_enums_and_includes_parents() -
         type=GeographyType.COUNTRY,
         code_standard=CodeStandard.ISO_3166_1,
     )
-    family = SeriesFamily(
+    family = Indicator(
         code="USA_CPI",
         name="USA CPI",
         description="Consumer price index family for the United States.",
@@ -119,11 +119,11 @@ def test_compose_series_embedding_input_humanizes_enums_and_includes_parents() -
         is_active=True,
     )
     series.alt_name = ["Headline CPI", "CPI-U All Items"]
-    SeriesFamilyMember(
-        family=family,
+    IndicatorVariant(
+        indicator=family,
         series=series,
-        variant="Headline",
-        is_primary=True,
+        label="Headline",
+        is_default=True,
     )
 
     assert compose_series_embedding_input(series) == (

@@ -77,10 +77,10 @@ async def test_api_smoke_flows_from_seeded_geography_to_observations(
         "/api/v1/series-family-members/",
         headers=auth_headers,
         json={
-            "family_id": family_id,
+            "indicator_id": family_id,
             "series_id": series_id,
-            "variant": "Headline NSA",
-            "is_primary": True,
+            "label": "Headline NSA",
+            "is_default": True,
         },
     )
     assert family_member_response.status_code == HTTPStatus.CREATED

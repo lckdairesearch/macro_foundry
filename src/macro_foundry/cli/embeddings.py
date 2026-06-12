@@ -13,11 +13,11 @@ from sqlalchemy.orm import selectinload
 
 from macro_foundry.config import settings
 from macro_foundry.db import EnvTarget, app_url_for_target, create_async_engine_for_url, create_session_factory
-from macro_foundry.models import Concept, Series, SeriesFamily, SeriesFamilyMember
+from macro_foundry.models import Concept, Series, Indicator, IndicatorVariant
 from macro_foundry.services.embeddings import (
     EMBEDDING_MODEL,
     compose_concept_embedding_input,
-    compose_family_embedding_input,
+    compose_indicator_embedding_input,
     compose_series_embedding_input,
     embed_texts,
     hash_embedding_input,
@@ -67,9 +67,9 @@ async def run_embeddings_backfill_with_session_factory(
         families = list(
             (
                 await session.execute(
-                    select(SeriesFamily).options(
-                        selectinload(SeriesFamily.geography),
-                        selectinload(SeriesFamily.concept),
+                    select(Indicator).options(
+                        selectinload(Indicator.geography),
+                        selectinload(Indicator.concept),
                     ),
                 )
             ).scalars().all(),
@@ -79,9 +79,9 @@ async def run_embeddings_backfill_with_session_factory(
                 await session.execute(
                     select(Series).options(
                         selectinload(Series.geography),
-                        selectinload(Series.family_member)
-                        .selectinload(SeriesFamilyMember.family)
-                        .selectinload(SeriesFamily.concept),
+                        selectinload(Series.indicator_variant)
+                        .selectinload(IndicatorVariant.indicator)
+                        .selectinload(Indicator.concept),
                     ),
                 )
             ).scalars().all(),
@@ -95,10 +95,10 @@ async def run_embeddings_backfill_with_session_factory(
                 embed=embed,
                 batch_size=batch_size,
             ),
-            "series_families": await _backfill_table(
+            "indicators": await _backfill_table(
                 session=session,
                 rows=families,
-                compose=compose_family_embedding_input,
+                compose=compose_indicator_embedding_input,
                 embed=embed,
                 batch_size=batch_size,
             ),
@@ -180,5 +180,5 @@ def backfill(
             batch_size=50,
         ),
     )
-    for table_name in ("concepts", "series_families", "series"):
+    for table_name in ("concepts", "indicators", "series"):
         typer.echo(f"{table_name}: {summary[table_name]} stale -> embedded")

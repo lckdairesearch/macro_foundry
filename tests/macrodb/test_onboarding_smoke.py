@@ -45,8 +45,8 @@ from macro_foundry.models import (
     Provider,
     ProviderCatalog,
     Series,
-    SeriesFamily,
-    SeriesFamilyMember,
+    Indicator,
+    IndicatorVariant,
     SeriesSource,
 )
 from macro_foundry.mcp.write_tools import MacrodbWriteTools
@@ -490,7 +490,7 @@ async def _create_existing_sibling(session: AsyncSession, code: str) -> Series:
     concept = Concept(code=f"CONCEPT_{code}", name=f"Concept {code}")
     session.add(concept)
     await session.flush()
-    family = SeriesFamily(
+    family = Indicator(
         code=f"FAM_{code}",
         name=f"Family {code}",
         concept_id=concept.id,
@@ -516,11 +516,11 @@ async def _create_existing_sibling(session: AsyncSession, code: str) -> Series:
     session.add(series)
     await session.flush()
     session.add(
-        SeriesFamilyMember(
-            family_id=family.id,
+        IndicatorVariant(
+            indicator_id=family.id,
             series_id=series.id,
-            variant="Headline NSA",
-            is_primary=True,
+            label="Headline NSA",
+            is_default=True,
         )
     )
     await session.flush()

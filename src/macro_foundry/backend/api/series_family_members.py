@@ -1,15 +1,15 @@
 """CRUD routes for series family members."""
 
 from macro_foundry.backend.crud import crud_router
-from macro_foundry.models import SeriesFamilyMember
-from macro_foundry.schemas import SeriesFamilyMemberCreate, SeriesFamilyMemberRead, SeriesFamilyMemberUpdate
+from macro_foundry.models import IndicatorVariant
+from macro_foundry.schemas import IndicatorVariantCreate, IndicatorVariantRead, IndicatorVariantUpdate
 
 router = crud_router(
     prefix="/series-family-members",
-    model=SeriesFamilyMember,
-    create_schema=SeriesFamilyMemberCreate,
-    update_schema=SeriesFamilyMemberUpdate,
-    read_schema=SeriesFamilyMemberRead,
+    model=IndicatorVariant,
+    create_schema=IndicatorVariantCreate,
+    update_schema=IndicatorVariantUpdate,
+    read_schema=IndicatorVariantRead,
 )
 
 __all__ = ["router"]

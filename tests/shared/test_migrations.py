@@ -28,16 +28,16 @@ EXPECTED_TABLES = {
     "observations",
     "provider_catalogs",
     "providers",
+    "indicators",
+    "indicator_variants",
     "series",
-    "series_families",
-    "series_family_members",
     "series_hierarchy_edges",
     "series_sources",
     "series_tags",
     "tags",
 }
 
-EMBEDDED_TABLES = ("concepts", "series", "series_families")
+EMBEDDED_TABLES = ("concepts", "series", "indicators")
 EMBEDDED_COLUMNS = ("embedding", "embedding_input_hash", "embedding_model")
 VECTOR_LITERAL = "[" + ",".join(["0.1"] * 1536) + "]"
 
@@ -175,9 +175,9 @@ async def _assert_catalog_embedding_schema() -> None:
                 ("series", "embedding", "vector"),
                 ("series", "embedding_input_hash", "text"),
                 ("series", "embedding_model", "text"),
-                ("series_families", "embedding", "vector"),
-                ("series_families", "embedding_input_hash", "text"),
-                ("series_families", "embedding_model", "text"),
+                ("indicators", "embedding", "vector"),
+                ("indicators", "embedding_input_hash", "text"),
+                ("indicators", "embedding_model", "text"),
             }
 
             index_rows = await conn.execute(
@@ -300,7 +300,7 @@ async def _assert_catalog_embedding_schema_removed_but_extension_persists() -> N
                 if row.indexname in {
                     "ix_concepts_embedding_hnsw",
                     "ix_series_embedding_hnsw",
-                    "ix_series_families_embedding_hnsw",
+                    "ix_indicators_embedding_hnsw",
                 }
             ]
             assert hnsw_indexes == []

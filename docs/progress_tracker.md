@@ -12,6 +12,72 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-13] Issue 68 — core rename `series_family → indicator` (ADR 0021)
+
+Atomic rename of the catalog's middle rung across every layer that shares
+Python imports or the Alembic chain, per ADR 0021 (#67). No backwards-compat
+shims; data carried forward in place.
+
+Rename applied:
+
+- tables `series_families → indicators`, `series_family_members → indicator_variants`
+- columns `family_id → indicator_id`, `variant → label`, `is_primary → is_default`
+- classes `SeriesFamily → Indicator`, `SeriesFamilyMember → IndicatorVariant`
+  (and the Pydantic schema classes + REST `IndicatorVariantCreate` body fields)
+- relationships/attrs `Concept/Geography.series_families → .indicators`,
+  `Indicator.members → .variants`, `IndicatorVariant.family → .indicator`,
+  `Series.family_member → .indicator_variant`
+- service API `register_family → register_indicator`,
+  `compose_family_embedding_input → compose_indicator_embedding_input`
+- named constraints/indexes renamed to match: `uq_indicators_code`,
+  `uq_indicator_variants_series_id`, both pkeys, the two indicator FKs, the two
+  indicator_variant FKs, and `ix_indicators_embedding_hnsw`
+- SQLAdmin display names + landing card/identity, CLI reset-summary fields, the
+  `embeddings backfill` summary key
+
+Alembic: `0013_rename_series_family_to_indicator.py` uses in-place
+`ALTER TABLE … RENAME` / `RENAME COLUMN` / `RENAME CONSTRAINT` / `ALTER INDEX …
+RENAME` (no drop+recreate); PG18 named NOT NULL constraints left untouched
+(invisible to ORM/autogenerate; renaming them risks Neon portability).
+
+**Migration number.** This slice landed first and owns `0013_rename_series_family_to_indicator`
+(down_revision `0012`). A parallel slice (#72) had provisionally claimed `0013`
+for a tags migration but it was never committed; whoever merges after this must
+rebase onto the new head (`0013` = this rename) and number their migration `0014`.
+
+Out of scope (handled in later slices, deliberately left): governance stored-enum
+values `series_families`/`series_family_members`/`add_family` (#69); MCP tool
+*names* `lookup_family`/`search_series_families` + `FindSiblingSeriesArgs.family_id`
+arg and REST URL prefixes `/series-families`, `/series-family-members` (#70);
+the retired `src/macro_foundry/agent` dir (its `DraftProposal.family` /
+`proposed_data` JSON keys are the unchanged producer contract the MCP write tool
+reads); non-schema docs (#71).
+
+Embeddings: a **pure rename** with no semantic change — the `Type: SeriesFamily`
+and `Family:` labels in the composed embedding input are intentionally preserved
+(only code symbols moved), so no `embedding_input_hash` drift and no backfill is
+required.
+
+Verification:
+
+- `uv run pytest tests/test_migrations.py -q` and
+  `uv run pytest tests/shared/test_migrations.py -q` both green (upgrade/downgrade
+  roundtrip locks model⇆DB agreement on the renamed tables/columns/index). Also
+  fixed a pre-existing staleness in root `tests/test_migrations.py` (its
+  `EXPECTED_TABLES` was missing `series_hierarchy_edges`, `ingestion_feed_members`,
+  `ingestion_run_log_members`).
+- `uv run pytest tests/macrodb tests/shared -q` → `379 passed, 2 failed`; both
+  failures pre-existing and unrelated (the known-flaky
+  `test_concurrency_advisory_warns_when_another_session_exists`, passes in
+  isolation; and `test_onboarding_scope` `FakeModel.with_structured_output(strict=…)`
+  signature mismatch on files this slice never touched).
+- Root `tests/test_e2e.py`, `tests/test_migrations.py` green individually.
+  `tests/test_constraints.py::test_series_source_external_code_is_unique_within_catalog`
+  fails but is pre-existing and unrelated: migration `0004` dropped
+  `uq_series_sources_catalog_external_code`, so the constraint correctly does not
+  exist at head — the stale root test was never run in standard CI.
+- `uv run ruff check` clean across all changed files.
+
 ### [2026-06-12] Issue 61 — added pure embedding service module
 
 Added `src/macro_foundry/services/embeddings.py` as the ADR 0020 text-composition
