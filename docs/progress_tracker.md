@@ -12,6 +12,44 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-12] Issue 64 — added embed-on-write registration helpers
+
+Implemented the ADR 0020 registration chokepoint in
+`src/macro_foundry/services/registration.py`:
+
+- `register_concept(session, payload)`
+- `register_family(session, payload)`
+- `register_series(session, payload)`
+
+Each helper now composes the row's embedding input through the existing
+`services.embeddings.compose_*_embedding_input` functions, calls
+`embed_text`, stores `embedding`, `embedding_model`, and
+`embedding_input_hash`, flushes the row, and returns it without
+committing. A session-scoped async lock serializes ORM mutation so
+same-session concurrent registration calls do not corrupt one another.
+
+Scope note: this issue landed only the helpers and their tests. No
+bootstrap, MCP write-tool, or other caller refactors were included in
+this slice.
+
+Test coverage added in `tests/macrodb/test_registration_services.py`
+for:
+
+- populated embedding fields on returned `Concept`, `SeriesFamily`, and
+  `Series` rows;
+- parent-context composition for family registration;
+- caller-owned transaction boundaries (helper does not commit);
+- failed embeddings leaving no pending ORM object and no persisted row
+  after caller rollback;
+- basic same-session concurrent-call safety.
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_registration_services.py tests/macrodb/test_embeddings_backfill.py -q`
+  exited 0 with `11 passed`.
+- `uv run ruff check src/macro_foundry/services/registration.py src/macro_foundry/services/__init__.py tests/macrodb/test_registration_services.py`
+  exited 0.
+
 ### [2026-06-12] Issue 63 — added MCP semantic-search read tools
 
 Implemented the ADR 0020 read surface on `macrodb-mcp`:
