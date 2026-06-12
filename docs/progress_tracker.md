@@ -12,6 +12,47 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-12] Onboarding — designed `check_db` node and catalog embeddings
+
+Two Proposed ADRs and one prompt landed as the design anchor for the
+next onboarding-graph node, slotted between brief authoring and
+proposal drafting.
+
+- ADR 0019 (`docs/adr/0019-check-db-node-for-onboarding.md`) — read-only
+  `check_db` node that detects catalog duplicates from a descriptive
+  brief carrying no canonical code, classifies the relationship into a
+  closed set (`no_match`, `duplicate`, `same_concept_other_feed`,
+  `transformation_overlap`, `adjacent_supersede_candidate`,
+  `distinct_with_related`), and emits a structured verdict consumed by
+  a downstream router.
+- ADR 0020 (`docs/adr/0020-catalog-embeddings-for-semantic-search.md`)
+  — pgvector columns on `concepts`, `series_families`, `series`;
+  `text-embedding-3-small` at 1536 dimensions; service-function
+  registration path (`register_concept`, `register_family`,
+  `register_series`) shared by the bootstrap, the MCP write tool, and
+  any future ingestion runner; `embedding_model` +
+  `embedding_input_hash` versioning columns for mechanical staleness
+  detection; and `macrodb embeddings backfill` as the only repair
+  path. The read-only MCP gains `search_concepts`,
+  `search_series_families`, and `search_series` backed by tag prefilter
+  plus cosine similarity.
+- `check_db_instructions` prompt added to
+  `src/macro_foundry/onboarding_agent/prompts.py` as the agent-facing
+  contract for the new node.
+
+Deviation note: this is design only. No Alembic migration, no service
+module, no MCP-tool extension, no graph wiring landed. Follow-up
+issues to track: (a) Alembic migration for `pgvector` extension +
+embedding columns + HNSW indexes; (b) `services/embeddings.py` and
+`services/registration.py`; (c) refactor of
+`src/macro_foundry/bootstrap/fred_us_macro.py` and the MCP write tool
+to use the registration helpers; (d) MCP read-tool extension for the
+three search tools; (e) `check_db` node wired into the graph in
+`src/macro_foundry/onboarding_agent/1_scoping.ipynb`; (f) backfill
+CLI command.
+
+Committed as `6679fb5`.
+
 ### [2026-06-12] CLI/DB naming — standardized target vs role vocabulary
 
 Breaking cleanup to keep environment targets separate from database roles:
@@ -2089,5 +2130,79 @@ Deviation note:
 
 - this is design and documentation work; no LangGraph, MCP, runtime, or
   agent code has been implemented yet
+
+### [2026-06-12] Scoping subgraph refactor — three-node split
+
+Restructured the onboarding scoping prototype in
+`src/macro_foundry/onboarding_agent/1_scoping.ipynb` from a two-node graph
+(`clarify_with_user` -> `write_series_brief`, with a back-edge where the brief
+writer also voted on `needs_clarification`) into a three-node graph with
+single-responsibility nodes:
+
+```
+START -> clarify_with_user -> verify_identifier -> write_series_brief -> END
+              ^                       |
+              |_______________________|
+                (bounded retry, MAX_VERIFICATION_ATTEMPTS = 2)
+```
+
+Motivation: a user requesting "headline inflation FRED CPILFESL" passes the
+clarifier (provider + ticker is unambiguous on its face) but `CPILFESL` is
+core CPI, not headline. The old brief writer caught this only as a side
+effect of authoring, which meant two prompts were voting on the same
+`needs_clarification` decision with no shared definition.
+
+Updated:
+
+- `src/macro_foundry/onboarding_agent/1_scoping.ipynb` — cells `57f0bb17`
+  (`%%writefile state_scope.py`) and `f9da056d`
+  (`%%writefile onboarding_scope.py`) rewritten to match the new topology
+- `src/macro_foundry/onboarding_agent/state_scope.py` (regenerated):
+  - `AgentState` namespaced per node (`clarification_*`, `verification_*`,
+    `series_brief`)
+  - new `VerificationFindings` schema (canonical_name, source_url, notes) as
+    a byproduct passed forward to the brief writer
+  - new `VerifyIdentifier` schema (has_conflict, conflict_description,
+    findings) for the verification node
+  - `SeriesBrief` shrunk to a pure author output; the
+    `needs_clarification` / `clarification_question` / `clarification_reasons`
+    fields are removed
+- `src/macro_foundry/onboarding_agent/onboarding_scope.py` (regenerated):
+  - `clarify_with_user` now accepts a `verification_conflict` placeholder
+    and constrains its question to that conflict when set
+  - new `verify_identifier` node, web-verifies the identifier against the
+    user's description, routes back to clarify on mismatch with bounded
+    retries, otherwise proceeds to the brief writer
+  - `write_series_brief` simplified to a pure author that reads
+    `verification_findings` as authoritative and fills gaps via targeted
+    `web_search`; no gating
+- `src/macro_foundry/onboarding_agent/prompts.py`:
+  - `clarify_with_user_instructions`: criteria 5 (acronym handling) and 6
+    (identifier/description conflict) removed; new `<VerificationConflict>`
+    block with an "if non-empty, ask only about this" branch; "out of scope"
+    note that points conflict-detection to `verify_identifier`
+  - new `verify_identifier_instructions` prompt with hard rules to keep it
+    focused on conflict detection (findings are a byproduct, not a goal)
+  - `transform_messages_into_series_brief_prompt`: trailing
+    `needs_clarification` gating block removed; new
+    `<VerificationFindings>` block with "treat as authoritative, do not
+    redo verification" framing
+
+New:
+
+- `docs/adr/0018-scoping-three-node-split.md` — ADR documenting the SRP
+  rationale, CPILFESL/headline failure case, loop bound, prompt-boundary
+  rules, and alternatives considered (collapse, beefed-up clarifier,
+  self-revise loop, no cap)
+- `docs/adr/README.md` index updated for ADR 0018
+
+Deviation note:
+
+- this is prototype work in the `onboarding_agent/` notebook directory; it
+  is upstream of the gated onboarding graph in ADR 0011 and does not yet
+  touch the production `macrodb-mcp` seam or LangGraph checkpointer
+- no test run was executed as part of this commit; verification cases
+  (`FRED CPIAUCSL`, `headline inflation FRED CPILFESL`, `give me CPI`) are
+  listed in the notebook for manual run by the developer
 
 ### [Future entries go above this line]
