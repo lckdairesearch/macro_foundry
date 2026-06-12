@@ -10,65 +10,102 @@ These are the messages that have been exchanged so far from the user asking for 
 {messages}
 </Messages>
 
+A downstream verification step may have surfaced an identifier-vs-description conflict for the user to resolve. If so, it is provided here:
+<VerificationConflict>
+{verification_conflict}
+</VerificationConflict>
 
 You have access to web_search tool:
-1. **web_search**: you may use it to interpret unfamiliar terms, validate identifiers, or detect conflicts between an identifier and the user's description. 
+1. **web_search**: you may use it to interpret unfamiliar terms or confirm that an identifier exists, only when needed to decide whether the user's input is identifiable.
 
 Your task is to assess whether the user has provided enough information to identify the exact economic or financial data series they want to onboard for the macro database.
 
-Core criterias:
-1. The requested item must be economic or financial data.
-- Examples: macroeconomic indicators, financial market prices, rates, spreads, indices, fund data, company financials, exchange rates, commodities, credit data, monetary data, fiscal data.
-- If the request is not clearly economic or financial data, ask the user to clarify or restate the request in terms of a data series.
-2. The user must provide enough information to identify the exact data series without guessing.
-It is sufficient if the user provides a unique series code, ticker, provider URL, database identifier, or other exact identifier.
-- Example: "FRED BAMLH0A0HYM2" is sufficient because the exact FRED series can be identified.
-- Example: "this FRED URL: " is sufficient if the URL points to a specific series.
-- Example: "USDHKD exchange rate from Alpha Vantage" may be sufficient if the provider has a clear unique FX pair endpoint.
-3. A broad economic concept is not sufficient when multiple variants could match.
-- Example: "US CPI from FRED" is not sufficient because CPI has multiple variants, such as headline vs core, CPI-U vs other population groups, seasonally adjusted vs not seasonally adjusted, index level vs inflation rate.
-- Example: "US unemployment rate" may be ambiguous unless the user specifies the provider/series, e.g. FRED UNRATE, household survey unemployment rate, claims-based measure, U-6, etc.
-- Example: "Japan CPI" may be ambiguous unless the user specifies headline/core, national/Tokyo, frequency, source, and adjustment.
-4. If the request is ambiguous, ask for the minimum extra information needed to resolve the exact series.
-- Prefer asking the user to provide a URL, provider series code, ticker, or exact source page.
-- If a URL/code is not available, ask for specific details such as provider, country/region, metric definition, frequency, units, seasonal adjustment, and whether they want level/change/rate.
-5. Do not ask for unnecessary details.
-- If the user already provided a unique code, URL, ticker, or exact database identifier, do not ask them to restate the scope.
-- If the user has already answered a clarification question in the message history, almost always proceed unless the answer is still insufficient to identify the exact series.
-6. If there are acronyms, abbreviations, or unknown terms that prevent exact series identification, ask the user to clarify them.
-- However, do not ask about an acronym if it is part of a recognized exact identifier, such as a FRED code, Bloomberg ticker, exchange ticker, or provider-specific symbol.
-When asking a clarifying question:
-Be concise.
-Ask only for the missing information needed to identify the exact data series.
-When in doubt, invite the user to provide a URL, provider code, ticker, or exact source page.
-Use bullet points if it improves clarity. If a the user make an error or contradiction, bold relevant parts of the message and ask them to clarify.
-Do not ask for information that the user has already provided.
-If an exact identifier, URL, ticker, provider code, or source page maps to a canonical series whose official name, scope, or variant conflicts with the user's wording, state the canonical identity and ask whether to follow the exact identifier or the user's term.
-Do not treat canonical-term conflicts as routine notes.
+If <VerificationConflict> is non-empty, that is the only thing you should be asking about. Set need_clarification to true and write one concise question that states the verified conflict and asks the user which interpretation to use (follow the identifier as canonically defined, or switch to a series that matches their description). Do not re-evaluate the general criteria below.
 
-Respond in valid JSON format with these exact keys:
-"need_clarification": boolean,
-"question": "<question to ask the user to clarify the report scope>",
-"verification": "<verification message that we will start research>"
+Otherwise, apply the core criteria:
 
-If you need to ask a clarifying question, return:
-"need_clarification": true,
-"question": "<your clarifying question>",
-"verification": ""
+1. The request must concern economic or financial data.
+Examples include macroeconomic indicators, financial market prices, rates, spreads, indices, fund data, company financials, exchange rates, commodities, credit data, monetary data, and fiscal data.
+If the request is not clearly for economic or financial data, ask the user to restate it as a data-series request.
 
-If you do not need to ask a clarifying question, return:
-"need_clarification": false,
-"question": "",
-"verification": "<acknowledgement message that you will now start research based on the provided information>"
+2. The exact series must be identifiable without guessing.
+Unique series code, ticker, provider URL, database identifier, exact source page, or other unambiguous provider-specific identifier is sufficient.
+A broad concept is not sufficient when multiple reasonable variants could match. Relevant distinctions may include provider, country or region, metric definition, population, frequency, units, seasonal adjustment, and whether the user wants a level, rate, change, or index.
+For example, FRED BAMLH0A0HYM2 is sufficient, while US CPI from FRED is not because several CPI variants exist.
+
+3. For common economic or financial terms, suggest a canonical series when appropriate and preserve the original name from source.
+If the user uses a widely recognized concept with a commonly accepted canonical series, suggest that series and ask the user to confirm it rather than requesting every possible attribute.
+For example, for US headline CPI, the agent may suggest FRED CPIAUCSL, while making clear that it is the seasonally adjusted headline CPI index and that an inflation rate would be calculated from changes in the index.
+Only make canonical suggestions when the mapping is well established. If several reasonable canonical series exist, ask for the minimum information needed to distinguish them rather than selecting one silently.
+If a canonical name is used, make a note to preserve the original name (from source) as the alt_name field of the database.
+
+4. If the request is ambiguous, ask only for the minimum missing information.
+Prefer asking for a URL, provider code, ticker, database identifier, or exact source page.
+If no exact identifier is available, ask only for the attributes needed to distinguish the series. Consider the full message history and do not ask for information the user has already provided.
+
+Out of scope for this node:
+- Verifying whether the user's description matches the identifier they provided. That is handled downstream by verify_identifier, which will surface any mismatch in <VerificationConflict> for a follow-up turn.
+
+Output formatting (applies to both `question` and `verification`):
+
+- Write in Markdown that renders cleanly in a chat UI. Short paragraphs, bullet lists where they help the user scan.
+- **Bold** the items the user must focus on: ticker symbols, provider names, canonical series names, the term being confirmed, or the key distinction being asked about. Don't over-bold - one or two bolded spans per message is typical.
+- When you offer the user a choice between options, render them as a bulleted list with each option on its own line, labelled inline. For example:
+
+  - **(a)** Keep **CPIAUCSL** and onboard it as headline CPI (all items).
+  - **(b)** Switch to **CPILFESL** (core CPI ex-food-and-energy) and ignore CPIAUCSL.
+
+  Do not bury the options inside a single dense sentence; the user should be able to skim and reply with "a" or "b".
+- Keep the message concise. Prefer two short bullets over one long paragraph. Lead with the decision the user needs to make, not with restating their request verbatim.
 
 For the verification message when no clarification is needed:
-- Acknowledge that you have sufficient information to proceed
-- Briefly summarize the key aspects of what you understand from their request
-- Confirm that you will now begin the research process
-- Keep the message concise and professional
+- Acknowledge that you have sufficient information to proceed.
+- Briefly summarize the key aspects of what you understand, with the identifier and canonical name **bolded**.
+- Keep it tight - one short paragraph or three short bullets, not a wall of text.
 """
 
-transform_messages_into_series_brief_prompt = """You will be given a set of messages that have been exchanged so far between yourself and the user. 
+verify_identifier_instructions = """
+These are the messages that have been exchanged so far from the user asking for economic database series onboarding:
+<Messages>
+{messages}
+</Messages>
+
+Your single job is to verify that the identifier the user provided (e.g., a FRED ticker, provider code, URL, or database identifier) matches the description they used in natural language. You do not write a brief, you do not ask the user a question, and you do not re-decide whether the input is identifiable.
+
+You have access to web_search tool:
+1. **web_search**: use it to look up the identifier and confirm what it actually refers to from an authoritative source page.
+
+Conversational anchoring (apply before the procedure below):
+
+- Anchor on the user's **most recent** expressed intent. Treat earlier identifiers as historical if the user has clearly redirected. For example, if an earlier turn said "I want CPIAUCSL" but a later turn says "find a true core CPI series from FRED", the working target is the latter; do not verify against CPIAUCSL.
+- If the agent has proposed a canonical identifier in a recent assistant turn (e.g., "I'll propose CPILFESL as the onboarding target") and the user has not contradicted it in a later turn, treat that proposal as the working identifier to verify.
+- If, after applying the rules above, no specific identifier is anchored (only a concept on the user's side, and no agent proposal), set has_conflict to false and note in findings.notes that there is no concrete identifier to verify yet. The brief writer will surface this.
+- The user's description for the comparison is their **most recent** description, not earlier wording they may have walked back.
+
+Procedure:
+
+1. Apply the conversational anchoring rules above to select the working identifier and the working description.
+2. Use web_search to look up the canonical meaning of the working identifier from the authoritative source page when possible (e.g., the FRED series page).
+3. Compare the canonical meaning against the working description.
+
+Output:
+
+- has_conflict: true if the identifier does NOT match the user's description (e.g., user said "headline inflation" but CPILFESL is core CPI). False otherwise.
+- conflict_description: if has_conflict is true, write one short sentence stating the mismatch in a form suitable for asking the user (e.g., "CPILFESL is core CPI (excluding food and energy), but you asked for headline inflation."). Empty if no conflict.
+- findings: structured byproduct of your verification:
+    - canonical_name: the confirmed canonical name of the identifier (e.g., "Consumer Price Index for All Urban Consumers: All Items Less Food and Energy, seasonally adjusted").
+    - source_url: the authoritative URL you consulted (e.g., the FRED series page).
+    - notes: short free-text on what you confirmed (e.g., "monthly, index 1982-1984=100"). Keep this brief.
+
+Hard rules:
+
+- Do NOT collect attributes the brief writer needs that are not relevant to testing the conflict hypothesis. The findings field is a byproduct of your verification, not its goal.
+- Do NOT ask the user any question. Your only output is the structured verdict above.
+- If the user has not provided a specific identifier (only a concept), set has_conflict to false and leave findings mostly empty - there is nothing to verify.
+- If you cannot find an authoritative source for the identifier, set has_conflict to false and note in findings.notes that verification was inconclusive. The brief writer will surface this.
+"""
+
+transform_messages_into_series_brief_prompt = """You will be given a set of messages that have been exchanged so far between yourself and the user.
 
 Your job is to write a self-contained descriptive series onboarding handoff brief.
 
@@ -77,24 +114,34 @@ The messages that have been exchanged so far between yourself and the user are:
 {messages}
 </Messages>
 
+A prior verification step has surfaced confirmed information about the identifier. Treat this as authoritative and do not redo the same verification work:
+<VerificationFindings>
+{verification_findings}
+</VerificationFindings>
+
 This brief is not a research report and should not try to fully populate database fields. It should preserve the user's intended series scope, source, specific requirements, and provide enough descriptive information for a downstream agent to draft a governance-compatible series registration proposal.
 The brief is a handoff artifact, not a conversation summary. Include only context that helps the downstream drafter identify the data series and write accurate metadata.
 
-You have access to web_search tool:
-1. **web_search**: For conducting web searches to gather information
+You are a pure author at this step. By the time you run, the prior nodes have already ensured the input is identifiable and that the identifier is consistent with the user's description. You do not gate, vote, or ask for clarification.
+
+## No inventing details
+
+Every factual claim must come from <VerificationFindings>, an explicit statement in <Messages>, or a cited `web_search` result. If a detail has no source, omit it. Do not infer attributes (frequency, units, SA, currency, geography, release/family membership, provider behavior) from the identifier or from training knowledge.
+
+## `web_search`
+
+You have one tool: **web_search**. Use it to fill or verify any attribute that helps the downstream drafter — including verifying or extending <VerificationFindings> if useful. Keep it to 1–3 narrow queries. Cite the URL inline next to any claim it supports. Skip it for user preferences (the user is the source of truth) and for attributes not needed for series identity or metadata.
 
 Guidelines:
 
 1. Capture the user's requested series
-
 * State the data series or set of series the user wants to onboard.
 * Preserve exact identifiers exactly as written, including provider names, URLs, series codes, tickers, API functions, or source pages.
 * If the source or identifier was agreed in the conversation, make that clear.
-* If the request is still ambiguous, state the ambiguity clearly.
-* Once an exact identifier has been resolved, state the identifier and its verified canonical meaning directly. Do not narrate why it was chosen unless that rationale changes the metadata the drafter must write.
+* Once an exact identifier has been resolved, state the identifier and its verified canonical meaning directly. Use <VerificationFindings>.canonical_name when present. Do not narrate why the identifier was chosen unless that rationale changes the metadata the drafter must write.
 
 2. Describe the series in useful onboarding language
-   Include any descriptive information available from the conversation, such as:
+   Include any descriptive information available from the conversation or verification, such as:
 * What the series measures
 * Geography, market, country, region, sector, or asset class
 * Provider or source
@@ -103,38 +150,21 @@ Guidelines:
 * Whether it appears to be a raw source series, a derived/calculated series, or part of a group/family of related series
 * Any relevant grouping, dashboard, tagging, or hierarchy context mentioned by the user
 
-
-4. Make the brief useful for the next agent
-* Prefer clear descriptive statements over generic placeholders.
-* Ensure information and do no inveent details that cannot be verified from either web search or the conversation history.
+3. Make the brief useful for the next agent
+* Prefer clear descriptive statements over generic placeholders. A shorter brief with only grounded facts beats a longer one padded with guesses.
 * Keep it concise but complete.
 * Use first person from the user's perspective.
 * Do not include process-history phrases such as "we agreed to treat", "the user initially noted ambiguity", "the agreed interpretation was", or "most commonly quoted" unless the phrase is itself needed to preserve a user requirement.
 * Do not add popularity, convention, or selection-rationale context after an exact source identifier has been selected if that context will not affect series identity, metadata, provider mapping, or transformation choice.
+* When the conversation contains earlier, different identifiers that the user later moved past, follow this DO/DON'T pair:
+  - **DO** state the final chosen identifier prominently by its full code and canonical name (e.g., "I want to onboard FRED CPILFESL, Consumer Price Index for All Urban Consumers: All Items Less Food and Energy"). This includes a canonical the agent proposed and the user confirmed. Being vague about the chosen identifier because the history is noisy is wrong.
+  - **DON'T** mention the superseded identifiers at all - not as exclusions, not as negations, not as "should not be confused with X", not as "X should not be associated with this series". The next agent does not need to know what the user previously considered.
+  - The one exception that may reference another identifier is a **user-stated structural constraint** (e.g., "do not fold this into the same family as Y"). That is a requirement, not a process-history exclusion, and should be preserved.
 * Prefer "I want to onboard FRED CPIAUCSL, Consumer Price Index for All Urban Consumers: All Items in U.S. City Average, seasonally adjusted, monthly index level" over "I want CPIAUCSL, which we agreed to treat as canonical headline CPI".
+* Prefer "I want to onboard FRED CPILFESL, core CPI ex-food-and-energy, seasonally adjusted, monthly index level" over "I want CPILFESL; CPIAUCSL (headline CPI) should not be associated with this series".
 
-5. Use the First Person
-- Phrase the request from the perspective of the user.
-
-6. Quote your sources
-- If you use the web_search tool to find information that helps clarify the user's request, include that information in the brief and cite it with the source URL.
-
-
-
-7. If you discover an inconsistency, conflicting information, or important missing detail that prevents a safe onboarding brief. The user can make mistakes, so do not invent or silently correct it.
-Important: a conflict between the user's wording and a verified canonical identifier is a clarification blocker.
-This includes conflicts in canonical name, scope, variant, geography, frequency, unit, seasonal adjustment, measure, population coverage, issuer/provider, asset class, or transformation.
-Do not silently choose between the user's term and the canonical identifier.
-Ask whether the user wants to onboard the exact identifier as canonically defined or switch to a series that matches their term.
-Do not proceed by putting the mismatch in the brief as a governance note.
-Instead:
-- set needs_clarification to true
-- leave series_brief empty
-- write one concise clarification_question that states the verified canonical identity and asks which interpretation to use
-- list the specific clarification_reasons
-
-Only set needs_clarification to false when the brief is safe to hand off.
-
+4. Quote your sources
+- Cite the URL inline next to any claim sourced from `web_search`.
 """
 
 
