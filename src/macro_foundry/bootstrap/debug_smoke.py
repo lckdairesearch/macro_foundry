@@ -46,6 +46,13 @@ from macro_foundry.models import (
     SeriesHierarchyEdge,
     SeriesSource,
 )
+from macro_foundry.schemas import ConceptCreate, SeriesCreate, SeriesFamilyCreate
+from macro_foundry.services.registration import (
+    ensure_series_embedding_current,
+    register_concept,
+    register_family,
+    register_series,
+)
 
 _PROVIDER_NAME = "Macro Foundry Debug Provider"
 _CATALOG_NAME = "Debug smoke catalog"
@@ -120,6 +127,10 @@ async def _run_debug_smoke_transaction(
     ]
     for item in series:
         await _get_or_create_family_member(session, family=family, series=item)
+    series = [
+        await ensure_series_embedding_current(session, item)
+        for item in series
+    ]
 
     sources = [
         await _get_or_create_source(session, catalog=catalog, series=item, order=order)
@@ -242,13 +253,14 @@ async def _get_or_create_catalog(session: AsyncSession, provider: Provider) -> P
 async def _get_or_create_concept(session: AsyncSession) -> Concept:
     concept = await session.scalar(select(Concept).where(Concept.code == _CONCEPT_CODE))
     if concept is None:
-        concept = Concept(
-            code=_CONCEPT_CODE,
-            name="Debug index",
-            description="Synthetic concept for request-centric debug bootstrap inspection.",
+        concept = await register_concept(
+            session,
+            ConceptCreate(
+                code=_CONCEPT_CODE,
+                name="Debug index",
+                description="Synthetic concept for request-centric debug bootstrap inspection.",
+            ),
         )
-        session.add(concept)
-        await session.flush()
     return concept
 
 
@@ -260,14 +272,15 @@ async def _get_or_create_family(
 ) -> SeriesFamily:
     family = await session.scalar(select(SeriesFamily).where(SeriesFamily.code == _FAMILY_CODE))
     if family is None:
-        family = SeriesFamily(
-            code=_FAMILY_CODE,
-            name="United States debug index",
-            concept_id=concept.id,
-            geography_id=geography.id,
+        family = await register_family(
+            session,
+            SeriesFamilyCreate(
+                code=_FAMILY_CODE,
+                name="United States debug index",
+                concept_id=concept.id,
+                geography_id=geography.id,
+            ),
         )
-        session.add(family)
-        await session.flush()
     return family
 
 
@@ -279,22 +292,23 @@ async def _get_or_create_series(
 ) -> Series:
     series = await session.scalar(select(Series).where(Series.code == code))
     if series is None:
-        series = Series(
-            code=code,
-            name=code.replace("_", " ").title(),
-            origin_type=OriginType.INGESTED,
-            geography_id=geography.id,
-            frequency=Frequency.DAILY,
-            temporal_stock_flow=TemporalStockFlow.INDEX,
-            unit_kind=UnitKind.INDEX,
-            unit_scale=UnitScale.ONE,
-            measure=Measure.LEVEL,
-            annualized=False,
-            seasonal_adjustment=SeasonalAdjustment.NSA,
-            is_active=True,
+        series = await register_series(
+            session,
+            SeriesCreate(
+                code=code,
+                name=code.replace("_", " ").title(),
+                origin_type=OriginType.INGESTED,
+                geography_id=geography.id,
+                frequency=Frequency.DAILY,
+                temporal_stock_flow=TemporalStockFlow.INDEX,
+                unit_kind=UnitKind.INDEX,
+                unit_scale=UnitScale.ONE,
+                measure=Measure.LEVEL,
+                annualized=False,
+                seasonal_adjustment=SeasonalAdjustment.NSA,
+                is_active=True,
+            ),
         )
-        session.add(series)
-        await session.flush()
     return series
 
 

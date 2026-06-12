@@ -186,6 +186,8 @@ async def test_register_concept_leaves_commit_boundary_to_caller(
                 select(Concept).where(Concept.code == "TEST_NO_COMMIT_CONCEPT"),
             )
             assert after_commit is not None
+            await reader.delete(after_commit)
+            await reader.commit()
     finally:
         monkeypatch.undo()
 

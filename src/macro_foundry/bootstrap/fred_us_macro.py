@@ -62,6 +62,12 @@ from macro_foundry.schemas import (
     SeriesSourceCreate,
 )
 from macro_foundry.seed._shared import assign_if_changed
+from macro_foundry.services.registration import (
+    ensure_series_embedding_current,
+    register_concept,
+    register_family,
+    register_series,
+)
 
 _FRED_PROVIDER_NAME = "USA FRED"
 _FRED_CATALOG_NAME = "FRED default catalog"
@@ -588,6 +594,7 @@ async def _prepare_series_catalog(
             is_primary=spec.is_primary_family_member,
         ).model_dump(),
     )
+    raw_series = await ensure_series_embedding_current(session, raw_series)
     source = await _upsert_series_source(
         session,
         payload=SeriesSourceCreate(
@@ -872,10 +879,10 @@ async def _upsert_fred_catalog(
 async def _upsert_concept(session: AsyncSession, *, payload: dict[str, Any]) -> Concept:
     concept = await session.scalar(select(Concept).where(Concept.code == payload["code"]))
     if concept is None:
-        concept = Concept(**payload)
-        session.add(concept)
-        await session.flush()
-        return concept
+        return await register_concept(
+            session,
+            ConceptCreate.model_validate(payload),
+        )
     assign_if_changed(concept, payload, ("name", "description"))
     await session.flush()
     return concept
@@ -888,10 +895,10 @@ async def _upsert_series_family(
 ) -> SeriesFamily:
     family = await session.scalar(select(SeriesFamily).where(SeriesFamily.code == payload["code"]))
     if family is None:
-        family = SeriesFamily(**payload)
-        session.add(family)
-        await session.flush()
-        return family
+        return await register_family(
+            session,
+            SeriesFamilyCreate.model_validate(payload),
+        )
     assign_if_changed(
         family,
         payload,
@@ -908,10 +915,10 @@ async def _upsert_series(
 ) -> Series:
     series = await session.scalar(select(Series).where(Series.code == payload["code"]))
     if series is None:
-        series = Series(**payload)
-        session.add(series)
-        await session.flush()
-        return series
+        return await register_series(
+            session,
+            SeriesCreate.model_validate(payload),
+        )
     assign_if_changed(
         series,
         payload,

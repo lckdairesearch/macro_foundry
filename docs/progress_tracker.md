@@ -12,6 +12,54 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-12] Issue 65 — routed bootstrap catalog writes through registration helpers
+
+Refactored the embedded catalog creation paths in the bootstrap layer to
+use the ADR 0020 registration service instead of direct ORM
+construction:
+
+- `src/macro_foundry/bootstrap/fred_us_macro.py`
+- `src/macro_foundry/bootstrap/debug_smoke.py`
+
+For FRED bootstrap, the create branches of `_upsert_concept`,
+`_upsert_series_family`, and `_upsert_series` now call
+`register_concept`, `register_family`, and `register_series`
+respectively. After the family membership row is created, bootstrap now
+calls `ensure_series_embedding_current(...)` so a newly created series
+is immediately re-embedded with family/concept context and the live
+compose/hash predicate is already true without running
+`macrodb embeddings backfill`.
+
+`debug_smoke` now follows the same pattern for `Concept`,
+`SeriesFamily`, and `Series` creation, and likewise refreshes each
+series embedding after the family-member link exists.
+
+Test updates:
+
+- `tests/macrodb/test_fred_bootstrap.py` now mocks
+  `macro_foundry.services.registration.embed_text`, asserts all created
+  `concepts`, `series_families`, and `series` rows have populated
+  embedding columns, and verifies the composed-hash predicate is already
+  current after bootstrap.
+- `tests/macrodb/test_debug_bootstrap.py` now mocks the registration
+  embedding call and asserts the debug bootstrap's embedded catalog rows
+  are populated.
+- `tests/macrodb/test_mcp_read_tools.py` now mocks the registration
+  embedding call so its bootstrap-backed semantic-search tests remain
+  hermetic.
+- `tests/macrodb/test_registration_services.py` now cleans up the
+  committed concept in the transaction-boundary test so later files do
+  not observe leaked catalog state.
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_registration_services.py tests/macrodb/test_fred_bootstrap.py tests/macrodb/test_debug_bootstrap.py tests/macrodb/test_mcp_read_tools.py -q`
+  exited 0 with `26 passed`.
+- `uv run ruff check src/macro_foundry/bootstrap/fred_us_macro.py src/macro_foundry/bootstrap/debug_smoke.py src/macro_foundry/services/registration.py src/macro_foundry/services/__init__.py tests/macrodb/test_registration_services.py tests/macrodb/test_fred_bootstrap.py tests/macrodb/test_debug_bootstrap.py tests/macrodb/test_mcp_read_tools.py`
+  exited 0.
+- `rg -nP "(?<![A-Za-z])(Concept|SeriesFamily|Series)\(" src/macro_foundry/bootstrap/fred_us_macro.py src/macro_foundry/bootstrap/debug_smoke.py`
+  returned no matches.
+
 ### [2026-06-12] Issue 64 — added embed-on-write registration helpers
 
 Implemented the ADR 0020 registration chokepoint in

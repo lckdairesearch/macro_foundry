@@ -9,6 +9,7 @@ from decimal import Decimal
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.orm import selectinload
 
 from macro_foundry.bootstrap import (
     EnvTarget,
@@ -28,6 +29,13 @@ from macro_foundry.models import (
     SeriesFamily,
     SeriesFamilyMember,
     SeriesSource,
+)
+from macro_foundry.services.embeddings import EMBEDDING_DIMENSIONS, EMBEDDING_MODEL
+from macro_foundry.services.embeddings import (
+    compose_concept_embedding_input,
+    compose_family_embedding_input,
+    compose_series_embedding_input,
+    hash_embedding_input,
 )
 
 
@@ -141,6 +149,18 @@ def _build_fake_client() -> FakeFredClient:
     )
 
 
+@pytest.fixture(autouse=True)
+def mock_registration_embed_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_embed_text(text: str) -> list[float]:
+        fill = float((sum(ord(ch) for ch in text) % 13) + 1)
+        return [fill] * EMBEDDING_DIMENSIONS
+
+    monkeypatch.setattr(
+        "macro_foundry.services.registration.embed_text",
+        fake_embed_text,
+    )
+
+
 async def _count_rows(session: AsyncSession, model: type[object]) -> int:
     return await session.scalar(select(func.count()).select_from(model)) or 0
 
@@ -179,6 +199,21 @@ async def test_fred_bootstrap_creates_curated_rows_and_run_logs(
         assert await _count_rows(session, IngestionRunLog) == 4
         assert await _count_rows(session, IngestionRunLogMember) == 4
         assert await _count_rows(session, Observation) == 18
+        concepts = list((await session.execute(select(Concept))).scalars().all())
+        families = list((await session.execute(select(SeriesFamily))).scalars().all())
+        series_rows = list((await session.execute(select(Series))).scalars().all())
+        assert concepts
+        assert families
+        assert series_rows
+        assert all(row.embedding is not None for row in concepts)
+        assert all(row.embedding_model == EMBEDDING_MODEL for row in concepts)
+        assert all(row.embedding_input_hash is not None for row in concepts)
+        assert all(row.embedding is not None for row in families)
+        assert all(row.embedding_model == EMBEDDING_MODEL for row in families)
+        assert all(row.embedding_input_hash is not None for row in families)
+        assert all(row.embedding is not None for row in series_rows)
+        assert all(row.embedding_model == EMBEDDING_MODEL for row in series_rows)
+        assert all(row.embedding_input_hash is not None for row in series_rows)
 
         raw_series = await _series(session, "US_CPI_HEADLINE_M_NSA")
         assert raw_series.start_date == date(2025, 1, 1)
@@ -273,6 +308,56 @@ async def test_fred_bootstrap_rerun_skips_unchanged_snapshot_rows(
             )
         ).scalars().all()
         assert len(zero_write_member_logs) == 4
+
+
+@pytest.mark.asyncio
+async def test_fred_bootstrap_new_catalog_rows_are_immediately_up_to_date_for_embeddings(
+    test_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    await run_fred_us_macro_bootstrap(
+        target=EnvTarget.TEST,
+        session_factory=test_session_factory,
+        client=_build_fake_client(),
+        run_date=date(2026, 6, 9),
+    )
+
+    async with test_session_factory() as session:
+        concepts = list((await session.execute(select(Concept))).scalars().all())
+        families = list(
+            (
+                await session.execute(
+                    select(SeriesFamily).options(
+                        selectinload(SeriesFamily.concept),
+                        selectinload(SeriesFamily.geography),
+                    ),
+                )
+            ).scalars().all(),
+        )
+        series_rows = list(
+            (
+                await session.execute(
+                    select(Series).options(
+                        selectinload(Series.geography),
+                        selectinload(Series.family_member)
+                        .selectinload(SeriesFamilyMember.family)
+                        .selectinload(SeriesFamily.concept),
+                    ),
+                )
+            ).scalars().all(),
+        )
+
+        assert all(
+            row.embedding_input_hash == hash_embedding_input(compose_concept_embedding_input(row))
+            for row in concepts
+        )
+        assert all(
+            row.embedding_input_hash == hash_embedding_input(compose_family_embedding_input(row))
+            for row in families
+        )
+        assert all(
+            row.embedding_input_hash == hash_embedding_input(compose_series_embedding_input(row))
+            for row in series_rows
+        )
 
 
 @pytest.mark.asyncio

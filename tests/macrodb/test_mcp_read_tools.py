@@ -44,6 +44,19 @@ from macro_foundry.models import (
     SeriesFamilyMember,
     SeriesSource,
 )
+from macro_foundry.services.embeddings import EMBEDDING_DIMENSIONS
+
+
+@pytest.fixture(autouse=True)
+def mock_registration_embed_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_embed_text(text: str) -> list[float]:
+        fill = float((sum(ord(ch) for ch in text) % 7) + 1)
+        return [fill] * EMBEDDING_DIMENSIONS
+
+    monkeypatch.setattr(
+        "macro_foundry.services.registration.embed_text",
+        fake_embed_text,
+    )
 
 
 @pytest.mark.asyncio

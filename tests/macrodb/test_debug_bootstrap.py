@@ -13,16 +13,31 @@ from macro_foundry.bootstrap import DebugSmokeBootstrapResult, EnvTarget, run_de
 from macro_foundry.cli import app
 from macro_foundry.enums import IngestionRunStatus
 from macro_foundry.models import (
+    Concept,
     IngestionFeed,
     IngestionFeedMember,
     IngestionRunLog,
     IngestionRunLogMember,
     Observation,
     Series,
+    SeriesFamily,
     SeriesHierarchyEdge,
 )
+from macro_foundry.services.embeddings import EMBEDDING_DIMENSIONS, EMBEDDING_MODEL
 
 runner = CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def mock_registration_embed_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_embed_text(text: str) -> list[float]:
+        fill = float((sum(ord(ch) for ch in text) % 11) + 1)
+        return [fill] * EMBEDDING_DIMENSIONS
+
+    monkeypatch.setattr(
+        "macro_foundry.services.registration.embed_text",
+        fake_embed_text,
+    )
 
 
 @pytest.mark.asyncio
@@ -97,6 +112,18 @@ async def test_debug_bootstrap_exercises_request_feed_provenance_and_hierarchy(
         child = await session.scalar(select(Series).where(Series.code == "DEBUG_COMPONENT_A_INDEX"))
         assert parent is not None
         assert child is not None
+        concept = await session.scalar(select(Concept).where(Concept.code == "DEBUG_INDEX"))
+        family = await session.scalar(select(SeriesFamily).where(SeriesFamily.code == "US_DEBUG_INDEX"))
+        assert concept is not None
+        assert family is not None
+        assert concept.embedding is not None
+        assert family.embedding is not None
+        assert parent.embedding is not None
+        assert child.embedding is not None
+        assert concept.embedding_model == EMBEDDING_MODEL
+        assert family.embedding_model == EMBEDDING_MODEL
+        assert parent.embedding_model == EMBEDDING_MODEL
+        assert child.embedding_model == EMBEDDING_MODEL
         edge = await session.scalar(
             select(SeriesHierarchyEdge).where(
                 SeriesHierarchyEdge.parent_series_id == parent.id,

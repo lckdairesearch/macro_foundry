@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import asyncio
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from macro_foundry.models import Concept, Geography, Series, SeriesFamily
+from macro_foundry.models import Concept, Geography, Series, SeriesFamily, SeriesFamilyMember
 from macro_foundry.schemas import ConceptCreate, SeriesCreate, SeriesFamilyCreate
 from macro_foundry.services.embeddings import (
     EMBEDDING_MODEL,
@@ -25,6 +27,44 @@ def _registration_lock(session: AsyncSession) -> asyncio.Lock:
     new_lock = asyncio.Lock()
     session.info["_registration_lock"] = new_lock
     return new_lock
+
+
+async def ensure_series_embedding_current(
+    session: AsyncSession,
+    series: Series,
+) -> Series:
+    """Recompute a series embedding when its live composition has gone stale."""
+
+    async with _registration_lock(session):
+        hydrated = await session.scalar(
+            select(Series)
+            .options(
+                selectinload(Series.geography),
+                selectinload(Series.family_member)
+                .selectinload(SeriesFamilyMember.family)
+                .selectinload(SeriesFamily.concept),
+            )
+            .where(Series.id == series.id),
+        )
+
+    if hydrated is None:
+        raise ValueError(f"Series {series.id} not found for embedding refresh")
+
+    text = compose_series_embedding_input(hydrated)
+    expected_hash = hash_embedding_input(text)
+    if (
+        hydrated.embedding is not None
+        and hydrated.embedding_model == EMBEDDING_MODEL
+        and hydrated.embedding_input_hash == expected_hash
+    ):
+        return hydrated
+
+    hydrated.embedding = await embed_text(text)
+    hydrated.embedding_model = EMBEDDING_MODEL
+    hydrated.embedding_input_hash = expected_hash
+    async with _registration_lock(session):
+        await session.flush()
+    return hydrated
 
 
 async def register_concept(
@@ -88,4 +128,9 @@ async def register_series(
     return series
 
 
-__all__ = ["register_concept", "register_family", "register_series"]
+__all__ = [
+    "ensure_series_embedding_current",
+    "register_concept",
+    "register_family",
+    "register_series",
+]

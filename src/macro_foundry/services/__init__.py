@@ -10,7 +10,12 @@ from macro_foundry.services.embeddings import (
     embed_texts,
     hash_embedding_input,
 )
-from macro_foundry.services.registration import register_concept, register_family, register_series
+from macro_foundry.services.registration import (
+    ensure_series_embedding_current,
+    register_concept,
+    register_family,
+    register_series,
+)
 
 __all__ = [
     "EMBEDDING_DIMENSIONS",
@@ -21,6 +26,7 @@ __all__ = [
     "embed_text",
     "embed_texts",
     "hash_embedding_input",
+    "ensure_series_embedding_current",
     "register_concept",
     "register_family",
     "register_series",
