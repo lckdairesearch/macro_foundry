@@ -10,8 +10,7 @@ import typer
 from macro_foundry.agent.onboarding import OnboardingResult, SessionRuntimeConfig, run_onboarding_session
 from macro_foundry.agent.production_deps import build_production_dependencies
 from macro_foundry.agent.roles import AgentRole, RoleOverride, apply_role_overrides, default_role_configs
-from macro_foundry.db import EnvTarget
-from macro_foundry.db.env_target import database_url_for_env_target
+from macro_foundry.db import EnvTarget, app_url_for_target
 from macro_foundry.db.session import create_async_engine_for_url, create_session_factory
 
 from . import _helpers
@@ -96,7 +95,7 @@ async def _async_onboard(
 ) -> OnboardingResult:
     """Open a DB session, build production dependencies, then run the onboarding loop."""
     role_configs = apply_role_overrides(default_role_configs(), role_config_overrides or {})
-    url = database_url_for_env_target(target)
+    url = app_url_for_target(target)
     engine = create_async_engine_for_url(url)
     session_factory = create_session_factory(engine)
 

@@ -9,7 +9,7 @@ from typing import Any, TypeVar
 
 import typer
 
-from macro_foundry.db import EnvTarget, create_async_engine_for_url, create_session_factory, database_url_for_env_target
+from macro_foundry.db import EnvTarget, app_url_for_target, create_async_engine_for_url, create_session_factory
 from macro_foundry.seed import parse_seed_targets, reset_seed_tables, run_seed
 
 F = TypeVar("F", bound=Callable[..., Any])
@@ -52,7 +52,7 @@ async def _seed_database(
     dry_run: bool,
     reset: bool,
 ) -> dict[object, object]:
-    url = database_url_for_env_target(target)
+    url = app_url_for_target(target)
     engine = create_async_engine_for_url(url)
     session_factory = create_session_factory(engine)
     selected_targets = parse_seed_targets(only)
@@ -87,7 +87,7 @@ async def _bootstrap_database(
     if preset == "debug-smoke":
         if reset:
             raise ValueError("debug-smoke does not support --reset")
-        return await run_debug_smoke_bootstrap(database=target)
+        return await run_debug_smoke_bootstrap(target=target)
     if reset:
-        return await reset_fred_us_macro_bootstrap(database=target)
-    return await run_fred_us_macro_bootstrap(database=target)
+        return await reset_fred_us_macro_bootstrap(target=target)
+    return await run_fred_us_macro_bootstrap(target=target)

@@ -86,9 +86,9 @@ def test_onboarding_graph_state_accepts_review_fields() -> None:
 def test_checkpoint_state_accepts_review_bundles() -> None:
     from datetime import datetime, timezone
 
-    from macro_foundry.agent.onboarding import OnboardingTarget
     from macro_foundry.agent.onboarding_state import OnboardingCheckpointState, SessionMetadata
     from macro_foundry.agent.review import ReviewBundle
+    from macro_foundry.db import EnvTarget
 
     gov = ReviewBundle(
         specialty="governance",
@@ -105,7 +105,7 @@ def test_checkpoint_state_accepts_review_bundles() -> None:
     state = OnboardingCheckpointState(
         session_metadata=SessionMetadata(
             session_id="s1",
-            target_environment=OnboardingTarget.DEV.value,
+            target_environment=EnvTarget.DEV.value,
             created_at=datetime(2026, 6, 10, tzinfo=timezone.utc),
             created_by="macrodb-cli",
             cli_version="0.1.0",

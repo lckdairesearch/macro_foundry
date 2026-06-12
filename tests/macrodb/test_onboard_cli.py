@@ -219,7 +219,7 @@ def _patch_production_deps(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda *_args, **_kwargs: MagicMock(),
     )
     monkeypatch.setattr(
-        "macro_foundry.cli.onboard.database_url_for_env_target",
+        "macro_foundry.cli.onboard.app_url_for_target",
         lambda *_args, **_kwargs: "postgresql+psycopg://stub",
     )
 

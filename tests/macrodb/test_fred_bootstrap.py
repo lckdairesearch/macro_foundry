@@ -160,13 +160,13 @@ async def test_fred_bootstrap_creates_curated_rows_and_run_logs(
     client = _build_fake_client()
 
     summary = await run_fred_us_macro_bootstrap(
-        database=EnvTarget.TEST,
+        target=EnvTarget.TEST,
         session_factory=test_session_factory,
         client=client,
         run_date=date(2026, 6, 9),
     )
 
-    assert summary.database is EnvTarget.TEST
+    assert summary.target is EnvTarget.TEST
     assert len(summary.raw_imports) == 4
     assert len(summary.derived_imports) == 4
     assert sum(result.rows_written for result in summary.raw_imports) == 18
@@ -254,13 +254,13 @@ async def test_fred_bootstrap_rerun_skips_unchanged_snapshot_rows(
     client = _build_fake_client()
 
     await run_fred_us_macro_bootstrap(
-        database=EnvTarget.TEST,
+        target=EnvTarget.TEST,
         session_factory=test_session_factory,
         client=client,
         run_date=date(2026, 6, 9),
     )
     second_summary = await run_fred_us_macro_bootstrap(
-        database=EnvTarget.TEST,
+        target=EnvTarget.TEST,
         session_factory=test_session_factory,
         client=client,
         run_date=date(2026, 6, 10),
@@ -292,7 +292,7 @@ async def test_fred_bootstrap_rerun_inserts_only_changed_and_new_rows(
     client = _build_fake_client()
 
     await run_fred_us_macro_bootstrap(
-        database=EnvTarget.TEST,
+        target=EnvTarget.TEST,
         session_factory=test_session_factory,
         client=client,
         run_date=date(2026, 6, 9),
@@ -315,7 +315,7 @@ async def test_fred_bootstrap_rerun_inserts_only_changed_and_new_rows(
     ]
 
     summary = await run_fred_us_macro_bootstrap(
-        database=EnvTarget.TEST,
+        target=EnvTarget.TEST,
         session_factory=test_session_factory,
         client=client,
         run_date=date(2026, 6, 10),
@@ -376,14 +376,14 @@ async def test_fred_bootstrap_reset_removes_curated_preset_rows_only(
     client = _build_fake_client()
 
     await run_fred_us_macro_bootstrap(
-        database=EnvTarget.TEST,
+        target=EnvTarget.TEST,
         session_factory=test_session_factory,
         client=client,
         run_date=date(2026, 6, 9),
     )
 
     reset_summary = await reset_fred_us_macro_bootstrap(
-        database=EnvTarget.TEST,
+        target=EnvTarget.TEST,
         session_factory=test_session_factory,
     )
 

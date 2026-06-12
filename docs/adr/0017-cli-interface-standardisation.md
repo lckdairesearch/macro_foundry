@@ -140,9 +140,9 @@ macrodb serve mcp  [--write] [--database-url URL]         --target dev|test|stag
   this is pre-1.0 internal tooling with a single operator, no alias
   shim is provided.
 - `EnvTarget` replaces `DatabaseTarget` and `OnboardingTarget`; their
-  `database_url_for_*` resolvers consolidate into one
-  `database_url_for_target(EnvTarget)` with per-command subset
-  validation at the CLI boundary.
+  target resolvers consolidate into `app_url_for_target(EnvTarget)` and
+  `owner_url_for_target(EnvTarget)` with per-command subset validation at
+  the CLI boundary.
 - Implementation is deferred. This ADR is the spec; the refactor lands
   as a follow-up once accepted.
 

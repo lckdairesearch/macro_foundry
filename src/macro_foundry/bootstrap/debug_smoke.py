@@ -12,9 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from macro_foundry.db import (
     EnvTarget,
+    app_url_for_target,
     create_async_engine_for_url,
     create_session_factory,
-    database_url_for_env_target,
 )
 from macro_foundry.enums import (
     FeedMethod,
@@ -59,7 +59,7 @@ _SERIES_CODES = ("DEBUG_TOTAL_INDEX", "DEBUG_COMPONENT_A_INDEX")
 class DebugSmokeBootstrapResult:
     """Summary of the request-centric debug bootstrap."""
 
-    database: EnvTarget
+    target: EnvTarget
     run_date: date
     feed_members: int
     member_logs: int
@@ -69,7 +69,7 @@ class DebugSmokeBootstrapResult:
 
 async def run_debug_smoke_bootstrap(
     *,
-    database: EnvTarget = EnvTarget.DEV,
+    target: EnvTarget = EnvTarget.DEV,
     session_factory: async_sessionmaker[AsyncSession] | None = None,
     run_date: date | None = None,
 ) -> DebugSmokeBootstrapResult:
@@ -79,7 +79,7 @@ async def run_debug_smoke_bootstrap(
     managed_engine = None
 
     if session_factory is None:
-        managed_engine = create_async_engine_for_url(database_url_for_env_target(database))
+        managed_engine = create_async_engine_for_url(app_url_for_target(target))
         session_factory = create_session_factory(managed_engine)
 
     try:
@@ -87,7 +87,7 @@ async def run_debug_smoke_bootstrap(
             try:
                 result = await _run_debug_smoke_transaction(
                     session,
-                    database=database,
+                    target=target,
                     run_date=resolved_run_date,
                 )
                 await session.commit()
@@ -103,7 +103,7 @@ async def run_debug_smoke_bootstrap(
 async def _run_debug_smoke_transaction(
     session: AsyncSession,
     *,
-    database: EnvTarget,
+    target: EnvTarget,
     run_date: date,
 ) -> DebugSmokeBootstrapResult:
     geography = await session.scalar(select(Geography).where(Geography.code == "USA"))
@@ -198,7 +198,7 @@ async def _run_debug_smoke_transaction(
     await session.execute(statement)
 
     return DebugSmokeBootstrapResult(
-        database=database,
+        target=target,
         run_date=run_date,
         feed_members=len(members),
         member_logs=len(member_logs),

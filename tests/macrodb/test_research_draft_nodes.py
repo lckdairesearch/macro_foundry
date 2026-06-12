@@ -8,12 +8,12 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from macro_foundry.agent.onboarding import OnboardingTarget
 from macro_foundry.agent.onboarding_state import (
     EnumGapProposal,
     OnboardingCheckpointState,
     SessionMetadata,
 )
+from macro_foundry.db import EnvTarget
 from macro_foundry.agent.proposal import (
     DraftConcept,
     DraftFamily,
@@ -29,7 +29,7 @@ from macro_foundry.agent.proposal import (
 def _metadata(session_id: str = "s1") -> SessionMetadata:
     return SessionMetadata(
         session_id=session_id,
-        target_environment=OnboardingTarget.DEV.value,
+        target_environment=EnvTarget.DEV.value,
         created_at=datetime(2026, 6, 10, tzinfo=timezone.utc),
         created_by="macrodb-cli",
         cli_version="0.1.0",

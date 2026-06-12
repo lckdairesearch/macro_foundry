@@ -30,15 +30,15 @@ framework.
 
 First-pass UX:
 
-`macrodb bootstrap fred-us-macro --database test`
+`macrodb db bootstrap fred-us-macro --target test`
 
 Behavioral rules:
 
 - the command is separate from `macrodb seed`
-- the command must accept an explicit database target
-- the implementation should support `test` and `app`
+- the command must accept an explicit environment target
+- the implementation should support `dev` and `test`
 - implementation work should be exercised against `macrodb_test` first
-- default target should remain `app`; `--database test` is an explicit safety
+- default target should remain `dev`; `--target test` is an explicit safety
   switch during development
 
 ## Runtime/code placement

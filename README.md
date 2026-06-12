@@ -18,7 +18,7 @@ uv run macrodb db bootstrap fred-us-macro --target dev
 uv run macrodb serve api --target dev
 ```
 
-`--target dev` resolves to the local `macrodb_dev` database (`MACRODB_APP_URL`); `test` and `prod` are not valid CLI targets. Migrations run as `macrodb_owner` via `MACRODB_OWNER_URL`.
+`--target dev` resolves to the local `macrodb_dev` database using the `macrodb_app` role (`MACRODB_APP_URL`). Target availability is command-specific; `prod` is never a CLI target. Migrations run as `macrodb_owner` via `MACRODB_OWNER_URL`.
 
 Then open:
 - **API docs** — http://127.0.0.1:8000/docs

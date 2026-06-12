@@ -30,12 +30,12 @@ async def test_debug_bootstrap_exercises_request_feed_provenance_and_hierarchy(
     test_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     summary = await run_debug_smoke_bootstrap(
-        database=EnvTarget.TEST,
+        target=EnvTarget.TEST,
         session_factory=test_session_factory,
         run_date=date(2026, 6, 9),
     )
 
-    assert summary.database is EnvTarget.TEST
+    assert summary.target is EnvTarget.TEST
     assert summary.feed_members == 2
     assert summary.member_logs == 2
     assert summary.observations == 2
@@ -120,7 +120,7 @@ def test_debug_bootstrap_cli_reports_request_centric_smoke_summary(
         assert reset is False
         assert preset == "debug-smoke"
         return DebugSmokeBootstrapResult(
-            database=target,
+            target=target,
             run_date=date(2026, 6, 9),
             feed_members=2,
             member_logs=2,

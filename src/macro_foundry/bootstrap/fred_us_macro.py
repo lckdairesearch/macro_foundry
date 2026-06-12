@@ -15,9 +15,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from macro_foundry.config import settings
 from macro_foundry.db import (
     EnvTarget,
+    app_url_for_target,
     create_async_engine_for_url,
     create_session_factory,
-    database_url_for_env_target,
 )
 from macro_foundry.enums import (
     ComputationRunStatus,
@@ -161,7 +161,7 @@ class FredImportOutcome:
 class FredUsMacroBootstrapResult:
     """End-to-end bootstrap summary returned to the CLI and tests."""
 
-    database: EnvTarget
+    target: EnvTarget
     run_date: date
     raw_imports: tuple[FredImportOutcome, ...]
     derived_imports: tuple[DerivedComputationOutcome, ...]
@@ -171,7 +171,7 @@ class FredUsMacroBootstrapResult:
 class FredUsMacroResetResult:
     """Summary of removing the curated first-pass FRED preset."""
 
-    database: EnvTarget
+    target: EnvTarget
     observations_deleted: int
     ingestion_run_logs_deleted: int
     computation_run_logs_deleted: int
@@ -388,7 +388,7 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
 
 async def run_fred_us_macro_bootstrap(
     *,
-    database: EnvTarget = EnvTarget.DEV,
+    target: EnvTarget = EnvTarget.DEV,
     session_factory: async_sessionmaker[AsyncSession] | None = None,
     client: FredClientProtocol | None = None,
     run_date: date | None = None,
@@ -400,14 +400,14 @@ async def run_fred_us_macro_bootstrap(
     managed_engine = None
 
     if session_factory is None:
-        managed_engine = create_async_engine_for_url(database_url_for_env_target(database))
+        managed_engine = create_async_engine_for_url(app_url_for_target(target))
         session_factory = create_session_factory(managed_engine)
 
     try:
         return await _run_bootstrap_transaction(
             session_factory=session_factory,
             client=client,
-            database=database,
+            target=target,
             run_date=resolved_run_date,
             code_version=code_version,
         )
@@ -418,20 +418,20 @@ async def run_fred_us_macro_bootstrap(
 
 async def reset_fred_us_macro_bootstrap(
     *,
-    database: EnvTarget = EnvTarget.DEV,
+    target: EnvTarget = EnvTarget.DEV,
     session_factory: async_sessionmaker[AsyncSession] | None = None,
 ) -> FredUsMacroResetResult:
     """Delete the curated first-pass FRED preset rows while preserving provider seeds."""
 
     managed_engine = None
     if session_factory is None:
-        managed_engine = create_async_engine_for_url(database_url_for_env_target(database))
+        managed_engine = create_async_engine_for_url(app_url_for_target(target))
         session_factory = create_session_factory(managed_engine)
 
     try:
         async with session_factory() as session:
             try:
-                result = await _reset_bootstrap_transaction(session, database=database)
+                result = await _reset_bootstrap_transaction(session, target=target)
                 await session.commit()
                 return result
             except Exception:
@@ -446,7 +446,7 @@ async def _run_bootstrap_transaction(
     *,
     session_factory: async_sessionmaker[AsyncSession],
     client: FredClientProtocol | None,
-    database: EnvTarget,
+    target: EnvTarget,
     run_date: date,
     code_version: str | None,
 ) -> FredUsMacroBootstrapResult:
@@ -511,7 +511,7 @@ async def _run_bootstrap_transaction(
 
             await session.commit()
             return FredUsMacroBootstrapResult(
-                database=database,
+                target=target,
                 run_date=run_date,
                 raw_imports=tuple(raw_results),
                 derived_imports=tuple(derived_results),
@@ -524,7 +524,7 @@ async def _run_bootstrap_transaction(
 async def _reset_bootstrap_transaction(
     session: AsyncSession,
     *,
-    database: EnvTarget,
+    target: EnvTarget,
 ) -> FredUsMacroResetResult:
     series_codes = _all_bootstrap_series_codes()
     series_rows = (
@@ -534,7 +534,7 @@ async def _reset_bootstrap_transaction(
     ).all()
     if not series_rows:
         return FredUsMacroResetResult(
-            database=database,
+            target=target,
             observations_deleted=0,
             ingestion_run_logs_deleted=0,
             computation_run_logs_deleted=0,
@@ -652,7 +652,7 @@ async def _reset_bootstrap_transaction(
             )
 
     return FredUsMacroResetResult(
-        database=database,
+        target=target,
         observations_deleted=observations_deleted,
         ingestion_run_logs_deleted=ingestion_run_logs_deleted,
         computation_run_logs_deleted=computation_run_logs_deleted,

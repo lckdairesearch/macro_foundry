@@ -12,6 +12,33 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-12] CLI/DB naming — standardized target vs role vocabulary
+
+Breaking cleanup to keep environment targets separate from database roles:
+
+- `EnvTarget` remains the single environment-target enum (`dev`, `test`,
+  `staging`), while `macrodb_app` / `macrodb_owner` remain role names.
+- Replaced the resolver surface with `app_url_for_target(target)` and
+  `owner_url_for_target(target)`. Removed the previous resolver and
+  onboarding-target alias paths rather than keeping compatibility shims.
+- Renamed bootstrap result/parameter surfaces from `database` to `target`
+  where the value is an `EnvTarget`; raw `database_url` remains only for
+  explicit connection strings such as MCP serving.
+- Updated current docs/examples away from `--database app|test`; historical
+  tracker entries below still describe the surface as it existed when those
+  entries were written.
+
+Verification:
+
+- `uv run pytest tests/macrodb/test_onboard_cli.py tests/macrodb/test_debug_bootstrap.py tests/macrodb/test_fred_bootstrap.py -q -m no_db`
+  exited 0 with `12 passed, 5 deselected`.
+- `uv run pytest tests/shared/test_config.py -q` exited 0 with `2 passed`
+  after the planned `-m no_db` variant deselected both tests.
+- `uv run ruff check` on the refactor-touched source and test files passed.
+  Full `uv run ruff check src/macro_foundry tests` still fails on unrelated
+  lint in the vendored `onboarding_agent/reference/deep_research_from_scratch`
+  copy and pre-existing unrelated test lint.
+
 ### [2026-06-12] CLI — added `macrodb db migrate --target {dev|test}`
 
 Plugged the ergonomic gap surfaced by the `series.alt_name` rollout:
@@ -28,7 +55,7 @@ macrodb db migrate --target {dev|test} [--revision REV] [--downgrade] [--json]
 
 `--target` defaults to `dev`, matching the rest of the CLI. The
 command resolves the owner-role URL for the selected target via a new
-`owner_url_for_env_target` helper (reuses the database-name swap
+`owner_url_for_target` helper (reuses the database-name swap
 pattern from `tests/conftest.py:_owner_test_url`), then runs Alembic
 programmatically. Output is key=value (or JSON) and includes
 before/after revisions so a no-op upgrade is obvious from a glance.
