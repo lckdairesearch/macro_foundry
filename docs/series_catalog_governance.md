@@ -1,7 +1,7 @@
 # Series Catalog Governance
 
 This document governs how canonical macrodb series are named and how future
-workers should decide whether something is a concept, a series family, or a
+workers should decide whether something is a concept, an indicator, or a
 series variant.
 
 It is intentionally narrow. This is not an ingestion spec. It is the naming and
@@ -18,16 +18,16 @@ when the same series is sourced from different providers or redistributors.
 1. `series.code` is semantic and provider-agnostic.
 2. Provider tickers belong in `series_sources.external_code`.
 3. A concept is geography-neutral.
-4. A series family is exactly one concept plus one geography.
-5. Methodological differences between sibling series in one family are modeled
+4. An indicator is exactly one concept plus one geography.
+5. Methodological differences between sibling series in one indicator are modeled
    as series variants, not new concepts, unless the underlying economic idea is
    genuinely different.
 6. A code should be readable by both humans and agents without consulting a
    provider manual.
 7. Not every provider-exposed qualifier must appear in the canonical code.
-8. A family may have a curated default variant whose qualifier is omitted from
-   `series.code` when that omission is unlikely to create confusion inside the
-   project.
+8. An indicator may have a curated default variant whose qualifier is omitted
+   from `series.code` when that omission is unlikely to create confusion inside
+   the project.
 9. If the methodological scope is materially ambiguous, an agent should flag
    the ambiguity and propose rather than create a new canonical series.
 10. Once a canonical series has crossed the publication boundary described in
@@ -55,11 +55,11 @@ Slot definitions:
 
 Rules:
 
-- Omit the variant slot only when the family has a single obvious canonical
+- Omit the variant slot only when the indicator has a single obvious canonical
   variant.
-- A family may also omit a qualifier for its curated default variant when the
-  project has intentionally decided that one scope is the baseline reading for
-  that family.
+- An indicator may also omit a qualifier for its curated default variant when
+  the project has intentionally decided that one scope is the baseline reading
+  for that indicator.
 - Omit the measure slot for level series. Only add a measure token when the
   series is a non-level transformation (for example `YOY`).
 - Keep slots in this order. Do not invent ad hoc reorderings.
@@ -98,9 +98,9 @@ seasonal adjustment, measure, and related methodology.
 Canonical codes should capture distinctions that matter to macrodb's intended
 identity, not every peripheral distinction a provider happens to expose.
 
-This means a family may define one methodological scope as the default reading
-and omit that qualifier from `series.code`, while still modeling non-default
-siblings explicitly if they are later curated.
+This means an indicator may define one methodological scope as the default
+reading and omit that qualifier from `series.code`, while still modeling
+non-default siblings explicitly if they are later curated.
 
 Example shape:
 
@@ -112,35 +112,36 @@ Use this sparingly. If omitting the qualifier is likely to confuse a future
 reader or block a likely sibling that should also exist, prefer explicit
 variant tokens from the start.
 
-## Concept vs family vs variant
+## Concept vs indicator vs variant
 
 Use this decision rule:
 
 - New concept: only when the underlying geography-neutral economic idea is
   different.
-- New family: when the same concept needs a geography-specific grouping.
-- New series variant inside a family: when the economic idea is the same but
-  methodology differs, such as nominal vs real, headline vs core, or SA vs NSA.
+- New indicator: when the same concept needs a geography-specific grouping.
+- New series variant inside an indicator: when the economic idea is the same
+  but methodology differs, such as nominal vs real, headline vs core, or
+  SA vs NSA.
 
 Examples:
 
 - `GDP` and `real GDP` are one concept (`GDP`) with separate variants in one
-  geography family.
+  geography indicator.
 - Headline CPI and core CPI are one concept (`CPI`) with separate variants in
-  one geography family.
+  one geography indicator.
 - Household-basis CPI variants such as one-person and two-or-more-person
-  baskets remain one `CPI` concept and one `JP_CPI` family; they become
+  baskets remain one `CPI` concept and one `JP_CPI` indicator; they become
   separate sibling series with different variants.
 - A provider redistributor copy of a series is not a new concept and not a new
   canonical series code; it is a new `series_source`.
 
 For compound variant cases, use explicit tokens in the code and a readable
-label in the family membership row. Example pair:
+label in the `indicator_variants` row. Example pair:
 
 - `JP_CPI_CORE_1P_HH_M_NSA`
 - `JP_CPI_CORE_2PPLUS_HH_M_NSA`
 
-Matching `series_family_members.variant` values might be:
+Matching `indicator_variants.label` values might be:
 
 - `Core, one-person household basket`
 - `Core, two-or-more-person household basket`

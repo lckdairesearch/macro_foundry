@@ -15,8 +15,8 @@ The runtime skill loader may now load this skill into role prompts.
 ## Scope
 
 How the proposal drafter writes prose fields (`series.description`,
-`series.name`, `series_family.description`, `concept.description`, and
-`series_family_members.variant`) so the catalog has consistent, readable,
+`series.name`, `indicators.description`, `concept.description`, and
+`indicator_variants.label`) so the catalog has consistent, readable,
 non-redundant language across related series, and the discipline for when
 to propose updates to existing prose versus letting it grandfather in.
 
@@ -36,14 +36,14 @@ structure lives in
 
 - node is `draft_proposal` or `governance_review`
 - the proposal under construction touches a prose field (`description`,
-  `name`, `variant`) on any of `concept`, `series_family`, `series`,
-  `series_family_members`
+  `name`, `label`) on any of `concept`, `indicators`, `series`,
+  `indicator_variants`
 - OR the harmonisation side-output of `draft_proposal` is non-empty (the
   drafter has proposed updates to existing prose)
 
 The `Seed exemplars` sub-section is conditionally loaded only when
-`is_first_in_family == true` (no `series_family` siblings exist yet for
-the family under draft). When siblings exist, the cohort is the anchor
+`is_first_in_family == true` (no indicator siblings exist yet for the
+indicator under draft). When siblings exist, the cohort is the anchor
 and exemplars are unnecessary noise.
 
 ## Body
@@ -55,7 +55,7 @@ field, it reads `reference_metadata`, populated by the upstream
 `gather_reference_metadata` node. That state field carries three
 cohorts:
 
-- **Cohort A** — sibling series in the same `series_family`. Strongest
+- **Cohort A** — sibling series in the same `indicator`. Strongest
   anchor; new prose must read as coherent with siblings.
 - **Cohort B** — series for the same `concept` across geographies.
   Provides house voice for how this concept is described system-wide.
@@ -82,11 +82,11 @@ burden is on the drafter to justify any deviation.
    fields alone. Note that basket- or population-scope distinctions
    (e.g. "all items" vs "core", "all households" vs "two-or-more-person
    households") are **not** structural columns in V3 — they are carried
-   by `variant` and the prose itself, so they must be spelled out
-   explicitly in `name`/`description` rather than assumed legible from
-   a column.
+   by `indicator_variants.label` and the prose itself, so they must be
+   spelled out explicitly in `name`/`description` rather than assumed
+   legible from a column.
 3. **Descriptions do not contain internal codes.** `series.code`,
-   `concept.code`, `series_family.code` are identity, not prose.
+   `concept.code`, `indicators.code` are identity, not prose.
    Descriptions describe the series in human terms; codes belong
    elsewhere.
 4. **No request-encoding or runtime-implementation detail.** Descriptions
@@ -151,7 +151,7 @@ of the four triggers below fires.
 |---|---|---|
 | `factual_incompleteness` | Low — always propose | Existing prose omits a structural difference the row's own schema fields record. A reader of the prose alone would be misled. Example: description says "Japan CPI" but `seasonal_adjustment = NSA` and the prose nowhere indicates that. |
 | `factual_error` | Low — always propose | Existing prose contradicts the row's structural fields or the published source. Example: description says "monthly" but `frequency = quarterly`. |
-| `family_outlier` | High — needs a chorus | Within `series_family`, this row's prose structure diverges significantly from siblings' shared pattern. Requires showing a clear consensus among siblings. A single sibling disagreeing is not consensus. |
+| `family_outlier` | High — needs a chorus | Within an `indicator`, this row's prose structure diverges significantly from siblings' shared pattern. Requires showing a clear consensus among siblings. A single sibling disagreeing is not consensus. |
 | `house_voice_outlier` | Highest — needs a louder chorus | Cross-cohort B, this row's terminology, framing, or structure no longer matches the cohort B consensus. Requires showing clear consensus across multiple cohort B entries. Cosmetic differences excluded. |
 
 #### Anti-patterns (never proposable as updates, regardless of trigger)
@@ -229,12 +229,12 @@ Different prose-adjacent fields are touched differently by the agent:
 | `series.name` | ✅ | — |
 | `series.alt_name` | ✅ | — |
 | `series.description` | ✅ | — |
-| `series_family.description` | ✅ | — |
+| `indicators.description` | ✅ | — |
 | `concept.description` | ✅ | — |
-| `series_family_members.variant` | ✅ | — |
+| `indicator_variants.label` | ✅ | — |
 | `concept.name` | — | ✅ |
-| `series_family.name` | — | ✅ |
-| `series.code`, `concept.code`, `series_family.code` | — | ✅ (and only via Gate 2 if changing an existing code) |
+| `indicators.name` | — | ✅ |
+| `series.code`, `concept.code`, `indicators.code` | — | ✅ (and only via Gate 2 if changing an existing code) |
 | Structural enum-backed fields (`unit_kind`, `frequency`, `seasonal_adjustment`, etc.) | — | ✅ (may require enum-gap escalation per [ADR 0014](../adr/0014-enum-gap-escalation.md) / [skill-enum-gap-escalation](skill-enum-gap-escalation.md)) |
 
 For propose-only fields, the agent emits a `change_proposal_item` with
@@ -257,10 +257,10 @@ Loaded only when `is_first_in_family == true`. Status:
   in the prices paid by consumers for a representative basket of goods
   and services. Used as the primary indicator of consumer price
   inflation.
-- **`series_family.code`:** `US_CPI`
-- **`series_family.name`:** U.S. Consumer Price Index for All Urban
+- **`indicators.code`:** `US_CPI`
+- **`indicators.name`:** U.S. Consumer Price Index for All Urban
   Consumers
-- **`series_family.description`:** The CPI for All Urban Consumers
+- **`indicators.description`:** The CPI for All Urban Consumers
   (CPI-U) is the U.S. Bureau of Labor Statistics' headline measure of
   consumer price inflation in the United States. It tracks the average
   change over time in prices paid by urban consumers for a
@@ -273,9 +273,9 @@ Loaded only when `is_first_in_family == true`. Status:
   Index for All Urban Consumers (CPI-U) covering all items, U.S. city
   average. Published by the U.S. Bureau of Labor Statistics. Not
   seasonally adjusted. Reference base period 1982-84 = 100.
-- **`variant`:** All Items, NSA, monthly index
+- **`indicator_variants.label`:** All Items, NSA, monthly index
 
-#### Exemplar 2 — Same family, transformed (12-month % change)
+#### Exemplar 2 — Same indicator, transformed (12-month % change)
 
 - **`series.name`:** USA – Consumer Price Index for All Urban Consumers:
   All Items, 12-Month Percent Change in U.S. City Average
@@ -283,13 +283,13 @@ Loaded only when `is_first_in_family == true`. Status:
   Consumer Price Index for All Urban Consumers (CPI-U) covering all
   items, U.S. city average. Not seasonally adjusted. Derived from the
   CPI-U all-items index level.
-- **`variant`:** All Items, NSA, 12-month percent change
+- **`indicator_variants.label`:** All Items, NSA, 12-month percent change
 
 The description does not repeat "Published by the U.S. Bureau of Labor
-Statistics"; the family-level description already carries the publisher
-context, and sibling variants inherit it.
+Statistics"; the indicator-level description already carries the
+publisher context, and sibling variants inherit it.
 
-#### Exemplar 3 — Same family, scope-narrowed (core), seasonally adjusted
+#### Exemplar 3 — Same indicator, scope-narrowed (core), seasonally adjusted
 
 - **`series.name`:** USA – Consumer Price Index for All Urban Consumers:
   All Items Less Food and Energy in U.S. City Average
@@ -299,7 +299,7 @@ context, and sibling variants inherit it.
   Reference base period 1982-84 = 100. Core CPI tracks underlying
   inflation by removing the most volatile components of the headline
   basket.
-- **`variant`:** Core (ex food and energy), SA, monthly index
+- **`indicator_variants.label`:** Core (ex food and energy), SA, monthly index
 
 Both the seasonal-adjustment difference ("Seasonally adjusted") and the
 scope-narrowing difference ("All Items Less Food and Energy") appear
@@ -313,8 +313,8 @@ row record them too; the prose makes them legible to a human reader.
 - **`concept.description`:** The total monetary value of all final goods
   and services produced within a country's borders during a specified
   period.
-- **`series_family.code`:** `US_GDP`
-- **`series_family.name`:** U.S. Gross Domestic Product
+- **`indicators.code`:** `US_GDP`
+- **`indicators.name`:** U.S. Gross Domestic Product
 - **`series.name`:** USA – Real Gross Domestic Product, Seasonally
   Adjusted Annual Rate, Billions of Chained 2017 Dollars
 - **`series.description`:** Quarterly level of real gross domestic
@@ -324,12 +324,12 @@ row record them too; the prose makes them legible to a human reader.
   and Product Accounts. Real GDP measures the total value of goods and
   services produced in the United States after adjusting for changes in
   prices.
-- **`variant`:** Real, SAAR, chained 2017 dollars
+- **`indicator_variants.label`:** Real, SAAR, chained 2017 dollars
 
 #### Exemplar 5 — Non-USA geography, to show the prefix pattern
 
-- **`series_family.code`:** `GBR_CPIH`
-- **`series_family.name`:** U.K. Consumer Prices Index Including Owner
+- **`indicators.code`:** `GBR_CPIH`
+- **`indicators.name`:** U.K. Consumer Prices Index Including Owner
   Occupiers' Housing Costs
 - **`series.name`:** GBR – Consumer Prices Index Including Owner
   Occupiers' Housing Costs: All Items, Index 2015 = 100
@@ -339,7 +339,7 @@ row record them too; the prose makes them legible to a human reader.
   Not seasonally adjusted. Reference base period 2015 = 100. CPIH
   extends the standard CPI by including owner-occupied housing costs and
   is the ONS's preferred headline measure of consumer price inflation.
-- **`variant`:** All Items (CPIH), NSA, monthly index
+- **`indicator_variants.label`:** All Items (CPIH), NSA, monthly index
 
 The `GBR` prefix comes from `geographies.code`, not "United Kingdom" or
 "UK". The prefix is always the geography code; the long name is fine

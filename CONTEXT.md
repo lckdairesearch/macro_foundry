@@ -48,13 +48,14 @@ country" rather than "is the only grouping tree for this country."
 to force one subnational-region hierarchy; those memberships live in
 `geography_memberships`.
 
-### Series family
+### Indicator
 
 A group of related series within a single geography for a single concept.
 Examples: `US_CPI`, `JP_CPI`, `JP_HOUSEHOLD_CONSUMPTION`.
 
-A family connects a concept (geography-neutral) to a geography. Within a family,
-multiple series may exist — different variants of the same underlying measurement.
+An indicator connects a concept (geography-neutral) to a geography. Within an
+indicator, multiple series may exist — different variants of the same underlying
+measurement.
 
 Examples within `US_CPI`:
 - US CPI All Items, NSA, monthly index, level
@@ -62,10 +63,10 @@ Examples within `US_CPI`:
 - US CPI Core (ex food and energy), SA, monthly index, level
 - US CPI All Items, YoY % change, monthly
 
-Each is a separate `series` row attached to the `US_CPI` family.
+Each is a separate `series` row attached to the `US_CPI` indicator.
 
-A series can belong to at most one family (enforced by `UNIQUE(series_id)` on
-`series_family_members`). If a series feels like it belongs to multiple families,
+A series can belong to at most one indicator (enforced by `UNIQUE(series_id)` on
+`indicator_variants`). If a series feels like it belongs to multiple indicators,
 it probably needs to be a variant of one or a derived series in another, not
 double-assigned.
 
@@ -101,28 +102,29 @@ After the publication boundary, changes to canonical identity are dangerous
 because other database records and future reasoning may already depend on that
 series as defined.
 
-### Variant
+### Indicator variant
 
-A field on `series_family_members.variant`. Human-readable description of how
-this series differs from its siblings in the family. Examples: "Core ex fresh
-food", "Two-or-more-person households", "Headline NSA".
+A membership row in `indicator_variants` linking a series to its indicator.
+The `label` field carries a human-readable description of how this series
+differs from its siblings in the indicator. Examples: "Core ex fresh food",
+"Two-or-more-person households", "Headline NSA".
 
-This is intentionally free text. The structural distinctions (measure, unit,
-seasonal_adjustment, etc.) are encoded on the series itself; `variant` is the
+`label` is intentionally free text. The structural distinctions (measure, unit,
+seasonal_adjustment, etc.) are encoded on the series itself; `label` is the
 human label for the combination.
 
 ### Default variant
 
-A family's default variant is the methodological scope that macrodb treats as
-the baseline reading for that family when no extra qualifier is included in the
-canonical `series.code`.
+An indicator's default variant is the methodological scope that macrodb treats
+as the baseline reading for that indicator when no extra qualifier is included
+in the canonical `series.code`. Marked by `indicator_variants.is_default = true`.
 
 Not every provider-exposed distinction needs to become part of canonical
 identity. A default variant exists only when the omission is an intentional
 curation choice, not when the scope is still ambiguous.
 
-`variant` is robust enough for human-facing cataloging and rare methodological
-edge cases inside a family. It is not a normalized taxonomy column. If a
+`label` is robust enough for human-facing cataloging and rare methodological
+edge cases inside an indicator. It is not a normalized taxonomy column. If a
 distinction becomes common enough that the system needs consistent cross-series
 machine filtering on it, that should become a separate structured field or
 model rather than more convention piled into free text.
@@ -407,9 +409,9 @@ Always UNIQUE within its table. The user-facing identifier; the UUID is internal
 
 A field that carries human-readable narrative rather than identity or
 structural meaning. In macrodb the prose fields are `description` on
-`concept`, `series_family`, and `series`; `name` on the same three;
-`alt_name` on `series`, `geographies`, and `providers`; and `variant`
-on `series_family_members`. Prose fields are read by humans navigating
+`concept`, `indicators`, and `series`; `name` on the same three;
+`alt_name` on `series`, `geographies`, and `providers`; and `label`
+on `indicator_variants`. Prose fields are read by humans navigating
 the catalog. They are distinct from identity fields (`code`),
 structural fields (enum-backed methodology columns like `frequency`,
 `seasonal_adjustment`, `unit_code`), and provider-mapping fields

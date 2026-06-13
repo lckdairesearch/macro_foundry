@@ -164,12 +164,12 @@ print(Frequency.MONTHLY.value)"` prints `"M"`.
 **Intentionally NOT implemented (per V3 final draft):**
 
 - `reference_kind` set → `reference_year IS NOT NULL`
-- `series_family_members` partial unique on `(family_id) WHERE is_primary = true`
+- `indicator_variants` partial unique on `(indicator_id) WHERE is_default = true`
 
 **One-to-one UNIQUE constraints:**
 
 - `UNIQUE(replaced_by_series_id)` on `series`
-- `UNIQUE(series_id)` on `series_family_members`
+- `UNIQUE(series_id)` on `indicator_variants`
 - `UNIQUE(series_id)` on `derived_series`
 
 **Depends on:** Phases 3 and 4.
@@ -270,7 +270,7 @@ create_schema, update_schema, read_schema, ...)` factory
 - `src/macro_foundry/backend/deps.py` — `get_session` re-export, `verify_token`
   bearer auth dep
 - One router file per simple table (concepts, tags, providers, provider_catalogs,
-  geographies, geography_memberships, series_families, series_family_members,
+  geographies, geography_memberships, indicators, indicator_variants,
   series_tags, series_sources, derived_series, derivation_inputs,
   ingestion_feeds, both run_logs, change_proposals, change_proposal_items),
   each a one-liner registration

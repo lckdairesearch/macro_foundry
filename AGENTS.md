@@ -20,7 +20,7 @@ Before any work, load these files. They are short by design — read all of them
 
 1. `docs/project_overview.md` — what macro_foundry is, and the scope of the current phase
 2. `docs/architecture.md` — the stack, layers, and decisions
-3. `CONTEXT.md` — domain language (series vs series_family vs concept vs observation, etc.)
+3. `CONTEXT.md` — domain language (series vs indicator vs concept vs observation, etc.)
 4. `docs/code_standards.md` — rules that apply to every line of code
 5. `docs/build_plan.md` — the phased implementation plan
 6. `docs/progress_tracker.md` — what's done, what's next

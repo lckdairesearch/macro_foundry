@@ -98,7 +98,7 @@ ride along on the same Gate 1 proposal as the new series and are
 governed by the metadata-standardisation skill; the default is to emit
 nothing.
 
-For propose-only fields (`concept.name`, `series_family.name`, all
+For propose-only fields (`concept.name`, `indicators.name`, all
 `*.code` values), the drafter emits items with
 `action = suggest_human_apply`. The executor skips these at apply
 time; they remain in `change_proposals` as `pending_human_apply` until
@@ -283,7 +283,7 @@ The mechanism has two graph-level components.
 `draft_proposal`. It is deterministic. It calls three MCP cohort lookups
 and writes a `reference_metadata` state field carrying three cohorts:
 
-- **Cohort A** — sibling series in the same `series_family`
+- **Cohort A** — sibling series in the same `indicator`
 - **Cohort B** — series for the same `concept` across all geographies
 - **Cohort C** — series for the same `provider` and same `concept`,
   joined through `series_sources`
@@ -307,7 +307,7 @@ updates to existing prose, but only under the four closed triggers in
 the skill, and the default is to emit nothing.
 
 For prose-adjacent fields that the agent cannot mutate directly
-(`concept.name`, `series_family.name`, all `*.code` values), the
+(`concept.name`, `indicators.name`, all `*.code` values), the
 drafter emits items with `action = suggest_human_apply`. The
 executor leaves these items as `pending_human_apply` rows; the
 operator applies them via SQLAdmin and flips them to

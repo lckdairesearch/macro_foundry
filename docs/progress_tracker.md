@@ -12,6 +12,28 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-13] Issue 71 — documentation sweep: series_family → indicator (ADR 0021)
+
+Terminology sweep across all prose docs to match the schema rename completed in
+issues #68–#70. No schema or code changes; docs only.
+
+Files updated: `CONTEXT.md` (glossary), `CLAUDE.md`, `AGENTS.md`,
+`docs/adr/0008`, `docs/adr/0013`, `docs/series_catalog_governance.md`,
+`docs/skills/skill-concept-vs-family-vs-variant.md`,
+`docs/skills/skill-metadata-standardisation.md`, `docs/build_plan.md`,
+`docs/code_standards.md`, `docs/series_onboarding_workflow.md`.
+
+Key changes:
+- Glossary heading `### Series family` → `### Indicator`; `### Variant` →
+  `### Indicator variant`; `is_default` documented as the default-variant marker
+- `series_family_members` → `indicator_variants`, `series_family` →
+  `indicator`/`indicators`, `variant` column → `label`, `is_primary` →
+  `is_default` throughout prose
+- Seed exemplar fields in `skill-metadata-standardisation.md` updated to new
+  table/column names
+
+---
+
 ### [2026-06-13] Issue 69 — governance stored-enum values follow the indicator rename
 
 Brought the governance audit vocabulary in line with the `series_family →

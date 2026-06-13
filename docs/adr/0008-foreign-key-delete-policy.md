@@ -42,13 +42,13 @@ Canonical `ON DELETE` map:
 - `geography_memberships.group_geography_id` → `CASCADE`
 - `series.geography_id` → `RESTRICT`
 - `series.replaced_by_series_id` → `RESTRICT`
-- `series_families.concept_id` → `RESTRICT`
-- `series_families.geography_id` → `RESTRICT`
+- `indicators.concept_id` → `RESTRICT`
+- `indicators.geography_id` → `RESTRICT`
 - `provider_catalogs.provider_id` → `RESTRICT`
 - `series_tags.series_id` → `CASCADE`
 - `series_tags.tag_id` → `CASCADE`
-- `series_family_members.family_id` → `CASCADE`
-- `series_family_members.series_id` → `CASCADE`
+- `indicator_variants.indicator_id` → `CASCADE`
+- `indicator_variants.series_id` → `CASCADE`
 - `series_hierarchy_edges.parent_series_id` → `RESTRICT`
 - `series_hierarchy_edges.child_series_id` → `RESTRICT`
 - `series_sources.provider_catalog_id` → `RESTRICT`

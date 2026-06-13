@@ -9,8 +9,8 @@
 ADR 0011 ratifies the gated onboarding graph and the proposal drafter role,
 and ADR 0012 ratifies the selector-registry ingestion runtime. Neither
 addresses how the proposal drafter handles **prose fields**: `description`
-on `concept`, `series_family`, and `series`; `name` on the same three;
-and `variant` on `series_family_members`. These are the fields a human
+on `concept`, `indicators`, and `series`; `name` on the same three;
+and `label` on `indicator_variants`. These are the fields a human
 reads when navigating the catalog, and they live next to identity fields
 (codes) and structural fields (enums and methodology columns) without
 sharing their lifecycle.
@@ -38,7 +38,7 @@ every sibling that follows, so the first-write moment is the highest
 stakes.
 
 A small number of prose-adjacent fields — `concept.name`,
-`series_family.name`, all `*.code` values, and structural enum fields —
+`indicators.name`, all `*.code` values, and structural enum fields —
 should never be mutated by the agent even after gate approval. The
 existing graph has no mechanism for "the agent proposed this; the human
 must apply it from the backend"; an agent that wants to suggest such a
@@ -55,7 +55,7 @@ Inserted between `research` and `draft_proposal`. Deterministic, with at
 most a small extractive LLM call. Reads three cohorts via the macrodb MCP
 server:
 
-- **Cohort A** — sibling series in the same `series_family` (via the
+- **Cohort A** — sibling series in the same `indicator` (via the
   existing `find_sibling_series` tool)
 - **Cohort B** — series for the same `concept` across all geographies
   (via a new MCP tool `list_series_for_concept`)
@@ -87,8 +87,8 @@ generated proposal.
 
 | Field | Agent can mutate after Gate 1 approval | Agent can only propose; human applies via SQLAdmin |
 |---|---|---|
-| `series.name`, `series.alt_name`, `series.description`, `series_family.description`, `concept.description`, `series_family_members.variant` | ✅ | — |
-| `concept.name`, `series_family.name` | — | ✅ |
+| `series.name`, `series.alt_name`, `series.description`, `indicators.description`, `concept.description`, `indicator_variants.label` | ✅ | — |
+| `concept.name`, `indicators.name` | — | ✅ |
 | `*.code` | — | ✅ (and only via Gate 2 if changing an existing code) |
 | Structural enum-backed fields | — | ✅ (may require enum-gap escalation, deferred to a separate ADR) |
 
@@ -156,7 +156,7 @@ drafter has anchor language even when no siblings exist.
   sake" hard to commit by accident.
 - Gate 2 stays semantically about identity. Routine prose updates never
   reach it.
-- High-stakes propose-only suggestions (concept name, family name,
+- High-stakes propose-only suggestions (concept name, indicator name,
   codes) become auditable through `change_proposals` rather than living
   in free-text remarks. The operator can later query "what did the agent
   propose, what got applied, what is still pending?".

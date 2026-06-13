@@ -30,7 +30,7 @@ When in doubt, follow these. When tempted to deviate, propose first.
   append-only tables like `observations` and run logs).
 - V3 composite-key junction tables keep their schema-native keys instead of
   gaining a synthetic `id`. Today that applies to `series_tags` and
-  `series_family_members`.
+  `indicator_variants`.
 - `id` is always `uuid.UUID` with `server_default=text("uuidv7()")`. Never
   generate UUIDs in Python.
 - `created_at` and `updated_at` are always server-side defaults

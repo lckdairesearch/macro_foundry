@@ -8,10 +8,10 @@ status: stub
 ## Scope
 
 The decision rule for whether a new arrival should be a new `concept`, a
-new `series_family`, or a new `series` variant within an existing family.
+new `indicator`, or a new `series` variant within an existing indicator.
 Codifies the governance from `docs/series_catalog_governance.md` and the
-glossary entries in `CONTEXT.md` (concept, series family, series, variant,
-default variant).
+glossary entries in `CONTEXT.md` (concept, indicator, series, indicator
+variant, default variant).
 
 This skill does not cover canonical code grammar (see
 [skill-canonical-code-grammar](skill-canonical-code-grammar.md)) or
@@ -28,10 +28,10 @@ identity).
 ## Body
 
 To be written. Should cover: the geography-neutrality test for concepts;
-the one-concept-one-geography rule for families; when methodology
-differences justify a sibling series vs. a new family vs. a new concept;
+the one-concept-one-geography rule for indicators; when methodology
+differences justify a sibling series vs. a new indicator vs. a new concept;
 the default-variant pattern and when it is appropriate to use it; the
 publication-boundary rule that makes identity decisions sticky once
-crossed; and worked examples (US CPI headline vs. core as one family;
-US GDP nominal vs. real as one family; household-basket CPI variants as
+crossed; and worked examples (US CPI headline vs. core as one indicator;
+US GDP nominal vs. real as one indicator; household-basket CPI variants as
 sibling series with explicit variant tokens).
