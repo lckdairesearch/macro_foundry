@@ -13,21 +13,22 @@ from macro_foundry.seed.data.tags import TAGS
 
 
 async def seed_tags(session: AsyncSession) -> SeedOutcome:
-    """Seed the normalized Phase 8 tag taxonomy."""
+    """Seed the topical tag taxonomy, upserting on the `code` key."""
 
-    payloads = [TagCreate(name=name).model_dump() for name in TAGS]
-    existing_names = set((await session.execute(select(Tag.name).where(Tag.name.in_(TAGS)))).scalars())
+    payloads = [TagCreate(code=code, name=name).model_dump() for code, name in TAGS]
+    codes = [code for code, _name in TAGS]
+    existing_codes = set((await session.execute(select(Tag.code).where(Tag.code.in_(codes)))).scalars())
 
     statement = insert(Tag).values(payloads)
     statement = statement.on_conflict_do_update(
-        index_elements=[Tag.name],
+        index_elements=[Tag.code],
         set_={"name": statement.excluded.name, "updated_at": func.now()},
     )
     await session.execute(statement)
     await session.flush()
     return SeedOutcome(
-        inserted=len(TAGS) - len(existing_names),
-        updated=len(existing_names),
+        inserted=len(codes) - len(existing_codes),
+        updated=len(existing_codes),
     )
 
 

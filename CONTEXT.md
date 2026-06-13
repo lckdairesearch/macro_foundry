@@ -403,6 +403,22 @@ In macrodb, "code" almost always means the canonical short identifier of an
 entity: `USA` for a geography, `CPI` for a concept, `US_CPI` for a family, etc.
 Always UNIQUE within its table. The user-facing identifier; the UUID is internal.
 
+Codes are **UPPERCASE**. Internal, curated codes use **SCREAMING_SNAKE**
+(`CPI`, `GDP`, `UNEMPLOYMENT_RATE`, `US_CPI`, `NATIONAL_ACCOUNTS`). Codes
+adopted from an external standard follow that standard's own format
+(ISO 3166 hyphenated for `geographies`: `US-CA`, `JP-01`). `code` is `UNIQUE`
+within its table and is the user-facing key; the UUID is internal.
+
+This rule is **convention-only**: it is documented and seeded-against, but not
+enforced by a Pydantic validator or CHECK constraint. Mechanically enforcing
+code format is a legitimate but separate, schema-wide decision (a shared
+annotated `Code` type across all `code` columns) and is out of scope here — no
+single table should become the lone one with a format validator (ADR 0022 §4).
+
+`tags.code` follows this rule: tags carry a canonical UPPERCASE `code` (the
+topical taxonomy — `PRICES`, `NATIONAL_ACCOUNTS`, …) with `name` as free
+display text, modeled like `concepts`.
+
 ### Prose field
 
 A field that carries human-readable narrative rather than identity or

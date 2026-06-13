@@ -97,16 +97,24 @@ def test_bloc_membership_seed_tracks_2026_emu_and_mercosur_status() -> None:
     assert mercosur_memberships["VEN"]["end_date"] == date(2017, 8, 5)
 
 
-def test_tags_match_normalized_subject_taxonomy() -> None:
+def test_tags_match_topical_taxonomy() -> None:
     assert TAGS == [
-        "national_accounts",
-        "production_business_activity",
-        "prices",
-        "labor_population",
-        "money_banking_finance",
-        "international",
-        "housing",
+        ("PRICES", "Prices"),
+        ("MONETARY_BANKING", "Monetary and Banking Variables"),
+        ("POPULATION_LABOR", "Population and Labor Market"),
+        ("PRODUCTION_BUSINESS_ACTIVITY", "Production and Business Activity"),
+        ("RETAIL_CONSUMPTION", "Retail and Consumption"),
+        ("NATIONAL_ACCOUNTS", "National Accounts"),
+        ("GOVERNMENT_FISCAL", "Government and Fiscal"),
+        ("INTERNATIONAL", "International"),
+        ("FINANCIAL_INDICATORS", "Financial Indicators"),
+        ("OTHER", "Others"),
     ]
+
+
+def test_tag_codes_are_uppercase() -> None:
+    for code, _name in TAGS:
+        assert code == code.upper()
 
 
 def test_default_provider_seed_set_matches_phase_8_scope() -> None:

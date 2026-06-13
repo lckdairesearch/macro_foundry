@@ -31,7 +31,23 @@ from macro_foundry.schemas import (
     ProviderCreate,
     SeriesCreate,
     SeriesUpdate,
+    TagCreate,
+    TagRead,
 )
+
+
+def test_tag_create_requires_code_and_name() -> None:
+    payload = TagCreate(code="PRICES", name="Prices")
+    assert payload.code == "PRICES"
+    assert payload.name == "Prices"
+
+    with pytest.raises(ValidationError):
+        TagCreate(name="Prices")
+
+
+def test_tag_read_exposes_code_as_natural_key() -> None:
+    assert "code" in TagRead.model_fields
+    assert "name" in TagRead.model_fields
 
 
 def test_geography_create_requires_parent_for_subnational_types() -> None:

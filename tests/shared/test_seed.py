@@ -68,6 +68,26 @@ async def test_seed_rerun_is_idempotent_for_row_counts(
 
 
 @pytest.mark.asyncio
+async def test_seed_restores_modified_seeded_tag_by_code(
+    session: AsyncSession,
+) -> None:
+    prices = await session.scalar(select(Tag).where(Tag.code == "PRICES"))
+    assert prices is not None
+
+    prices.name = "Prices (mutated)"
+    await session.commit()
+
+    summary = await run_seed(session, only={SeedTarget.TAGS})
+    await session.commit()
+
+    restored = await session.scalar(select(Tag).where(Tag.code == "PRICES"))
+    assert restored is not None
+    await session.refresh(restored)
+    assert restored.name == "Prices"
+    assert summary[SeedTarget.TAGS].updated > 0
+
+
+@pytest.mark.asyncio
 async def test_seed_restores_modified_seeded_geography(
     session: AsyncSession,
 ) -> None:

@@ -12,6 +12,7 @@ from macro_foundry.schemas._base import ReadSchema, SchemaModel, TimestampedRead
 class TagBase(SchemaModel):
     """Shared tag fields."""
 
+    code: str
     name: str
 
 
@@ -22,6 +23,7 @@ class TagCreate(TagBase):
 class TagUpdate(SchemaModel):
     """PATCH payload for a tag."""
 
+    code: str | None = None
     name: str | None = None
 
 

@@ -31,6 +31,8 @@ references and supersedes the old one — don't edit the old one.
 | [0018](0018-scoping-three-node-split.md) | Scoping subgraph splits clarify, verify, and brief authoring into separate nodes | Accepted |
 | [0019](0019-check-db-node-for-onboarding.md) | `check_db` node for catalog-duplicate detection in onboarding | Proposed |
 | [0020](0020-catalog-embeddings-for-semantic-search.md) | Catalog embeddings for semantic search | Proposed |
+| [0021](0021-rename-series-family-to-indicator.md) | Rename `series_family` to `indicator` | Accepted |
+| [0022](0022-concept-grained-topical-tags.md) | Concept-grained topical tags | Proposed |
 
 ## Format
 

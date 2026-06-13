@@ -19,8 +19,9 @@ class Tag(TimestampedBase):
     """Curated tag taxonomy row."""
 
     __tablename__ = "tags"
-    __table_args__ = (UniqueConstraint("name", name="uq_tags_name"),)
+    __table_args__ = (UniqueConstraint("code", name="uq_tags_code"),)
 
+    code: Mapped[str] = mapped_column(String(), nullable=False)
     name: Mapped[str] = mapped_column(String(), nullable=False)
 
     series_tags: Mapped[list["SeriesTag"]] = relationship(

@@ -9,11 +9,11 @@ class TagAdmin(BaseModelView, model=Tag):
     name_plural = "Tags"
     category = "Core Curation"
     category_icon = "ti ti-tags"
-    column_list = [Tag.name, Tag.updated_at]
-    column_searchable_list = [Tag.name]
-    column_sortable_list = [Tag.name, Tag.updated_at]
-    column_default_sort = [(Tag.name, False)]
-    form_columns = [Tag.name]
+    column_list = [Tag.code, Tag.name, Tag.updated_at]
+    column_searchable_list = [Tag.code, Tag.name]
+    column_sortable_list = [Tag.code, Tag.name, Tag.updated_at]
+    column_default_sort = [(Tag.code, False)]
+    form_columns = [Tag.code, Tag.name]
 
 
 class SeriesTagAdmin(BaseModelView, model=SeriesTag):
