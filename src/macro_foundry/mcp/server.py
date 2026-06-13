@@ -17,7 +17,7 @@ from macro_foundry.mcp.read_tools import (
     ListProviderSeriesForConceptArgs,
     ListSeriesForConceptArgs,
     LookupConceptArgs,
-    LookupFamilyArgs,
+    LookupIndicatorArgs,
     MacrodbReadTools,
     SelectorConfigValidationArgs,
     SelectorSchemaArgs,
@@ -36,12 +36,12 @@ from macro_foundry.mcp.write_tools import (
 
 READ_ONLY_TOOL_NAMES = {
     "lookup_concept",
-    "lookup_family",
+    "lookup_indicator",
     "find_sibling_series",
     "list_series_for_concept",
     "list_provider_series_for_concept",
     "search_concepts",
-    "search_series_families",
+    "search_indicators",
     "search_series",
     "list_selector_types",
     "get_selector_schema",
@@ -96,10 +96,10 @@ def _register_read_tools(
         )
         return None if result is None else result.model_dump(mode="json")
 
-    @server.tool(name="lookup_family")
-    async def lookup_family(code: str) -> dict[str, Any] | None:
+    @server.tool(name="lookup_indicator")
+    async def lookup_indicator(code: str) -> dict[str, Any] | None:
         result = await with_read(
-            lambda tools: tools.lookup_family(LookupFamilyArgs(code=code))
+            lambda tools: tools.lookup_indicator(LookupIndicatorArgs(code=code))
         )
         return None if result is None else result.model_dump(mode="json")
 
@@ -140,13 +140,13 @@ def _register_read_tools(
         result = await with_read(lambda tools: tools.search_concepts(query, limit))
         return [hit.model_dump(mode="json") for hit in result]
 
-    @server.tool(name="search_series_families")
-    async def search_series_families(
+    @server.tool(name="search_indicators")
+    async def search_indicators(
         query: str,
         limit: int = 10,
     ) -> list[dict[str, Any]]:
         result = await with_read(
-            lambda tools: tools.search_series_families(query, limit),
+            lambda tools: tools.search_indicators(query, limit),
         )
         return [hit.model_dump(mode="json") for hit in result]
 

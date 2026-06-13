@@ -37,8 +37,8 @@ class LookupConceptArgs(SchemaModel):
     code: str
 
 
-class LookupFamilyArgs(SchemaModel):
-    """Arguments for lookup_family."""
+class LookupIndicatorArgs(SchemaModel):
+    """Arguments for lookup_indicator."""
 
     code: str
 
@@ -158,8 +158,8 @@ class MacrodbReadTools:
             for row in ranking_rows
         ]
 
-    async def lookup_family(
-        self, args: LookupFamilyArgs
+    async def lookup_indicator(
+        self, args: LookupIndicatorArgs
     ) -> IndicatorReadDetail | None:
         """Return the indicator with its variant rows, or None."""
 
@@ -322,7 +322,7 @@ class MacrodbReadTools:
             for row in ranking_rows
         ]
 
-    async def search_series_families(
+    async def search_indicators(
         self,
         query: str,
         limit: int = 10,
@@ -397,7 +397,7 @@ __all__ = [
     "ListProviderSeriesForConceptArgs",
     "ListSeriesForConceptArgs",
     "LookupConceptArgs",
-    "LookupFamilyArgs",
+    "LookupIndicatorArgs",
     "MacrodbReadTools",
     "SelectorConfigValidationArgs",
     "SelectorSchemaArgs",

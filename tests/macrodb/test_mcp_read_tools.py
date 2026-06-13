@@ -28,7 +28,7 @@ from macro_foundry.mcp.read_tools import (
     ListProviderSeriesForConceptArgs,
     ListSeriesForConceptArgs,
     LookupConceptArgs,
-    LookupFamilyArgs,
+    LookupIndicatorArgs,
     MacrodbReadTools,
     SelectorConfigValidationArgs,
     SelectorSchemaArgs,
@@ -83,7 +83,7 @@ async def test_lookup_concept_returns_typed_concept_or_none(
 
 
 @pytest.mark.asyncio
-async def test_lookup_family_returns_family_with_members(session: AsyncSession) -> None:
+async def test_lookup_indicator_returns_indicator_with_members(session: AsyncSession) -> None:
     concept = Concept(code="MCP_FAMILY_CPI", name="Consumer price index")
     geography = await _get_geography(session, "USA")
     session.add(concept)
@@ -108,8 +108,8 @@ async def test_lookup_family_returns_family_with_members(session: AsyncSession) 
     await session.flush()
     tools = MacrodbReadTools(session)
 
-    result = await tools.lookup_family(LookupFamilyArgs(code="MCP_US_CPI"))
-    missing = await tools.lookup_family(LookupFamilyArgs(code="NO_SUCH_FAMILY"))
+    result = await tools.lookup_indicator(LookupIndicatorArgs(code="MCP_US_CPI"))
+    missing = await tools.lookup_indicator(LookupIndicatorArgs(code="NO_SUCH_FAMILY"))
 
     assert result is not None
     assert result.code == "MCP_US_CPI"
@@ -459,7 +459,7 @@ async def test_search_concepts_returns_ranked_hits_for_semantic_query(
 
 
 @pytest.mark.asyncio
-async def test_search_series_families_returns_ranked_hits_with_members(
+async def test_search_indicators_returns_ranked_hits_with_members(
     session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -501,7 +501,7 @@ async def test_search_series_families_returns_ranked_hits_with_members(
         lambda query: _embed_family_query(query),
     )
 
-    result = await tools.search_series_families("us inflation family")
+    result = await tools.search_indicators("us inflation family")
 
     assert result[0].indicator.code == "US_CPI"
     assert result[0].similarity > 0.5
@@ -582,11 +582,11 @@ async def test_semantic_search_tools_return_empty_lists_for_empty_catalog(
     )
 
     concept_hits = await tools.search_concepts("anything")
-    family_hits = await tools.search_series_families("anything")
+    indicator_hits = await tools.search_indicators("anything")
     series_hits = await tools.search_series("anything")
 
     assert concept_hits == []
-    assert family_hits == []
+    assert indicator_hits == []
     assert series_hits == []
 
 

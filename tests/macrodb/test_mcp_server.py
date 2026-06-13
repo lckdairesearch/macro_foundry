@@ -25,12 +25,12 @@ async def test_read_only_server_binds_only_read_tools() -> None:
     assert {tool.name for tool in tools} == READ_ONLY_TOOL_NAMES
     assert READ_ONLY_TOOL_NAMES == {
         "lookup_concept",
-        "lookup_family",
+        "lookup_indicator",
         "find_sibling_series",
         "list_series_for_concept",
         "list_provider_series_for_concept",
         "search_concepts",
-        "search_series_families",
+        "search_indicators",
         "search_series",
         "list_selector_types",
         "get_selector_schema",

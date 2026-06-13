@@ -8,6 +8,8 @@ from macro_foundry.backend.api.derivation_inputs import router as derivation_inp
 from macro_foundry.backend.api.derived_series import router as derived_series_router
 from macro_foundry.backend.api.geographies import router as geographies_router
 from macro_foundry.backend.api.geography_memberships import router as geography_memberships_router
+from macro_foundry.backend.api.indicator_variants import router as indicator_variants_router
+from macro_foundry.backend.api.indicators import router as indicators_router
 from macro_foundry.backend.api.ingestion_feed_members import router as ingestion_feed_members_router
 from macro_foundry.backend.api.ingestion_feeds import router as ingestion_feeds_router
 from macro_foundry.backend.api.ingestion_run_log_members import router as ingestion_run_log_members_router
@@ -16,8 +18,6 @@ from macro_foundry.backend.api.observations import router as observations_router
 from macro_foundry.backend.api.provider_catalogs import router as provider_catalogs_router
 from macro_foundry.backend.api.providers import router as providers_router
 from macro_foundry.backend.api.series import router as series_router
-from macro_foundry.backend.api.series_families import router as series_families_router
-from macro_foundry.backend.api.series_family_members import router as series_family_members_router
 from macro_foundry.backend.api.series_hierarchy_edges import router as series_hierarchy_edges_router
 from macro_foundry.backend.api.series_sources import router as series_sources_router
 from macro_foundry.backend.api.series_tags import router as series_tags_router
@@ -32,6 +32,8 @@ API_ROUTERS = (
     derived_series_router,
     geographies_router,
     geography_memberships_router,
+    indicator_variants_router,
+    indicators_router,
     ingestion_feed_members_router,
     ingestion_feeds_router,
     ingestion_run_log_members_router,
@@ -40,8 +42,6 @@ API_ROUTERS = (
     provider_catalogs_router,
     providers_router,
     series_router,
-    series_families_router,
-    series_family_members_router,
     series_hierarchy_edges_router,
     series_sources_router,
     series_tags_router,

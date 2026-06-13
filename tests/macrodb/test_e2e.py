@@ -44,7 +44,7 @@ async def test_api_smoke_flows_from_seeded_geography_to_observations(
     concept_id = concept_response.json()["id"]
 
     family_response = await client.post(
-        "/api/v1/series-families/",
+        "/api/v1/indicators/",
         headers=auth_headers,
         json={
             "code": "MF_US_CPI_FAMILY",
@@ -86,7 +86,7 @@ async def test_api_smoke_flows_from_seeded_geography_to_observations(
     series_id = series_response.json()["id"]
 
     family_member_response = await client.post(
-        "/api/v1/series-family-members/",
+        "/api/v1/indicator-variants/",
         headers=auth_headers,
         json={
             "indicator_id": family_id,

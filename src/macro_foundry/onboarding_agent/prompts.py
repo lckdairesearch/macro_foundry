@@ -122,8 +122,8 @@ The brief carries descriptive information only — concept, methodology, geograp
 
 You have access to the read-only `macrodb-mcp` tool surface:
 
-1. **Similarity search tools** — `search_concepts(query, limit)`, `search_series_families(query, limit)`, `search_series(query, limit)`. Each takes a natural-language query and returns ranked candidates with full descriptive payload (name, alt-name, description, methodology fields, family/concept context) plus a similarity score. The underlying retrieval combines tag-based narrowing with embedding-based semantic similarity, so close-but-differently-worded matches (e.g. "inflation" against a "Consumer Price Index" series) are surfaced — you do not need to manually enumerate every synonym.
-2. **Drill-down tools** — `lookup_concept`, `lookup_family`, `find_sibling_series`, `list_series_for_concept`, `list_provider_series_for_concept`. Use these on candidates returned by similarity search to inspect family membership, sibling transformations, and provider coverage.
+1. **Similarity search tools** — `search_concepts(query, limit)`, `search_indicators(query, limit)`, `search_series(query, limit)`. Each takes a natural-language query and returns ranked candidates with full descriptive payload (name, alt-name, description, methodology fields, indicator/concept context) plus a similarity score. The underlying retrieval combines tag-based narrowing with embedding-based semantic similarity, so close-but-differently-worded matches (e.g. "inflation" against a "Consumer Price Index" series) are surfaced — you do not need to manually enumerate every synonym.
+2. **Drill-down tools** — `lookup_concept`, `lookup_indicator`, `find_sibling_series`, `list_series_for_concept`, `list_provider_series_for_concept`. Use these on candidates returned by similarity search to inspect indicator membership, sibling transformations, and provider coverage.
 3. **`list_enum_values`** — read the live allowed values for any methodology enum when you need to compare units, frequency, seasonal adjustment, measure, etc. between the briefed series and a candidate.
 
 Procedure:
