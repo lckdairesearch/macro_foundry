@@ -29,7 +29,7 @@ When in doubt, follow these. When tempted to deviate, propose first.
   (id + created_at + updated_at) or `CreatedAtBase` (id + created_at only, for
   append-only tables like `observations` and run logs).
 - V3 composite-key junction tables keep their schema-native keys instead of
-  gaining a synthetic `id`. Today that applies to `series_tags` and
+  gaining a synthetic `id`. Today that applies to `concept_tags` and
   `indicator_variants`.
 - `id` is always `uuid.UUID` with `server_default=text("uuidv7()")`. Never
   generate UUIDs in Python.

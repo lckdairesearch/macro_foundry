@@ -6,7 +6,7 @@
 // Dependency levels:
 //   L0 (roots):   geographies, concepts, tags, providers, ingestion_feeds
 //   L1:           series, indicators, provider_catalogs
-//   L2:           series_tags, indicator_variants, series_hierarchy_edges, series_sources, derived_series
+//   L2:           concept_tags, indicator_variants, series_hierarchy_edges, series_sources, derived_series
 //   L3:           ingestion_feed_members, derivation_inputs
 //   L4:           ingestion_run_logs, computation_run_logs
 //   L5:           ingestion_run_log_members
@@ -175,8 +175,8 @@ provider_catalogs [icon: list, color: blue] {
 // L2 — Junction and Second-level Dependents
 // =======================
 
-series_tags [icon: tag, color: orange] {
-  series_id uuid pk fk            // FK -> series.id
+concept_tags [icon: tag, color: orange] {
+  concept_id uuid pk fk           // FK -> concepts.id
   tag_id uuid pk fk               // FK -> tags.id
 }
 
@@ -391,11 +391,11 @@ geographies.id < geography_memberships.group_geography_id // ON DELETE CASCADE
 // ---- Series core (anchor table + direct attributes) ----
 series.geography_id > geographies.id // ON DELETE RESTRICT
 series.replaced_by_series_id - series.id // ON DELETE RESTRICT
-series_tags.series_id > series.id // ON DELETE CASCADE
-series_tags.tag_id > tags.id // ON DELETE CASCADE
 
 // ---- Concept / indicator cluster ----
 indicators.concept_id > concepts.id // ON DELETE RESTRICT
+concept_tags.concept_id > concepts.id // ON DELETE CASCADE
+concept_tags.tag_id > tags.id // ON DELETE CASCADE
 indicators.geography_id > geographies.id // ON DELETE RESTRICT
 indicator_variants.indicator_id > indicators.id // ON DELETE CASCADE
 indicator_variants.series_id - series.id // ON DELETE CASCADE
