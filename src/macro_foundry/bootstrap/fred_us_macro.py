@@ -96,9 +96,9 @@ class RawSeriesSpec:
     concept_code: str
     concept_name: str
     concept_description: str
-    family_code: str
-    family_name: str
-    family_description: str
+    indicator_code: str
+    indicator_name: str
+    indicator_description: str
     series_code: str
     series_name: str
     series_alt_name: tuple[str, ...]
@@ -183,9 +183,9 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
         concept_code="GDP",
         concept_name="Gross Domestic Product",
         concept_description="The total monetary value of all final goods and services produced within a country's borders during a specified period.",
-        family_code="US_GDP",
-        family_name="United States Gross Domestic Product",
-        family_description="Curated United States GDP variants.",
+        indicator_code="US_GDP",
+        indicator_name="United States Gross Domestic Product",
+        indicator_description="Curated United States GDP variants.",
         series_code="US_GDP_NOMINAL_Q_SAAR",
         series_name="USA – Gross Domestic Product, Nominal, Seasonally Adjusted Annual Rate, Billions of Dollars",
         series_alt_name=(
@@ -216,9 +216,9 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
         concept_code="GDP",
         concept_name="Gross Domestic Product",
         concept_description="The total monetary value of all final goods and services produced within a country's borders during a specified period.",
-        family_code="US_GDP",
-        family_name="United States Gross Domestic Product",
-        family_description="Curated United States GDP variants.",
+        indicator_code="US_GDP",
+        indicator_name="United States Gross Domestic Product",
+        indicator_description="Curated United States GDP variants.",
         series_code="US_GDP_REAL_Q_SAAR",
         series_name="USA – Gross Domestic Product, Real, Seasonally Adjusted Annual Rate, Billions of Chained 2017 Dollars",
         series_alt_name=(
@@ -249,9 +249,9 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
         concept_code="CPI",
         concept_name="Consumer Price Index",
         concept_description="A measure of the average change over time in the prices paid by consumers for a representative basket of goods and services. Used as the primary indicator of consumer price inflation.",
-        family_code="US_CPI",
-        family_name="United States Consumer Price Index",
-        family_description="Curated United States CPI variants.",
+        indicator_code="US_CPI",
+        indicator_name="United States Consumer Price Index",
+        indicator_description="Curated United States CPI variants.",
         series_code="US_CPI_HEADLINE_M_NSA",
         series_name="USA – Consumer Price Index for All Urban Consumers: All Items in U.S. City Average",
         series_alt_name=(
@@ -283,9 +283,9 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
         concept_code="CPI",
         concept_name="Consumer Price Index",
         concept_description="A measure of the average change over time in the prices paid by consumers for a representative basket of goods and services. Used as the primary indicator of consumer price inflation.",
-        family_code="US_CPI",
-        family_name="United States Consumer Price Index",
-        family_description="Curated United States CPI variants.",
+        indicator_code="US_CPI",
+        indicator_name="United States Consumer Price Index",
+        indicator_description="Curated United States CPI variants.",
         series_code="US_CPI_CORE_M_SA",
         series_name="USA – Consumer Price Index for All Urban Consumers: All Items Less Food and Energy in U.S. City Average",
         series_alt_name=(
@@ -515,17 +515,17 @@ async def _reset_bootstrap_transaction(
     )
 
     indicators_deleted = 0
-    for family_code in _bootstrap_family_codes():
-        family = await session.scalar(select(Indicator).where(Indicator.code == family_code))
-        if family is None:
+    for indicator_code in _bootstrap_indicator_codes():
+        indicator = await session.scalar(select(Indicator).where(Indicator.code == indicator_code))
+        if indicator is None:
             continue
         has_members = await session.scalar(
-            select(IndicatorVariant.series_id).where(IndicatorVariant.indicator_id == family.id).limit(1),
+            select(IndicatorVariant.series_id).where(IndicatorVariant.indicator_id == indicator.id).limit(1),
         )
         if has_members is None:
             indicators_deleted += await _execute_delete(
                 session,
-                delete(Indicator).where(Indicator.id == family.id),
+                delete(Indicator).where(Indicator.id == indicator.id),
             )
 
     concepts_deleted = 0
@@ -570,12 +570,12 @@ async def _prepare_series_catalog(
             description=spec.concept_description,
         ).model_dump(),
     )
-    family = await _upsert_indicator(
+    indicator = await _upsert_indicator(
         session,
         payload=IndicatorCreate(
-            code=spec.family_code,
-            name=spec.family_name,
-            description=spec.family_description,
+            code=spec.indicator_code,
+            name=spec.indicator_name,
+            description=spec.indicator_description,
             concept_id=concept.id,
             geography_id=geography.id,
         ).model_dump(),
@@ -588,7 +588,7 @@ async def _prepare_series_catalog(
     await _upsert_indicator_variant(
         session,
         payload=IndicatorVariantCreate(
-            indicator_id=family.id,
+            indicator_id=indicator.id,
             series_id=raw_series.id,
             label=spec.variant_label,
             is_default=spec.is_default_variant,
@@ -893,19 +893,19 @@ async def _upsert_indicator(
     *,
     payload: dict[str, Any],
 ) -> Indicator:
-    family = await session.scalar(select(Indicator).where(Indicator.code == payload["code"]))
-    if family is None:
+    indicator = await session.scalar(select(Indicator).where(Indicator.code == payload["code"]))
+    if indicator is None:
         return await register_indicator(
             session,
             IndicatorCreate.model_validate(payload),
         )
     assign_if_changed(
-        family,
+        indicator,
         payload,
         ("name", "description", "concept_id", "geography_id"),
     )
     await session.flush()
-    return family
+    return indicator
 
 
 async def _upsert_series(
@@ -1118,8 +1118,8 @@ def _all_bootstrap_series_codes() -> tuple[str, ...]:
     return tuple(spec.series_code for spec in RAW_SERIES_SPECS)
 
 
-def _bootstrap_family_codes() -> tuple[str, ...]:
-    return tuple(dict.fromkeys(spec.family_code for spec in RAW_SERIES_SPECS))
+def _bootstrap_indicator_codes() -> tuple[str, ...]:
+    return tuple(dict.fromkeys(spec.indicator_code for spec in RAW_SERIES_SPECS))
 
 
 def _bootstrap_concept_codes() -> tuple[str, ...]:

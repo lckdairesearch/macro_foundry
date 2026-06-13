@@ -307,7 +307,7 @@ async def test_register_indicator_populates_embedding_fields_from_parent_context
 
     expected_text = "\n".join(
         [
-            "Type: SeriesFamily",
+            "Type: Indicator",
             "Code: TEST_FAMILY",
             "Name: Test family",
             "Description: Test family description",

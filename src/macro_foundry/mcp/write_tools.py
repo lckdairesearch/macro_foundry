@@ -133,7 +133,7 @@ class MacrodbWriteTools:
         draft = DraftProposal.model_validate(args.payload)
         now = datetime.now(timezone.utc)
 
-        # Resolve geography by code (shared by family and series)
+        # Resolve geography by code (shared by indicator and series)
         geography = (
             await self._session.execute(
                 select(Geography).where(Geography.code == draft.family.geography_code)
@@ -161,15 +161,15 @@ class MacrodbWriteTools:
             )
 
         # Get or create Indicator
-        family = (
+        indicator = (
             await self._session.execute(
                 select(Indicator).where(Indicator.code == draft.family.code)
             )
         ).scalar_one_or_none()
-        if family is None:
+        if indicator is None:
             if draft.family.action != "new":
                 raise ValueError(f"Indicator {draft.family.code!r} not found")
-            family = await register_indicator(
+            indicator = await register_indicator(
                 self._session,
                 IndicatorCreate(
                     code=draft.family.code,
@@ -211,13 +211,13 @@ class MacrodbWriteTools:
         )
 
         # Create IndicatorVariant
-        family_member = IndicatorVariant(
-            indicator_id=family.id,
+        indicator_variant = IndicatorVariant(
+            indicator_id=indicator.id,
             series_id=series.id,
             label=draft.family_member.variant,
             is_default=draft.family_member.is_primary,
         )
-        self._session.add(family_member)
+        self._session.add(indicator_variant)
         await self._session.flush()
         series = await ensure_series_embedding_current(self._session, series)
 
@@ -342,7 +342,7 @@ class MacrodbWriteTools:
             "proposal_id": str(audit_proposal.id),
             "item_id": str(audit_item.id),
             "series_id": str(series.id),
-            "family_id": str(family.id),
+            "indicator_id": str(indicator.id),
             "concept_id": str(concept.id),
             "feed_id": str(feed.id),
         }
@@ -413,7 +413,7 @@ class MacrodbWriteTools:
             item.target_id = concept.id
             item.target_ref = concept.code
         elif item.target_type == TargetType.INDICATORS:
-            family = await register_indicator(
+            indicator = await register_indicator(
                 self._session,
                 IndicatorCreate.model_validate(
                     {
@@ -425,8 +425,8 @@ class MacrodbWriteTools:
                     }
                 ),
             )
-            item.target_id = family.id
-            item.target_ref = family.code
+            item.target_id = indicator.id
+            item.target_ref = indicator.code
         elif item.target_type == TargetType.SERIES:
             series_payload = {
                 field: data[field]
@@ -441,18 +441,18 @@ class MacrodbWriteTools:
             item.target_id = series.id
             item.target_ref = series.code
         elif item.target_type == TargetType.INDICATOR_VARIANTS:
-            family = await self._resolve_family(data)
+            indicator = await self._resolve_indicator(data)
             series = await self._resolve_series(data)
-            family_member = IndicatorVariant(
-                indicator_id=family.id,
+            indicator_variant = IndicatorVariant(
+                indicator_id=indicator.id,
                 series_id=series.id,
-                label=data.get("variant"),
-                is_default=data.get("is_primary", True),
+                label=data.get("label"),
+                is_default=data.get("is_default", True),
             )
-            self._session.add(family_member)
+            self._session.add(indicator_variant)
             await self._session.flush()
             refreshed_series = await ensure_series_embedding_current(self._session, series)
-            item.target_ref = f"{family.code}:{refreshed_series.code}"
+            item.target_ref = f"{indicator.code}:{refreshed_series.code}"
         else:
             raise ValueError(
                 "apply_approved_proposal does not support DB-row inserts for "
@@ -497,24 +497,24 @@ class MacrodbWriteTools:
             raise ValueError(f"Concept {concept_code!r} not found")
         return concept.id
 
-    async def _resolve_family(self, data: dict[str, Any]) -> Indicator:
-        if family_id := data.get("family_id"):
-            family = await self._session.get(Indicator, UUID(str(family_id)))
-            if family is None:
-                raise ValueError(f"Indicator {family_id!r} not found")
-            return family
+    async def _resolve_indicator(self, data: dict[str, Any]) -> Indicator:
+        if indicator_id := data.get("indicator_id"):
+            indicator = await self._session.get(Indicator, UUID(str(indicator_id)))
+            if indicator is None:
+                raise ValueError(f"Indicator {indicator_id!r} not found")
+            return indicator
 
-        family_code = data.get("family_code")
-        if not family_code:
-            raise ValueError("family_id or family_code is required")
-        family = (
+        indicator_code = data.get("indicator_code")
+        if not indicator_code:
+            raise ValueError("indicator_id or indicator_code is required")
+        indicator = (
             await self._session.execute(
-                select(Indicator).where(Indicator.code == family_code)
+                select(Indicator).where(Indicator.code == indicator_code)
             )
         ).scalar_one_or_none()
-        if family is None:
-            raise ValueError(f"Indicator {family_code!r} not found")
-        return family
+        if indicator is None:
+            raise ValueError(f"Indicator {indicator_code!r} not found")
+        return indicator
 
     async def _resolve_series(self, data: dict[str, Any]) -> Series:
         if series_id := data.get("series_id"):

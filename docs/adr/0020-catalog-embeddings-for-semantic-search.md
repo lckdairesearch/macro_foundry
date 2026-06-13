@@ -41,14 +41,14 @@ Three properties of the codebase shape the design:
 ## Decision
 
 The catalog is extended with per-row text embeddings on three tables —
-`concepts`, `series_families`, and `series` — populated by a
+`concepts`, `indicators`, and `series` — populated by a
 service-function registration path, consumed by a similarity-search
 surface on the read-only MCP, and kept honest by a versioning scheme
 that mechanically detects stale embeddings.
 
 ### Scope
 
-Embedded tables: `concepts`, `series_families`, `series`. These are the
+Embedded tables: `concepts`, `indicators`, `series`. These are the
 three semantic-entity tables `check_db` reasons over.
 
 Not embedded: `providers`, `provider_catalogs`, `ingestion_feeds`,
@@ -79,7 +79,7 @@ A single Alembic migration as `macrodb_owner` does the following:
 CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
-Adds three columns to each of `concepts`, `series_families`, `series`:
+Adds three columns to each of `concepts`, `indicators`, `series`:
 
 - `embedding vector(1536)` — the embedding itself, nullable.
 - `embedding_model text` — the model identifier that produced it
@@ -104,14 +104,14 @@ input text from the row's own descriptive fields and its parents'
 context:
 
 - `compose_concept_embedding_input(concept) -> str`
-- `compose_family_embedding_input(family) -> str`
+- `compose_indicator_embedding_input(indicator) -> str`
 - `compose_series_embedding_input(series) -> str`
 
 Each function emits a structured natural-language description (label
 lines such as `"Concept:"`, `"Description:"`, `"Frequency:"`) so the
 embedding model sees both the values and their relationship. Series
-composition includes the names of the parent family and concept;
-family composition includes the parent concept; concept composition
+composition includes the names of the parent indicator and concept;
+indicator composition includes the parent concept; concept composition
 stands alone.
 
 The composed text is hashed (SHA-256 hex prefix is sufficient) into
@@ -132,7 +132,7 @@ All catalog mutations of embedded tables go through service functions
 in `src/macro_foundry/services/registration.py`:
 
 - `register_concept(session, payload) -> Concept`
-- `register_family(session, payload) -> SeriesFamily`
+- `register_indicator(session, payload) -> Indicator`
 - `register_series(session, payload) -> Series`
 
 Each function: validates the payload, composes the embedding input,
@@ -176,7 +176,7 @@ the existing `macrodb` CLI alongside `macrodb db migrate` and
 The read-only `macrodb-mcp` server gains three tools:
 
 - `search_concepts(query: str, limit: int = 10)`
-- `search_series_families(query: str, limit: int = 10)`
+- `search_indicators(query: str, limit: int = 10)`
 - `search_series(query: str, limit: int = 10)`
 
 Each tool internally:
@@ -340,10 +340,10 @@ Name: {name}
 Description: {description}
 ```
 
-**SeriesFamily**
+**Indicator**
 
 ```
-Type: SeriesFamily
+Type: Indicator
 Code: {code}
 Name: {name}
 Description: {description}
@@ -366,7 +366,7 @@ Unit: {humanized}
 Unit label: {unit_label}
 Measure: {humanized}
 Seasonal adjustment: {humanized}
-Family: {family.name} ({family.code})
+Indicator: {indicator.name} ({indicator.code})
 Concept: {concept.name} ({concept.code})
 ```
 
@@ -386,7 +386,7 @@ scoped:
 | Change                                                 | What re-embeds      |
 |--------------------------------------------------------|---------------------|
 | `compose_concept` wording or label change              | concepts only       |
-| `compose_family` wording or label change               | series_families only|
+| `compose_indicator` wording or label change            | indicators only     |
 | `compose_series` wording or label change               | series only         |
 | Humanization map entry change                          | every table whose recipe uses that map |
 | `EMBEDDING_MODEL` constant change                      | all three tables    |

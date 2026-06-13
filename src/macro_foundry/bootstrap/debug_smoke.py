@@ -57,7 +57,7 @@ from macro_foundry.services.registration import (
 _PROVIDER_NAME = "Macro Foundry Debug Provider"
 _CATALOG_NAME = "Debug smoke catalog"
 _CONCEPT_CODE = "DEBUG_INDEX"
-_FAMILY_CODE = "US_DEBUG_INDEX"
+_INDICATOR_CODE = "US_DEBUG_INDEX"
 _FEED_ENDPOINT = "/debug/shared-table"
 _SERIES_CODES = ("DEBUG_TOTAL_INDEX", "DEBUG_COMPONENT_A_INDEX")
 
@@ -120,13 +120,13 @@ async def _run_debug_smoke_transaction(
     provider = await _get_or_create_provider(session)
     catalog = await _get_or_create_catalog(session, provider)
     concept = await _get_or_create_concept(session)
-    family = await _get_or_create_family(session, concept=concept, geography=geography)
+    indicator = await _get_or_create_indicator(session, concept=concept, geography=geography)
     series = [
         await _get_or_create_series(session, code=code, geography=geography)
         for code in _SERIES_CODES
     ]
     for item in series:
-        await _get_or_create_family_member(session, family=family, series=item)
+        await _get_or_create_indicator_variant(session, indicator=indicator, series=item)
     series = [
         await ensure_series_embedding_current(session, item)
         for item in series
@@ -264,24 +264,24 @@ async def _get_or_create_concept(session: AsyncSession) -> Concept:
     return concept
 
 
-async def _get_or_create_family(
+async def _get_or_create_indicator(
     session: AsyncSession,
     *,
     concept: Concept,
     geography: Geography,
 ) -> Indicator:
-    family = await session.scalar(select(Indicator).where(Indicator.code == _FAMILY_CODE))
-    if family is None:
-        family = await register_indicator(
+    indicator = await session.scalar(select(Indicator).where(Indicator.code == _INDICATOR_CODE))
+    if indicator is None:
+        indicator = await register_indicator(
             session,
             IndicatorCreate(
-                code=_FAMILY_CODE,
+                code=_INDICATOR_CODE,
                 name="United States debug index",
                 concept_id=concept.id,
                 geography_id=geography.id,
             ),
         )
-    return family
+    return indicator
 
 
 async def _get_or_create_series(
@@ -312,10 +312,10 @@ async def _get_or_create_series(
     return series
 
 
-async def _get_or_create_family_member(
+async def _get_or_create_indicator_variant(
     session: AsyncSession,
     *,
-    family: Indicator,
+    indicator: Indicator,
     series: Series,
 ) -> IndicatorVariant:
     member = await session.scalar(
@@ -323,7 +323,7 @@ async def _get_or_create_family_member(
     )
     if member is None:
         member = IndicatorVariant(
-            indicator_id=family.id,
+            indicator_id=indicator.id,
             series_id=series.id,
             label=series.name,
             is_default=series.code == "DEBUG_TOTAL_INDEX",

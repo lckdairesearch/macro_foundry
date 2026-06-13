@@ -12,6 +12,77 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-13] ADR 0023 — retire the legacy `agent` package; correct ADR 0021's embeddings claim
+
+Wrote `docs/adr/0023-retire-legacy-agent-package.md` (Accepted, amends ADR 0021)
+and indexed it. The ADR:
+
+- declares `src/macro_foundry/depreciated_omit_this_agent` (formerly
+  `src/macro_foundry/agent`) **retired** — excluded from all sweeps, slated for
+  deletion — and names `src/macro_foundry/onboarding_agent` the single canonical
+  agent under construction;
+- sets a **precedence rule**: where the retired package's code/prompts/docs
+  contradict the current schema, vocabulary, an ADR, or the `onboarding_agent`
+  design, the retired package is authoritatively wrong and is deprioritised;
+- keeps ADRs 0011, 0013–0016, 0018 as historical records — their decisions stand,
+  their wiring into the retired package is superseded;
+- **corrects ADR 0021** (line 82–83): the in-place rename preserves rows but
+  **not embeddings**. The indicator recipe-label changes drift the embedding
+  input, so a re-embed is required; a **full re-embed of all catalog embeddings**
+  (`concepts`, `indicators`, `series`) is acceptable rather than a scoped backfill.
+
+Also closed the last `family`-vocab doc-sweep gaps (#71 residue): ADR 0019 line
+112 `find_sibling_series(indicator_id)`; ADR 0022 lines 27/35/133
+`indicator_variants → indicators` / `indicator_variant → indicator`.
+
+Note: the prior entry below said `src/macro_foundry/agent` was "deleted" — it was
+in fact **renamed** to `depreciated_omit_this_agent` and remains on disk (still
+importable-named but contradictory); treat per ADR 0023's precedence rule.
+
+### [2026-06-13] Rename follow-up — agent wire vocab + embedding labels finish the indicator sweep
+
+Sanity-check cleanup after #68–#71, closing the last `family` vocab that the #68
+"out of scope" note had deferred, plus the stale `family` labels the schema
+rename left inside the embedding recipes. Confirmed `src/macro_foundry/agent` is
+gone (deleted, not just retired) and the heavy `family`-vocab test files import
+it — they fail at collection and will be removed with the agent, so they were
+left untouched. Only the live MCP surface, the onboarding-agent prompts, and the
+embedding recipes needed changing.
+
+Agent wire vocab (item 5):
+
+- `FindSiblingSeriesArgs.family_id` → `indicator_id` (`mcp/read_tools.py` +
+  `mcp/server.py` `find_sibling_series` arg)
+- write-tool apply path (`mcp/write_tools.py`): `_resolve_family` →
+  `_resolve_indicator`; consumed `proposed_data` keys
+  `family_id`/`family_code`/`variant`/`is_primary` →
+  `indicator_id`/`indicator_code`/`label`/`is_default`; `propose_create_series`
+  return key `family_id` → `indicator_id`
+- onboarding-agent `check_db` verdict field `similar_series[].family_id` →
+  `indicator_id` (`onboarding_agent/prompts.py`)
+- `tests/macrodb/test_mcp_read_tools.py` updated to the new arg
+
+Embedding-recipe labels (item 6) — **requires a backfill**:
+
+- `compose_indicator_embedding_input`: `Type: SeriesFamily` → `Type: Indicator`
+- `compose_series_embedding_input`: `Family: …` → `Indicator: …`
+- Both drift the stored `embedding_input_hash`, so an **indicators + series**
+  re-embed is required: `uv run macrodb embeddings backfill`. This is the
+  sanctioned `compose_indicator` / `compose_series` label change in ADR 0020's
+  recipe-change scope table; it supersedes the #68 "pure rename, no backfill"
+  note below. ADR 0020 recipe examples and the two literal-text embed tests
+  (`test_embeddings_service.py`, `test_registration_services.py`) updated to
+  match.
+
+Deliberately left (broken now, pending rewrite under the onboarding agent, all on
+the deleted `macro_foundry.agent` import): `depreciated_omit_this_agent/`,
+`cli/onboard.py`, and `propose_create_series` Path A's `draft.family*` reads.
+
+Verification: `uv run ruff check` clean; module imports clean;
+`uv run pytest tests/macrodb -q -m no_db` green for the touched files. DB-backed
+embedding tests and the actual `embeddings backfill` need a live `macrodb_test`
+run by the operator.
+
 ### [2026-06-13] Issue 71 — documentation sweep: series_family → indicator (ADR 0021)
 
 Terminology sweep across all prose docs to match the schema rename completed in
@@ -119,10 +190,12 @@ the retired `src/macro_foundry/agent` dir (its `DraftProposal.family` /
 `proposed_data` JSON keys are the unchanged producer contract the MCP write tool
 reads); non-schema docs (#71).
 
-Embeddings: a **pure rename** with no semantic change — the `Type: SeriesFamily`
-and `Family:` labels in the composed embedding input are intentionally preserved
-(only code symbols moved), so no `embedding_input_hash` drift and no backfill is
-required.
+Embeddings: at this slice, a **pure rename** with no semantic change — the
+`Type: SeriesFamily` and `Family:` labels in the composed embedding input were
+intentionally preserved (only code symbols moved), so no `embedding_input_hash`
+drift. **Superseded 2026-06-13** (see the top "Rename follow-up" entry): those
+labels were later updated to `Indicator`, which now requires an indicators +
+series `embeddings backfill`.
 
 Verification:
 

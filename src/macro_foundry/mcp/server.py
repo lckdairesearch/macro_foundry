@@ -104,10 +104,10 @@ def _register_read_tools(
         return None if result is None else result.model_dump(mode="json")
 
     @server.tool(name="find_sibling_series")
-    async def find_sibling_series(family_id: str) -> list[dict[str, Any]]:
+    async def find_sibling_series(indicator_id: str) -> list[dict[str, Any]]:
         result = await with_read(
             lambda tools: tools.find_sibling_series(
-                FindSiblingSeriesArgs(family_id=family_id)
+                FindSiblingSeriesArgs(indicator_id=indicator_id)
             ),
         )
         return [series.model_dump(mode="json") for series in result]

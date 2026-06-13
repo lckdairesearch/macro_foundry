@@ -80,14 +80,15 @@ def compose_concept_embedding_input(concept: Concept) -> str:
 
 
 def compose_indicator_embedding_input(indicator: Indicator) -> str:
-    # NOTE: the "Type" / "Family" label strings below are intentionally kept at
-    # their pre-rename wording. They are part of the text fed to the embedding
-    # model, so changing them would drift every stored embedding_input_hash and
-    # force a full backfill. ADR 0021 is a pure rename with embeddings behavior
-    # unchanged; only the code symbols move, not the embedded prose.
+    # NOTE: the "Type" label below is "Indicator" to match the renamed schema
+    # (ADR 0021). This string is part of the text fed to the embedding model, so
+    # this value drifts every stored embedding_input_hash on `indicators` and
+    # requires an indicators-only re-embed (`macrodb embeddings backfill`). This
+    # is the sanctioned `compose_indicator` label change in ADR 0020's
+    # recipe-change scope table.
     return _compose(
         [
-            _line("Type", "SeriesFamily"),
+            _line("Type", "Indicator"),
             _line("Code", indicator.code),
             _line("Name", indicator.name),
             _line("Description", indicator.description),
@@ -118,7 +119,7 @@ def compose_series_embedding_input(series: Series) -> str:
             _line("Unit label", series.unit_label),
             _line("Measure", MEASURE_HUMAN.get(series.measure)),
             _line("Seasonal adjustment", SEASONAL_ADJUSTMENT_HUMAN.get(series.seasonal_adjustment)),
-            _line("Family", f"{indicator.name} ({indicator.code})" if indicator else None),
+            _line("Indicator", f"{indicator.name} ({indicator.code})" if indicator else None),
             _line("Concept", f"{concept.name} ({concept.code})" if concept else None),
         ],
     )

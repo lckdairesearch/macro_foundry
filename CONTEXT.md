@@ -393,7 +393,7 @@ applied`, or `rejected`, or `failed`, or `superseded`. Carries the `requested_by
 
 The line items of a proposal. Each item is one concrete change: insert this
 row, modify this file, run this test, etc. `target_type` identifies what kind
-of entity (concepts, series, series_families, providers, geographies, etc., or
+of entity (concepts, series, indicators, providers, geographies, etc., or
 file/function/test). `action` is the operation. `proposed_data` carries the
 content. `validation_status` tracks whether the item has been validated.
 

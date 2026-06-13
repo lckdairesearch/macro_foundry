@@ -157,7 +157,7 @@ async def test_find_sibling_series_returns_family_series(session: AsyncSession) 
     await session.flush()
     tools = MacrodbReadTools(session)
 
-    result = await tools.find_sibling_series(FindSiblingSeriesArgs(family_id=family.id))
+    result = await tools.find_sibling_series(FindSiblingSeriesArgs(indicator_id=family.id))
 
     assert [series.code for series in result] == [
         "MCP_US_CPI_SIBLING_HEADLINE",

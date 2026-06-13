@@ -109,17 +109,17 @@ semantic tool surface.
 The tool surface required by this node is **similarity-based**,
 because the brief carries no codes. The existing read-only MCP surface
 is built around exact-key lookups (`lookup_concept(code)`,
-`lookup_family(code)`, `find_sibling_series(family_id)`,
+`lookup_indicator(code)`, `find_sibling_series(indicator_id)`,
 `list_series_for_concept(concept_id)`,
 `list_provider_series_for_concept(provider_id, concept_id)`,
 `list_enum_values(table, column)`) which cover drill-down but not
 candidate retrieval from prose. The MCP is extended with a
-similarity-search surface — `search_concepts`, `search_series_families`,
+similarity-search surface — `search_concepts`, `search_indicators`,
 `search_series` — that internally combines a tag-based prefilter, a
 cosine-similarity rerank over per-row embeddings, and full descriptive
 payload in the returned candidates. The catalog-wide embedding
 infrastructure that makes this possible (pgvector columns on
-`concepts`, `series_families`, `series`; an `embed_text` wrapper around
+`concepts`, `indicators`, `series`; an `embed_text` wrapper around
 the OpenAI embeddings API pinned to `text-embedding-3-small` at 1536
 dimensions; a service-function registration path that owns
 embed-on-write; and a `macrodb embeddings backfill` CLI) is ratified

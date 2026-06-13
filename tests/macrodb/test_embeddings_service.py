@@ -72,7 +72,7 @@ def test_compose_indicator_embedding_input_includes_parent_context() -> None:
     )
 
     assert compose_indicator_embedding_input(family) == (
-        "Type: SeriesFamily\n"
+        "Type: Indicator\n"
         "Code: USA_CPI\n"
         "Name: USA CPI\n"
         "Description: Consumer price index family for the United States.\n"
@@ -138,7 +138,7 @@ def test_compose_series_embedding_input_humanizes_enums_and_includes_parents() -
         "Unit label: index\n"
         "Measure: level\n"
         "Seasonal adjustment: not seasonally adjusted\n"
-        "Family: USA CPI (USA_CPI)\n"
+        "Indicator: USA CPI (USA_CPI)\n"
         "Concept: Consumer Price Index (CPI)"
     )
 

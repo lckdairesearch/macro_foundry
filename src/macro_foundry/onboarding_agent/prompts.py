@@ -130,12 +130,12 @@ Procedure:
 
 1. Extract the search signals from `<SeriesBrief>`: concept phrase, geography, frequency, units, transformation, seasonal adjustment, and provider if named.
 2. Run 2–4 similarity searches across concepts, families, and series. The retrieval handles synonymy automatically, so prefer one focused query that names the construct (e.g. "headline inflation rate, United States, monthly") over many synonym variants. Expand the query only if the first round returns no plausible candidates or misses an obvious domain neighbour.
-3. For each plausible candidate, drill into family and sibling series. Compare methodology fields against the brief — focus on what would distinguish a genuinely new series from a trivial transformation of an existing one.
+3. For each plausible candidate, drill into the indicator and its sibling series. Compare methodology fields against the brief — focus on what would distinguish a genuinely new series from a trivial transformation of an existing one.
 4. Classify each candidate into one of:
    - **duplicate** — same concept, same provider, same methodology. The briefed series is already represented.
    - **same_concept_other_feed** — same concept and methodology but different provider or ingestion path. Worth recording, may still be worth ingesting (e.g. for redundancy or earlier release).
-   - **transformation_overlap** — same concept and same family, differing only in a transformation that is already representable from existing siblings (e.g. existing index level → YoY can be derived; do not duplicate).
-   - **adjacent_supersede_candidate** — same concept, different family or methodology, where the briefed series is a strict methodological upgrade over an existing one (e.g. level series superseding a monthly-change series). Surface as a supersede recommendation, not a duplicate.
+   - **transformation_overlap** — same concept and same indicator, differing only in a transformation that is already representable from existing siblings (e.g. existing index level → YoY can be derived; do not duplicate).
+   - **adjacent_supersede_candidate** — same concept, different indicator or methodology, where the briefed series is a strict methodological upgrade over an existing one (e.g. level series superseding a monthly-change series). Surface as a supersede recommendation, not a duplicate.
    - **distinct** — semantically related candidates exist but the briefed series introduces a justifiable new dimension (e.g. CPI YoY rate alongside CPI index level).
 
 Out of scope for this node:
@@ -147,7 +147,7 @@ Out of scope for this node:
 Output:
 
 - `verdict`: one of `no_match`, `duplicate`, `same_concept_other_feed`, `transformation_overlap`, `adjacent_supersede_candidate`, `distinct_with_related`. The strongest applicable classification wins.
-- `similar_series`: list of catalog series the agent considered, each with `series_id`, `family_id`, `concept_id`, `relation` (one of the classifications above), and a one-sentence `rationale` grounded in the methodology comparison. Empty if `verdict` is `no_match`.
+- `similar_series`: list of catalog series the agent considered, each with `series_id`, `indicator_id`, `concept_id`, `relation` (one of the classifications above), and a one-sentence `rationale` grounded in the methodology comparison. Empty if `verdict` is `no_match`.
 - `supersede_candidates`: subset of `similar_series` with `relation == adjacent_supersede_candidate`. Each entry includes a short statement of what the briefed series improves over the existing one.
 - `findings.notes`: short free-text on search coverage, ambiguous matches, or any unrecognised methodology value the downstream nodes should know about.
 
@@ -182,7 +182,7 @@ You are a pure author at this step. By the time you run, the prior nodes have al
 
 ## No inventing details
 
-Every factual claim must come from <VerificationFindings>, an explicit statement in <Messages>, or a cited `web_search` result. If a detail has no source, omit it. Do not infer attributes (frequency, units, SA, currency, geography, release/family membership, provider behavior) from the identifier or from training knowledge.
+Every factual claim must come from <VerificationFindings>, an explicit statement in <Messages>, or a cited `web_search` result. If a detail has no source, omit it. Do not infer attributes (frequency, units, SA, currency, geography, release/indicator membership, provider behavior) from the identifier or from training knowledge.
 
 ## `web_search`
 
@@ -203,7 +203,7 @@ Guidelines:
 * Provider or source
 * Variant or definition, if stated
 * Frequency, units, currency, seasonal adjustment, or transformation, if stated
-* Whether it appears to be a raw source series, a derived/calculated series, or part of a group/family of related series
+* Whether it appears to be a raw source series, a derived/calculated series, or part of a group of related series (an indicator)
 * Any relevant grouping, dashboard, tagging, or hierarchy context mentioned by the user
 
 3. Make the brief useful for the next agent
@@ -215,7 +215,7 @@ Guidelines:
 * When the conversation contains earlier, different identifiers that the user later moved past, follow this DO/DON'T pair:
   - **DO** state the final chosen identifier prominently by its full code and canonical name (e.g., "I want to onboard FRED CPILFESL, Consumer Price Index for All Urban Consumers: All Items Less Food and Energy"). This includes a canonical the agent proposed and the user confirmed. Being vague about the chosen identifier because the history is noisy is wrong.
   - **DON'T** mention the superseded identifiers at all - not as exclusions, not as negations, not as "should not be confused with X", not as "X should not be associated with this series". The next agent does not need to know what the user previously considered.
-  - The one exception that may reference another identifier is a **user-stated structural constraint** (e.g., "do not fold this into the same family as Y"). That is a requirement, not a process-history exclusion, and should be preserved.
+  - The one exception that may reference another identifier is a **user-stated structural constraint** (e.g., "do not fold this into the same indicator as Y"). That is a requirement, not a process-history exclusion, and should be preserved.
 * Prefer "I want to onboard FRED CPIAUCSL, Consumer Price Index for All Urban Consumers: All Items in U.S. City Average, seasonally adjusted, monthly index level" over "I want CPIAUCSL, which we agreed to treat as canonical headline CPI".
 * Prefer "I want to onboard FRED CPILFESL, core CPI ex-food-and-energy, seasonally adjusted, monthly index level" over "I want CPILFESL; CPIAUCSL (headline CPI) should not be associated with this series".
 

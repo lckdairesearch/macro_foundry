@@ -46,7 +46,7 @@ class LookupIndicatorArgs(SchemaModel):
 class FindSiblingSeriesArgs(SchemaModel):
     """Arguments for find_sibling_series."""
 
-    family_id: UUID
+    indicator_id: UUID
 
 
 class ListSeriesForConceptArgs(SchemaModel):
@@ -180,7 +180,7 @@ class MacrodbReadTools:
         result = await self._session.execute(
             select(Series)
             .join(IndicatorVariant, IndicatorVariant.series_id == Series.id)
-            .where(IndicatorVariant.indicator_id == args.family_id)
+            .where(IndicatorVariant.indicator_id == args.indicator_id)
             .order_by(IndicatorVariant.is_default.desc(), Series.code),
         )
         return [SeriesRead.model_validate(series) for series in result.scalars().all()]
