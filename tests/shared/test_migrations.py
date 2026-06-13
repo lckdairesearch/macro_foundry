@@ -141,6 +141,22 @@ async def _assert_round_trip_and_reseed() -> None:
         await app_engine.dispose()
 
 
+async def _reseed_test_database() -> None:
+    app_engine = create_async_engine(settings.db.test_url, pool_pre_ping=True)
+    session_factory = async_sessionmaker(
+        bind=app_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autoflush=False,
+    )
+    try:
+        async with session_factory() as session:
+            await run_seed(session)
+            await session.commit()
+    finally:
+        await app_engine.dispose()
+
+
 async def _assert_catalog_embedding_schema() -> None:
     owner_engine = create_async_engine(settings.db.owner_url, pool_pre_ping=True)
 
@@ -329,3 +345,6 @@ def test_downgrade_to_0011_removes_embedding_schema_but_keeps_extension(
 
     command.upgrade(alembic_config, "head")
     asyncio.run(_assert_catalog_embedding_schema())
+    # The downgrade/upgrade cycle truncates seeded data; restore it so this test
+    # leaves the shared session database in the seeded state later tests expect.
+    asyncio.run(_reseed_test_database())
