@@ -17,8 +17,8 @@ from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
 
 
-revision = "0015"
-down_revision = "0014"
+revision = "0016"
+down_revision = "0015"
 branch_labels = None
 depends_on = None
 

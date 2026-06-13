@@ -17,10 +17,11 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from macro_foundry.config import settings
 from macro_foundry.enums import ProposalType, TargetType
+from macro_foundry.seed import run_seed
 
 
 @pytest.mark.no_db
@@ -126,6 +127,17 @@ async def _assert_rows_renamed_and_constraints_tightened() -> None:
         await engine.dispose()
 
 
+async def _reseed_seed_tables() -> None:
+    engine = create_async_engine(settings.db.test_url, pool_pre_ping=True)
+    session_factory = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False, autoflush=False)
+    try:
+        async with session_factory() as session:
+            await run_seed(session)
+            await session.commit()
+    finally:
+        await engine.dispose()
+
+
 def test_migration_0014_renames_existing_governance_rows(alembic_config: Config) -> None:
     """Rows persisted under the old vocabulary are carried across by 0014."""
 
@@ -136,3 +148,6 @@ def test_migration_0014_renames_existing_governance_rows(alembic_config: Config)
         asyncio.run(_assert_rows_renamed_and_constraints_tightened())
     finally:
         command.upgrade(alembic_config, "head")
+        # Upgrading back to head re-runs 0015_tags_code, whose DELETE FROM tags
+        # empties the shared session seed; restore it for later tests.
+        asyncio.run(_reseed_seed_tables())
