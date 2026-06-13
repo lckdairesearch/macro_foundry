@@ -1,5 +1,5 @@
 // =============================================================
-// macrodb — Schema V6 (member-level observation provenance)
+// macrodb — Schema V7 (semantic-search embeddings + governance audit vocabulary)
 // Layout: tables ordered root → leaf, all FKs written child > parent
 // This gives eraser.io a consistent signal for top-down auto-layout
 //
@@ -16,6 +16,15 @@
 // Note: this is the canonical source of truth for the schema.
 // SQLAlchemy models, Alembic migrations, Pydantic schemas, and tests must
 // agree with this file. If a discrepancy is found, this is authoritative.
+//
+// V7 adds (over V6 member-level observation provenance):
+//   - pgvector embeddings on concepts, indicators, series — embedding vector(1536)
+//     + embedding_model + embedding_input_hash; all nullable, populated out-of-band;
+//     each backed by an HNSW cosine index (ix_<table>_embedding_hnsw)
+//   - change_proposals.applied_by + change_proposals.source_agent_session_id audit columns
+//   - widened governance enums: target_type adds credential_ref | enum_value;
+//     action adds suggest_human_apply | suggest_credential_provisioning | suggest_enum_addition;
+//     validation_status adds pending_human_apply | applied_by_operator | declined_by_operator
 //
 // Intentionally NOT enforced (decisions to keep, not gaps):
 //   - No `reference_kind IS NOT NULL → reference_year IS NOT NULL` CHECK
@@ -54,6 +63,9 @@ concepts [icon: brain, color: purple] {
   code string unique              // e.g. CPI, GDP, UNEMPLOYMENT_RATE, CURRENT_ACCOUNT_BALANCE
   name string                     // curated taxonomy; added through API/admin/bootstrap flows
   description string              // nullable
+  embedding vector                // nullable; 1536-dim; semantic search; HNSW cosine index ix_concepts_embedding_hnsw
+  embedding_model string          // nullable; model id that produced the embedding
+  embedding_input_hash string     // nullable; hash of embedded input text, for staleness detection
   created_at timestamp
   updated_at timestamp
 }
@@ -105,6 +117,9 @@ series [icon: activity, color: green] {
   name string
   alt_name text[]                 // nullable; curated aliases (provider title, informal names) used as a search aid; provider-agnostic, distinct from series_sources.external_name
   description string              // nullable but strongly encouraged
+  embedding vector                // nullable; 1536-dim; semantic search; HNSW cosine index ix_series_embedding_hnsw
+  embedding_model string          // nullable; model id that produced the embedding
+  embedding_input_hash string     // nullable; hash of embedded input text, for staleness detection
   origin_type string              // ENUM: ingested | derived | both
   geography_id uuid fk            // FK -> geographies.id
   frequency string                // ENUM: D | W | M | Q | S | A; S for semi-annual
@@ -134,6 +149,9 @@ indicators [icon: layers, color: purple] {
   code string unique              // e.g. JP_CPI, US_CPI, JP_HOUSEHOLD_CONSUMPTION
   name string
   description string              // nullable
+  embedding vector                // nullable; 1536-dim; semantic search; HNSW cosine index ix_indicators_embedding_hnsw
+  embedding_model string          // nullable; model id that produced the embedding
+  embedding_input_hash string     // nullable; hash of embedded input text, for staleness detection
   concept_id uuid fk              // FK -> concepts.id
   geography_id uuid fk            // FK -> geographies.id
   created_at timestamp
@@ -334,6 +352,8 @@ change_proposals [icon: clipboard, color: purple] {
   approved_by string              // nullable
   approved_at timestamp           // nullable
   applied_at timestamp            // nullable
+  applied_by string               // nullable; operator/agent that applied the proposal
+  source_agent_session_id string  // nullable; originating agent session for traceability
   superseded_by_proposal_id uuid  // nullable; FK -> change_proposals.id; set when status = superseded
   created_at timestamp
   updated_at timestamp
@@ -343,13 +363,13 @@ change_proposal_items [icon: list-checks, color: purple] {
   id uuid pk
   proposal_id uuid fk             // FK -> change_proposals.id
   item_type string                // ENUM: db_row | code_change | migration | test | validation | documentation
-  target_type string              // ENUM: concepts | series | indicators | series_sources | ingestion_feeds | file | function | test | providers | provider_catalogs | derived_series | derivation_inputs | geographies | tags | indicator_variants | geography_memberships
-  action string                   // ENUM: insert | update | deactivate | create_file | modify_file | run_test | validate
+  target_type string              // ENUM: concepts | series | indicators | series_sources | ingestion_feeds | file | function | test | providers | provider_catalogs | derived_series | derivation_inputs | geographies | tags | indicator_variants | geography_memberships | credential_ref | enum_value
+  action string                   // ENUM: insert | update | deactivate | create_file | modify_file | run_test | validate | suggest_human_apply | suggest_credential_provisioning | suggest_enum_addition
   target_id uuid                  // nullable; existing DB row if update or deactivate; polymorphic, no FK enforcement
   target_ref string               // nullable; file path, function path, artifact path
   proposed_data jsonb             // nullable; proposed DB row or structured change summary
   diff_summary string             // nullable
-  validation_status string        // ENUM: pending | passed | failed | warning | not_required
+  validation_status string        // ENUM: pending | passed | failed | warning | not_required | pending_human_apply | applied_by_operator | declined_by_operator
   validation_notes string         // nullable
   created_at timestamp
   updated_at timestamp
