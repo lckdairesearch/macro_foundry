@@ -13,7 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from macro_foundry.backend.deps import get_session, verify_token
-from macro_foundry.models import Series, SeriesTag
+from macro_foundry.models import Series
+from macro_foundry.models.concept import Concept
+from macro_foundry.models.series import Indicator, IndicatorVariant
+from macro_foundry.models.tag import ConceptTag
 from macro_foundry.schemas import GeographyRead, SeriesCreate, SeriesRead, SeriesReadDetail, SeriesUpdate, TagRead
 
 router = APIRouter(prefix="/series", tags=["series"])
@@ -22,18 +25,20 @@ router = APIRouter(prefix="/series", tags=["series"])
 def _series_detail_statement() -> Select[tuple[Series]]:
     return select(Series).options(
         selectinload(Series.geography),
-        selectinload(Series.series_tags).selectinload(SeriesTag.tag),
+        selectinload(Series.indicator_variant)
+        .selectinload(IndicatorVariant.indicator)
+        .selectinload(Indicator.concept)
+        .selectinload(Concept.concept_tags)
+        .selectinload(ConceptTag.tag),
     )
 
 
 def _serialize_series_detail(series: Series) -> SeriesReadDetail:
     base_payload = SeriesRead.model_validate(series).model_dump()
+    iv = series.indicator_variant
+    concept_tags = iv.indicator.concept.concept_tags if iv and iv.indicator and iv.indicator.concept else []
     tags = sorted(
-        (
-            TagRead.model_validate(series_tag.tag)
-            for series_tag in series.series_tags
-            if series_tag.tag is not None
-        ),
+        (TagRead.model_validate(ct.tag) for ct in concept_tags if ct.tag is not None),
         key=lambda tag: tag.name,
     )
     return SeriesReadDetail(

@@ -21,7 +21,7 @@ from macro_foundry.enums import (
     UnitKind,
     UnitScale,
 )
-from macro_foundry.models import Geography, Series, SeriesTag, Tag
+from macro_foundry.models import Concept, ConceptTag, Geography, Indicator, IndicatorVariant, Series, Tag
 
 
 async def _create_country(session: AsyncSession, *, code: str = "USA", name: str = "United States") -> Geography:
@@ -171,17 +171,30 @@ async def test_patch_series_rejects_duplicate_code(
 
 
 @pytest.mark.asyncio
-async def test_get_series_returns_geography_and_tags(
+async def test_get_series_returns_geography_and_tags_transitively(
     client: AsyncClient,
     session: AsyncSession,
     auth_headers: dict[str, str],
 ) -> None:
     geography = await _create_country(session)
     series = await _create_series(session, geography)
-    tag = Tag(code="INFLATION", name="inflation")
+
+    concept = Concept(code="CPI", name="Consumer Price Index")
+    session.add(concept)
+    await session.flush()
+
+    indicator = Indicator(code="US_CPI", name="US CPI", concept_id=concept.id, geography_id=geography.id)
+    session.add(indicator)
+    await session.flush()
+
+    session.add(IndicatorVariant(indicator_id=indicator.id, series_id=series.id, is_default=True))
+    await session.flush()
+
+    tag = Tag(code="TEST_TOPICAL_TAG", name="Test Topical Tag")
     session.add(tag)
     await session.flush()
-    session.add(SeriesTag(series_id=series.id, tag_id=tag.id))
+
+    session.add(ConceptTag(concept_id=concept.id, tag_id=tag.id))
     await session.commit()
 
     response = await client.get(f"/api/v1/series/{series.id}", headers=auth_headers)
@@ -189,4 +202,20 @@ async def test_get_series_returns_geography_and_tags(
     assert response.status_code == HTTPStatus.OK
     payload = response.json()
     assert payload["geography"]["code"] == geography.code
-    assert [tag_payload["name"] for tag_payload in payload["tags"]] == ["inflation"]
+    assert [t["name"] for t in payload["tags"]] == ["Test Topical Tag"]
+
+
+@pytest.mark.asyncio
+async def test_get_series_returns_empty_tags_when_no_indicator_variant(
+    client: AsyncClient,
+    session: AsyncSession,
+    auth_headers: dict[str, str],
+) -> None:
+    geography = await _create_country(session)
+    series = await _create_series(session, geography, code="US_STANDALONE")
+    await session.commit()
+
+    response = await client.get(f"/api/v1/series/{series.id}", headers=auth_headers)
+
+    assert response.status_code == HTTPStatus.OK
+    assert response.json()["tags"] == []

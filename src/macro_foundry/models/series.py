@@ -34,7 +34,6 @@ if TYPE_CHECKING:
     from macro_foundry.models.geography import Geography
     from macro_foundry.models.observation import Observation
     from macro_foundry.models.provider import SeriesSource
-    from macro_foundry.models.tag import SeriesTag
 
 
 class Series(TimestampedBase):
@@ -159,12 +158,6 @@ class Series(TimestampedBase):
         foreign_keys=lambda: [Series.replaced_by_series_id],
         lazy="selectin",
         uselist=False,
-    )
-    series_tags: Mapped[list["SeriesTag"]] = relationship(
-        "SeriesTag",
-        back_populates="series",
-        lazy="selectin",
-        passive_deletes=True,
     )
     indicator_variant: Mapped["IndicatorVariant | None"] = relationship(
         "IndicatorVariant",
