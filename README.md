@@ -36,6 +36,34 @@ uv run macrodb onboard --target dev --cost-cap 2.00
 
 It needs `OPENAI_API_KEY` set and makes real LLM calls — `--cost-cap` is a hard spend limit. `/save` or Ctrl-D checkpoints and exits; resume with `uv run macrodb onboard --target dev --resume <session-id>`.
 
+### Inspect the agent graphs in LangGraph Studio
+
+To step through the onboarding graphs (`scope_series_onboarding`, `macrodb_chat`) visually with hot reload:
+
+```bash
+uv run langgraph dev
+```
+
+This starts the LangGraph API server on `http://127.0.0.1:2024` and opens LangGraph Studio in your default browser. Graphs and env are read from [langgraph.json](langgraph.json).
+
+**Open Studio in a new Chrome window (instead of Safari).** `langgraph dev` opens via Python's `webbrowser`, which honours the `BROWSER` env var — but it splits `BROWSER` on whitespace, so the space in `/Applications/Google Chrome.app/...` can't be used directly. (Symlinking the binary doesn't work either: Chrome resolves its bundled framework relative to its executable path and crashes when launched through a symlink.) Create a small wrapper script that execs the real binary:
+
+```bash
+cat > /opt/homebrew/bin/chrome <<'EOF'
+#!/bin/sh
+exec "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" "$@"
+EOF
+chmod +x /opt/homebrew/bin/chrome
+```
+
+Then launch with `BROWSER` pointing at it:
+
+```bash
+BROWSER='chrome --new-window %s' uv run langgraph dev
+```
+
+`--new-window` makes Chrome open a fresh window (export the line in your shell profile to make it the default). Alternatively, set Chrome as your macOS default browser (System Settings → Desktop & Dock → Default web browser), or pass `--no-browser` to skip opening a browser entirely.
+
 ## Status
 
 | Component | State |
