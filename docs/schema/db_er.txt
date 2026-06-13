@@ -72,7 +72,8 @@ concepts [icon: brain, color: purple] {
 
 tags [icon: tag, color: orange] {
   id uuid pk
-  name string unique
+  code string unique              // canonical UPPERCASE key, modeled like concepts (no code_standard)
+  name string                     // human display label
   created_at timestamp
   updated_at timestamp
 }

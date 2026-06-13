@@ -59,7 +59,7 @@ async def test_api_smoke_flows_from_seeded_geography_to_observations(
     tag_response = await client.post(
         "/api/v1/tags/",
         headers=auth_headers,
-        json={"name": "macro_foundry_smoke"},
+        json={"code": "MACRO_FOUNDRY_SMOKE", "name": "macro_foundry_smoke"},
     )
     assert tag_response.status_code == HTTPStatus.CREATED
     tag_id = tag_response.json()["id"]

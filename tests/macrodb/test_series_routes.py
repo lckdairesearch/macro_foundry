@@ -178,7 +178,7 @@ async def test_get_series_returns_geography_and_tags(
 ) -> None:
     geography = await _create_country(session)
     series = await _create_series(session, geography)
-    tag = Tag(name="inflation")
+    tag = Tag(code="INFLATION", name="inflation")
     session.add(tag)
     await session.flush()
     session.add(SeriesTag(series_id=series.id, tag_id=tag.id))

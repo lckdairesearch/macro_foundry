@@ -334,7 +334,7 @@ Alembic owns schema. A separate Typer CLI owns seed data. They do not mix.
 
 Seed data lives in `src/macro_foundry/seed/data/` as typed Python (not YAML/JSON —
 the data is curated by developers and benefits from type-checked enum constants).
-Where the schema exposes a stable natural key (`geographies.code`, `tags.name`,
+Where the schema exposes a stable natural key (`geographies.code`, `tags.code`,
 `providers.name`), runners use `INSERT ... ON CONFLICT DO UPDATE`. Where V3 does
 not expose a uniqueness constraint (`provider_catalogs`, `geography_memberships`),
 the seed runner reconciles by curated natural keys before insert/update. Re-running
