@@ -12,6 +12,50 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-13] Issue 69 — governance stored-enum values follow the indicator rename
+
+Brought the governance audit vocabulary in line with the `series_family →
+indicator` table rename (#68). These values are *persisted* under named CHECK
+constraints (no native PG enums), so this is a stored-data change on a different
+table than #68, with its own data migration.
+
+Value renames:
+
+- `change_proposal_items.target_type` `series_families → indicators`
+- `change_proposal_items.target_type` `series_family_members → indicator_variants`
+- `change_proposals.proposal_type` `add_family → add_indicator`
+
+Layers touched:
+
+- `enums/governance.py` — member identifiers + string values renamed
+  (`TargetType.INDICATORS`, `TargetType.INDICATOR_VARIANTS`,
+  `ProposalType.ADD_INDICATOR`); member references updated in
+  `mcp/write_tools.py` and `tests/macrodb/test_write_mcp.py`
+- Alembic `0014_rename_governance_indicator_values.py` (down_revision `0013`,
+  single head) follows the ADR-0014 enum-gap pattern: widen each named CHECK to
+  the old∪new union → `UPDATE` existing rows old→new → tighten CHECK to the new
+  set. No VARCHAR widening needed — renamed values are no longer than the
+  existing maxima (`geography_memberships` / `add_provider_series`). Downgrade
+  reverses symmetrically.
+- V3 source `docs/schema/db_er.txt` proposal_type enum comment updated to
+  `add_indicator` (target_type line already carried `indicators` /
+  `indicator_variants` from #68).
+
+Verification:
+
+- `uv run pytest tests/shared/test_governance_enum_rename.py -q` green — new
+  file covering the enum vocabulary and a migration roundtrip that inserts rows
+  under the old vocabulary at `0013`, upgrades, and asserts they are renamed and
+  the tightened CHECK rejects the retired values.
+- `uv run pytest tests/macrodb/test_write_mcp.py tests/shared/test_migrations.py tests/test_migrations.py tests/macrodb/test_apply_catalog.py tests/macrodb/test_executor_nodes.py -q` green.
+- `uv run pytest tests/macrodb -q -m no_db` → `238 passed, 1 failed`; the single
+  failure is the pre-existing `test_onboarding_scope`
+  `FakeModel.with_structured_output(strict=…)` signature mismatch noted in the
+  #68 entry, on a file this slice never touched.
+- `uv run macrodb db migrate --target {test,dev}` both at `0014`;
+  `uv run alembic heads` reports a single head `0014`.
+- `uv run ruff check` clean across all changed files.
+
 ### [2026-06-13] Issue 68 — core rename `series_family → indicator` (ADR 0021)
 
 Atomic rename of the catalog's middle rung across every layer that shares

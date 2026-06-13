@@ -370,7 +370,7 @@ async def test_apply_approved_proposal_materializes_family_with_embeddings(
 
     proposal = ChangeProposal(
         title="approved family proposal",
-        proposal_type=ProposalType.ADD_FAMILY,
+        proposal_type=ProposalType.ADD_INDICATOR,
         status=ProposalStatus.APPROVED,
         requested_by=RequestedBy.AGENT,
         risk_level=RiskLevel.LOW,
@@ -383,7 +383,7 @@ async def test_apply_approved_proposal_materializes_family_with_embeddings(
         ChangeProposalItem(
             proposal_id=proposal.id,
             item_type=ItemType.DB_ROW,
-            target_type=TargetType.SERIES_FAMILIES,
+            target_type=TargetType.INDICATORS,
             action=Action.INSERT,
             proposed_data={
                 "code": "APPLIED_FAMILY_66",
@@ -475,7 +475,7 @@ async def test_apply_approved_proposal_materializes_series_with_current_family_c
             ChangeProposalItem(
                 proposal_id=proposal.id,
                 item_type=ItemType.DB_ROW,
-                target_type=TargetType.SERIES_FAMILY_MEMBERS,
+                target_type=TargetType.INDICATOR_VARIANTS,
                 action=Action.INSERT,
                 proposed_data={
                     "family_code": family.code,
@@ -567,7 +567,7 @@ async def test_apply_approved_proposal_rolls_back_partial_writes_when_embedding_
             ChangeProposalItem(
                 proposal_id=proposal.id,
                 item_type=ItemType.DB_ROW,
-                target_type=TargetType.SERIES_FAMILIES,
+                target_type=TargetType.INDICATORS,
                 action=Action.INSERT,
                 proposed_data={
                     "code": "ROLLBACK_FAMILY_66",

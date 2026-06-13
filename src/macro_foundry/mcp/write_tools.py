@@ -385,9 +385,9 @@ class MacrodbWriteTools:
     ) -> list[ChangeProposalItem]:
         priority = {
             TargetType.CONCEPTS: 0,
-            TargetType.SERIES_FAMILIES: 1,
+            TargetType.INDICATORS: 1,
             TargetType.SERIES: 2,
-            TargetType.SERIES_FAMILY_MEMBERS: 3,
+            TargetType.INDICATOR_VARIANTS: 3,
         }
         return sorted(
             items,
@@ -412,7 +412,7 @@ class MacrodbWriteTools:
             )
             item.target_id = concept.id
             item.target_ref = concept.code
-        elif item.target_type == TargetType.SERIES_FAMILIES:
+        elif item.target_type == TargetType.INDICATORS:
             family = await register_indicator(
                 self._session,
                 IndicatorCreate.model_validate(
@@ -440,7 +440,7 @@ class MacrodbWriteTools:
             )
             item.target_id = series.id
             item.target_ref = series.code
-        elif item.target_type == TargetType.SERIES_FAMILY_MEMBERS:
+        elif item.target_type == TargetType.INDICATOR_VARIANTS:
             family = await self._resolve_family(data)
             series = await self._resolve_series(data)
             family_member = IndicatorVariant(

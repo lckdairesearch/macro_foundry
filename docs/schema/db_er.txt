@@ -323,7 +323,7 @@ observations [icon: database, color: red] {
 change_proposals [icon: clipboard, color: purple] {
   id uuid pk
   title string
-  proposal_type string            // ENUM: add_provider_series | add_derived_series | add_family | add_concept | code_and_db_change | schema_change | mixed
+  proposal_type string            // ENUM: add_provider_series | add_derived_series | add_indicator | add_concept | code_and_db_change | schema_change | mixed
   status string                   // ENUM: proposed | approved | applied | rejected | failed | superseded
   requested_by string             // ENUM: user | agent | system
   created_by_agent string         // nullable; specific agent identifier when requested_by = agent e.g. "claude-opus-4-7", "gpt-4o"
