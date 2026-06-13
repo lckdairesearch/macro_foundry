@@ -1,7 +1,7 @@
 """SQLAdmin views for tag-domain models."""
 
 from macro_foundry.backend.admin._base import BaseModelView, relation_formatter
-from macro_foundry.models import SeriesTag, Tag
+from macro_foundry.models import ConceptTag, Tag
 
 
 class TagAdmin(BaseModelView, model=Tag):
@@ -16,18 +16,18 @@ class TagAdmin(BaseModelView, model=Tag):
     form_columns = [Tag.code, Tag.name]
 
 
-class SeriesTagAdmin(BaseModelView, model=SeriesTag):
-    name = "Series tag"
-    name_plural = "Series tags"
-    category = "Series Catalog"
-    category_icon = "ti ti-chart-line"
-    column_list = [SeriesTag.series, SeriesTag.tag]
-    column_searchable_list = ["series.code", "series.name", "tag.name"]
+class ConceptTagAdmin(BaseModelView, model=ConceptTag):
+    name = "Concept tag"
+    name_plural = "Concept tags"
+    category = "Core Curation"
+    category_icon = "ti ti-tags"
+    column_list = [ConceptTag.concept, ConceptTag.tag]
+    column_searchable_list = ["concept.code", "concept.name", "tag.name"]
     column_formatters = {
-        SeriesTag.series: relation_formatter("series"),
-        SeriesTag.tag: relation_formatter("tag"),
+        ConceptTag.concept: relation_formatter("concept"),
+        ConceptTag.tag: relation_formatter("tag"),
     }
-    form_columns = [SeriesTag.series, SeriesTag.tag]
+    form_columns = [ConceptTag.concept, ConceptTag.tag]
 
 
-__all__ = ["SeriesTagAdmin", "TagAdmin"]
+__all__ = ["ConceptTagAdmin", "TagAdmin"]

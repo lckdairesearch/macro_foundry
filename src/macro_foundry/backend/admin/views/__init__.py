@@ -18,7 +18,7 @@ from macro_foundry.backend.admin.views.series import (
     IndicatorVariantAdmin,
     SeriesHierarchyEdgeAdmin,
 )
-from macro_foundry.backend.admin.views.tag import SeriesTagAdmin, TagAdmin
+from macro_foundry.backend.admin.views.tag import ConceptTagAdmin, TagAdmin
 
 ADMIN_VIEWS = (
     GeographyAdmin,
@@ -34,7 +34,7 @@ ADMIN_VIEWS = (
     IndicatorAdmin,
     IndicatorVariantAdmin,
     SeriesHierarchyEdgeAdmin,
-    SeriesTagAdmin,
+    ConceptTagAdmin,
     DerivedSeriesAdmin,
     DerivationInputAdmin,
     ObservationAdmin,

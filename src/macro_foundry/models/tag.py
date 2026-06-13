@@ -12,7 +12,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from macro_foundry.db.base import Base, TimestampedBase
 
 if TYPE_CHECKING:
-    from macro_foundry.models.series import Series
+    from macro_foundry.models.concept import Concept
 
 
 class Tag(TimestampedBase):
@@ -24,22 +24,22 @@ class Tag(TimestampedBase):
     code: Mapped[str] = mapped_column(String(), nullable=False)
     name: Mapped[str] = mapped_column(String(), nullable=False)
 
-    series_tags: Mapped[list["SeriesTag"]] = relationship(
-        "SeriesTag",
+    concept_tags: Mapped[list["ConceptTag"]] = relationship(
+        "ConceptTag",
         back_populates="tag",
         lazy="selectin",
         passive_deletes=True,
     )
 
 
-class SeriesTag(Base):
-    """Canonical V3 series-tag junction table with a composite primary key."""
+class ConceptTag(Base):
+    """Concept-grain topical tag junction (ADR 0022)."""
 
-    __tablename__ = "series_tags"
+    __tablename__ = "concept_tags"
 
-    series_id: Mapped[uuid.UUID] = mapped_column(
+    concept_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("series.id", ondelete="CASCADE"),
+        ForeignKey("concepts.id", ondelete="CASCADE"),
         primary_key=True,
     )
     tag_id: Mapped[uuid.UUID] = mapped_column(
@@ -48,16 +48,16 @@ class SeriesTag(Base):
         primary_key=True,
     )
 
-    series: Mapped["Series"] = relationship(
-        "Series",
-        back_populates="series_tags",
+    concept: Mapped["Concept"] = relationship(
+        "Concept",
+        back_populates="concept_tags",
         lazy="selectin",
     )
     tag: Mapped["Tag"] = relationship(
         "Tag",
-        back_populates="series_tags",
+        back_populates="concept_tags",
         lazy="selectin",
     )
 
 
-__all__ = ["SeriesTag", "Tag"]
+__all__ = ["ConceptTag", "Tag"]

@@ -14,6 +14,7 @@ _EMBEDDING_DIMENSIONS = 1536
 
 if TYPE_CHECKING:
     from macro_foundry.models.series import Indicator
+    from macro_foundry.models.tag import ConceptTag
 
 
 class Concept(TimestampedBase):
@@ -31,6 +32,12 @@ class Concept(TimestampedBase):
 
     indicators: Mapped[list["Indicator"]] = relationship(
         "Indicator",
+        back_populates="concept",
+        lazy="selectin",
+        passive_deletes=True,
+    )
+    concept_tags: Mapped[list["ConceptTag"]] = relationship(
+        "ConceptTag",
         back_populates="concept",
         lazy="selectin",
         passive_deletes=True,

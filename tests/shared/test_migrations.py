@@ -33,7 +33,7 @@ EXPECTED_TABLES = {
     "series",
     "series_hierarchy_edges",
     "series_sources",
-    "series_tags",
+    "concept_tags",
     "tags",
 }
 

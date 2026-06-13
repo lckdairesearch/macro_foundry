@@ -97,15 +97,15 @@ async def test_api_smoke_flows_from_seeded_geography_to_observations(
     )
     assert family_member_response.status_code == HTTPStatus.CREATED
 
-    series_tag_response = await client.post(
-        "/api/v1/series-tags/",
+    concept_tag_response = await client.post(
+        "/api/v1/concept-tags/",
         headers=auth_headers,
         json={
-            "series_id": series_id,
+            "concept_id": concept_id,
             "tag_id": tag_id,
         },
     )
-    assert series_tag_response.status_code == HTTPStatus.CREATED
+    assert concept_tag_response.status_code == HTTPStatus.CREATED
 
     series_detail_response = await client.get(f"/api/v1/series/{series_id}", headers=auth_headers)
     assert series_detail_response.status_code == HTTPStatus.OK
