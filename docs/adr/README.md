@@ -34,6 +34,7 @@ references and supersedes the old one — don't edit the old one.
 | [0021](0021-rename-series-family-to-indicator.md) | Rename `series_family` to `indicator` | Accepted |
 | [0022](0022-concept-grained-topical-tags.md) | Concept-grained topical tags | Proposed |
 | [0023](0023-retire-legacy-agent-package.md) | Retire the legacy `agent` package; `onboarding_agent` is canonical | Accepted (amends ADR 0021) |
+| [0024](0024-agent-mcp-connection-lifecycle.md) | Agent reaches macrodb-mcp over a persistent per-run session | Proposed |
 
 ## Format
 

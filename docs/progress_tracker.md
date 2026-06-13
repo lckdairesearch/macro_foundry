@@ -2719,4 +2719,42 @@ Deviation note:
   (`FRED CPIAUCSL`, `headline inflation FRED CPILFESL`, `give me CPI`) are
   listed in the notebook for manual run by the developer
 
+### [2026-06-13] MVP MCP-chat spike + ADR 0024 (agent↔macrodb-mcp connection lifecycle)
+
+Done:
+
+- added a throwaway spike to de-risk ADR 0019's core seam: a single
+  `create_react_agent` node bound to the read-only `macrodb-mcp` tools,
+  runnable on `langgraph dev` as the `macrodb_chat` graph
+  - `src/macro_foundry/onboarding_agent/mcp_chat.py` (new)
+  - `langgraph.json` registers `macrodb_chat`
+  - deps: `langchain-mcp-adapters` (runtime), `langgraph-cli[inmem]` (dev)
+  - committed `231e645`, labelled `test(agents):` — spike, not production
+- verified end to end: the node spawns `macrodb serve mcp --target dev` over
+  stdio, loads all 12 read tools, and runs a tool-calling chat loop
+
+Findings:
+
+- dev and test catalogs are **both empty** (0 concepts / families / series),
+  so semantic `search_*` returns `[]`; the agent's earlier "rich" answer was
+  a hallucination over empty results. Canonical bootstrap
+  (`macrodb db bootstrap fred-us-macro --target dev`) has not been run; that
+  path embeds-on-write via the registration helpers.
+- read surface is semantic-search-only: there is no list/browse tool, so
+  "what concepts do I have" has nothing to enumerate with — a real gap for
+  human-facing chat, distinct from the `check_db` retrieval-from-prose use.
+- `search_concepts("")` 400s at the embeddings API (empty-string input);
+  should be guarded.
+
+ADR 0024 (Proposed):
+
+- `docs/adr/0024-agent-mcp-connection-lifecycle.md` — runtime nodes must
+  reach `macrodb-mcp` over **one persistent session per graph run**, never
+  `MultiServerMCPClient.get_tools()` over stdio (which re-spawns the server
+  subprocess — new interpreter, engine, and Postgres pool — on every tool
+  call). Transport stays stdio for now; `macrodb-mcp` as a streamable-HTTP
+  service is noted as the expected prod direction but deliberately not
+  decided here (narrow scope per user).
+- `docs/adr/README.md` index updated for ADR 0024
+
 ### [Future entries go above this line]
