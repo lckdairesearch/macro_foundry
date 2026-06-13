@@ -12,6 +12,49 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-13] Issues 72–75 — concept-grained topical tags (ADR 0022)
+
+Regrained the topical tag taxonomy from `series` to `concept` and gave `tags`
+a canonical `code` key, per ADR 0022. The `series_tags` junction was inert
+(nothing ever constructed a row), so this is a clean drop-and-recreate with no
+data migration.
+
+Schema / model changes:
+
+- `tags` gains a `code` (UPPERCASE canonical key, `uq_tags_code`); `name`
+  becomes free display text. Modeled like `concepts` — no `code_standard`.
+- `series_tags (series_id, tag_id)` dropped; `concept_tags (concept_id, tag_id)`
+  created with composite PK and `ON DELETE CASCADE` FKs.
+- `SeriesTag → ConceptTag`; `Series.series_tags` removed,
+  `Concept.concept_tags` added; schemas, admin view, and CRUD router renamed
+  (`/series-tags → /concept-tags`).
+- Series detail API now derives tags transitively via
+  `indicator_variant → indicator → concept → concept_tags → tag`
+  (deeper `selectinload`, no lazy loading); empty when a series has no variant.
+
+Taxonomy: the 7 legacy subject names replaced by the 10-category topical set
+(ADR 0022 §3), seeded as `(code, name)` tuples and upserted on `code`:
+`PRICES`, `MONETARY_BANKING`, `POPULATION_LABOR`,
+`PRODUCTION_BUSINESS_ACTIVITY`, `RETAIL_CONSUMPTION`, `NATIONAL_ACCOUNTS`,
+`GOVERNMENT_FISCAL`, `INTERNATIONAL`, `FINANCIAL_INDICATORS`, `OTHER`.
+
+Migrations: `0014_tags_code` (add `code`, swap unique constraint, drop seed) and
+`0015_concept_tags` (drop `series_tags`, create `concept_tags`), chained on the
+`0013` rename head as that earlier entry anticipated.
+
+Governance: codified the UPPERCASE / SCREAMING_SNAKE `code` casing rule in
+`CONTEXT.md` (convention-only, not validator/CHECK-enforced — ADR 0022 §4);
+`architecture.md` natural-key reference moved `tags.name → tags.code`;
+`code_standards.md` composite-PK junction examples updated to `concept_tags` /
+`indicator_variants`.
+
+Also synced `db_er.txt` to the V7 baseline (embeddings + governance audit
+vocabulary) the branch had not yet picked up, then applied the tag regrain on
+top, so the canonical schema is whole rather than V6-with-tags.
+
+Still owed (follow-on, not this slice): populating `concept_tags` — a curated
+`concept_code → [tag_code]` seed — which the concept grain makes tractable.
+
 ### [2026-06-13] Issue 68 — core rename `series_family → indicator` (ADR 0021)
 
 Atomic rename of the catalog's middle rung across every layer that shares

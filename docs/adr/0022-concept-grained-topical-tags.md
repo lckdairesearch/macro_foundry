@@ -1,6 +1,6 @@
 # ADR 0022 — Concept-grained topical tags
 
-**Status:** Proposed
+**Status:** Accepted
 
 **Date:** 2026-06-13
 

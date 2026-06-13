@@ -271,7 +271,7 @@ create_schema, update_schema, read_schema, ...)` factory
   bearer auth dep
 - One router file per simple table (concepts, tags, providers, provider_catalogs,
   geographies, geography_memberships, series_families, series_family_members,
-  series_tags, series_sources, derived_series, derivation_inputs,
+  concept_tags, series_sources, derived_series, derivation_inputs,
   ingestion_feeds, both run_logs, change_proposals, change_proposal_items),
   each a one-liner registration
 - `src/macro_foundry/backend/main.py` mounts all routers under `/api/v1`

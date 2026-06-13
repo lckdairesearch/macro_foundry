@@ -13,10 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from macro_foundry.backend.deps import get_session, verify_token
-from macro_foundry.models import Series
-from macro_foundry.models.concept import Concept
-from macro_foundry.models.series import Indicator, IndicatorVariant
-from macro_foundry.models.tag import ConceptTag
+from macro_foundry.models import Concept, ConceptTag, Indicator, IndicatorVariant, Series
 from macro_foundry.schemas import GeographyRead, SeriesCreate, SeriesRead, SeriesReadDetail, SeriesUpdate, TagRead
 
 router = APIRouter(prefix="/series", tags=["series"])
