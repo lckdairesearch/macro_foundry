@@ -1,5 +1,7 @@
 """Registered API routers for the backend."""
 
+from macro_foundry.backend.api.categories import router as categories_router
+from macro_foundry.backend.api.category_edges import router as category_edges_router
 from macro_foundry.backend.api.change_proposal_items import router as change_proposal_items_router
 from macro_foundry.backend.api.change_proposals import router as change_proposals_router
 from macro_foundry.backend.api.computation_run_logs import router as computation_run_logs_router
@@ -19,6 +21,8 @@ from macro_foundry.backend.api.series_hierarchy_edges import router as series_hi
 from macro_foundry.backend.api.series_sources import router as series_sources_router
 
 API_ROUTERS = (
+    categories_router,
+    category_edges_router,
     change_proposal_items_router,
     change_proposals_router,
     computation_run_logs_router,

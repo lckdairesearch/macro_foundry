@@ -31,16 +31,13 @@ TRUNCATE TABLE
     ingestion_feed_members,
     ingestion_feeds,
     series_sources,
-    concept_tags,
     series_hierarchy_edges,
-    indicator_variants,
-    indicators,
     series,
+    category_edges,
+    categories,
     provider_catalogs,
     providers,
     geography_memberships,
-    tags,
-    concepts,
     geographies
 RESTART IDENTITY CASCADE
 """

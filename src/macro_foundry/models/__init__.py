@@ -1,5 +1,6 @@
 """SQLAlchemy model exports for the full V3 schema."""
 
+from macro_foundry.models.category import Category, CategoryEdge
 from macro_foundry.models.derived import DerivationInput, DerivedSeries
 from macro_foundry.models.geography import Geography, GeographyMembership
 from macro_foundry.models.governance import ChangeProposal, ChangeProposalItem
@@ -10,6 +11,8 @@ from macro_foundry.models.run_log import ComputationRunLog, IngestionRunLog, Ing
 from macro_foundry.models.series import Series, SeriesHierarchyEdge
 
 __all__ = [
+    "Category",
+    "CategoryEdge",
     "ChangeProposal",
     "ChangeProposalItem",
     "ComputationRunLog",

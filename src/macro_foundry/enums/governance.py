@@ -42,6 +42,7 @@ class ItemType(str, Enum):
 
 
 class TargetType(str, Enum):
+    CATEGORIES = "categories"
     SERIES = "series"
     SERIES_SOURCES = "series_sources"
     INGESTION_FEEDS = "ingestion_feeds"

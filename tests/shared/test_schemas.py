@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from macro_foundry.enums import (
     Action,
     AuthScheme,
+    CategoryKind,
     CodeStandard,
     Frequency,
     GeographyType,
@@ -24,6 +25,9 @@ from macro_foundry.enums import (
     UnitScale,
 )
 from macro_foundry.schemas import (
+    CategoryCreate,
+    CategoryEdgeCreate,
+    CategoryUpdate,
     GeographyCreate,
     GeographyUpdate,
     ObservationCreate,
@@ -108,6 +112,35 @@ def test_observation_update_allows_single_bound_patch() -> None:
     payload = ObservationUpdate(period_end=date(2026, 1, 31))
 
     assert payload.period_end == date(2026, 1, 31)
+
+
+def test_category_create_accepts_concept_node() -> None:
+    payload = CategoryCreate(code="CPI_ALL_ITEMS", name="CPI, all items", kind=CategoryKind.CONCEPT)
+
+    assert payload.kind is CategoryKind.CONCEPT
+
+
+def test_category_create_requires_kind() -> None:
+    with pytest.raises(ValidationError):
+        CategoryCreate(code="PRICES", name="Prices")
+
+
+def test_category_update_allows_partial_patch() -> None:
+    payload = CategoryUpdate(name="Consumer prices")
+
+    assert payload.name == "Consumer prices"
+
+
+def test_category_edge_create_rejects_self_edge() -> None:
+    node_id = uuid4()
+    with pytest.raises(ValidationError):
+        CategoryEdgeCreate(parent_category_id=node_id, child_category_id=node_id)
+
+
+def test_category_edge_create_accepts_distinct_endpoints() -> None:
+    payload = CategoryEdgeCreate(parent_category_id=uuid4(), child_category_id=uuid4(), sort_order=1)
+
+    assert payload.sort_order == 1
 
 
 def test_provider_schema_exposes_credential_access_metadata() -> None:

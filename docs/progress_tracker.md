@@ -12,6 +12,65 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-20] Issue 79 — create the V8 categories tree (ADR 0025 §1, §2, §5)
+
+Constructive half of the V8 collapse, on top of #78: the single `categories`
+tree plus its strict-tree `category_edges`, end-to-end (migration → models →
+schemas → read API). Blocked-by #78 is closed.
+
+Migration `0018_create_categories_tree` (down_revision `0017`, single head):
+- `upgrade` creates `categories` (code unique, `kind` topic|concept via a named
+  CHECK `ck_categories_kind` — no native PG enum; nullable 1536-dim `embedding` +
+  `embedding_model`/`embedding_input_hash`; HNSW cosine index
+  `ix_categories_embedding_hnsw`) and `category_edges` (`UNIQUE(child_category_id)`
+  = single parent = strict tree; `ck_category_edges_no_self_edge`; FKs parent
+  `ON DELETE RESTRICT`, child `ON DELETE CASCADE`), then widens
+  `change_proposal_items.target_type` to admit `categories`;
+- `downgrade` tightens the CHECK back and drops both tables (HNSW index first) —
+  a clean round-trip.
+
+Scope held to the issue: `source_groups`/`source_group_members`,
+`series.category_id`/`series.is_default`, and the `add_category` proposal_type are
+left for their own slices (no enum value for a table that does not exist yet).
+
+App surface: async eager-loaded models `Category` (`child_edges`, `parent_edge`)
+and `CategoryEdge` (`parent_category`, `child_category`), all `selectin`; Pydantic
+`Category*` / `CategoryEdge*` (kind required; self-edge rejected; `embedding*` kept
+internal, not exposed); `CategoryKind` enum + `TargetType.CATEGORIES`. Read API:
+full CRUD for both tables via the in-repo `crud_router`, plus
+`/categories/{id}/ancestors` and `/descendants` — `WITH RECURSIVE` walks over
+`category_edges` (depth-unbounded; depth ≤ 3 and concept-only attachment remain
+app-layer conventions). The stale conftest `TRUNCATE` list (still naming the
+#78-dropped tables) was corrected and now covers `categories`/`category_edges`.
+
+Tests: `tests/macrodb/test_categories_tree.py` (CRUD; ancestor/descendant CTE
+walks; `UNIQUE(child)` second-parent → 409; self-edge → 422 + DB CHECK; named
+`kind` CHECK; eager-load with no `MissingGreenlet`; embedding column + HNSW index;
+`categories` accepted as `target_type`); category schema cases in
+`tests/shared/test_schemas.py`; `categories`/`category_edges` added to
+`test_migrations.py` `EXPECTED_TABLES`.
+
+Verification: `ruff check` clean across all new/changed files; full package imports
+and the FastAPI app boots (categories routes registered); category schema
+validation exercised directly (kind-required, self-edge, target_type). **Operator
+to run with Docker up:** the migration round-trip and the DB-backed
+`tests/macrodb`/`tests/shared` suites — the local test DB was not reachable this
+session.
+
+Also fixed (a #78 leftover the admin landing tripped over): `landing.html` still
+rendered `stats.concept_count`/`indicator_count` cards and `url_for`-linked the
+`concept`/`indicator` admin views that #78 unregistered — the latter raised at
+render time, so the admin landing page was broken, not just its test. Removed the
+two dead count cards and nav links, refreshed the V7 intro prose to V8 (categories
+tree), and dropped the stale `Concepts`/`Indicators` assertions in
+`test_admin_landing.py`. No Categories admin card was added — a categories
+`ModelView` + stat belongs with a dedicated admin slice.
+
+Follow-ups (out of #79 scope): the same-category guard on `series-hierarchy-edges`
+and concept-only series attachment land with `series.category_id`; a categories
+admin view; the pre-existing `macro_foundry.agent` collection failures are
+unrelated and untouched.
+
 ### [2026-06-20] Issue 78 — drop the V7 conceptual spine (ADR 0025 §1)
 
 Destructive half of the V8 collapse: removed `concepts`, `indicators`,

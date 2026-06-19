@@ -5,6 +5,7 @@ from macro_foundry.enums.derivation import (
     InputVintagePolicy,
     OutputMode,
 )
+from macro_foundry.enums.category import CategoryKind
 from macro_foundry.enums.geography import CodeStandard, GeographyType
 from macro_foundry.enums.governance import (
     Action,
@@ -39,6 +40,7 @@ from macro_foundry.enums.series import (
 __all__ = [
     "Action",
     "AuthScheme",
+    "CategoryKind",
     "CodeStandard",
     "ComputationRunStatus",
     "ComputationTriggeredBy",

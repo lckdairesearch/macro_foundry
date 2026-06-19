@@ -1,5 +1,15 @@
 """Public Pydantic schema surface for macro_foundry."""
 
+from macro_foundry.schemas.category import (
+    CategoryBase,
+    CategoryCreate,
+    CategoryEdgeBase,
+    CategoryEdgeCreate,
+    CategoryEdgeRead,
+    CategoryEdgeUpdate,
+    CategoryRead,
+    CategoryUpdate,
+)
 from macro_foundry.schemas.derived import (
     DerivedSeriesBase,
     DerivedSeriesCreate,
@@ -95,6 +105,14 @@ from macro_foundry.schemas.series import (
 )
 
 __all__ = [
+    "CategoryBase",
+    "CategoryCreate",
+    "CategoryEdgeBase",
+    "CategoryEdgeCreate",
+    "CategoryEdgeRead",
+    "CategoryEdgeUpdate",
+    "CategoryRead",
+    "CategoryUpdate",
     "ChangeProposalBase",
     "ChangeProposalCreate",
     "ChangeProposalItemBase",

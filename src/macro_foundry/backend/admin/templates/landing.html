@@ -15,9 +15,8 @@
   <div class="row mb-4">
     <div class="col-12">
       <p class="text-muted">
-        macro_foundry organises macroeconomic data into
-        <strong>concepts</strong> (what is measured),
-        <strong>series families</strong> (a group of related series across geographies or variants),
+        macro_foundry organises macroeconomic data into a
+        <strong>categories</strong> tree (topics and concepts — what is measured),
         <strong>series</strong> (a single time series, either ingested or derived),
         and <strong>observations</strong> (vintage-dated data points).
         Providers publish series via ingestion feeds.
@@ -26,24 +25,6 @@
   </div>
 
   <div class="row row-cards mb-4">
-
-    <div class="col-6 col-md-4 col-lg-2">
-      <div class="card h-100">
-        <div class="card-body">
-          <div class="subheader">Concepts</div>
-          <div class="h1 mb-0">{{ stats.concept_count }}</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-6 col-md-4 col-lg-2">
-      <div class="card h-100">
-        <div class="card-body">
-          <div class="subheader">Indicators</div>
-          <div class="h1 mb-0">{{ stats.indicator_count }}</div>
-        </div>
-      </div>
-    </div>
 
     <div class="col-6 col-md-4 col-lg-2">
       <div class="card h-100">
@@ -92,8 +73,6 @@
     <div class="col-12">
       <h3>Model views</h3>
       <ul>
-        <li><a href="{{ request.url_for('admin:list', identity='concept') }}">Concepts</a></li>
-        <li><a href="{{ request.url_for('admin:list', identity='indicator') }}">Indicators</a></li>
         <li><a href="{{ request.url_for('admin:list', identity='series') }}">Series</a></li>
         <li><a href="{{ request.url_for('admin:list', identity='provider') }}">Providers</a></li>
         <li><a href="{{ request.url_for('admin:list', identity='observation') }}">Observations</a></li>
