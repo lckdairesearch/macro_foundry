@@ -1,65 +1,25 @@
-"""Read-only macrodb MCP tool implementations."""
+"""Read-only macrodb MCP tool implementations.
+
+The concept/indicator drill-down and search tools were retired with the V7
+conceptual spine (ADR 0025); category-aware navigation will be reintroduced once
+the `categories` tree lands. What remains is provider/series-grounded: canonical
+series semantic search, the selector registry surface, and enum introspection.
+"""
 
 from __future__ import annotations
 
 import re
 from typing import Any
-from uuid import UUID
 
-from sqlalchemy import select, text
+from sqlalchemy import text
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from macro_foundry.ingestion.runtime.selectors import get_selector, list_selector_types
-from macro_foundry.models import (
-    Concept,
-    ProviderCatalog,
-    Series,
-    Indicator,
-    IndicatorVariant,
-    SeriesSource,
-)
-from macro_foundry.schemas import (
-    ConceptRead,
-    ConceptSearchHit,
-    IndicatorSearchHit,
-    IndicatorReadDetail,
-    SeriesRead,
-    SeriesSearchHit,
-)
+from macro_foundry.models import Series
+from macro_foundry.schemas import SeriesRead, SeriesSearchHit
 from macro_foundry.schemas._base import SchemaModel
 from macro_foundry.services.embeddings import embed_text
-
-
-class LookupConceptArgs(SchemaModel):
-    """Arguments for lookup_concept."""
-
-    code: str
-
-
-class LookupIndicatorArgs(SchemaModel):
-    """Arguments for lookup_indicator."""
-
-    code: str
-
-
-class FindSiblingSeriesArgs(SchemaModel):
-    """Arguments for find_sibling_series."""
-
-    indicator_id: UUID
-
-
-class ListSeriesForConceptArgs(SchemaModel):
-    """Arguments for list_series_for_concept."""
-
-    concept_id: UUID
-
-
-class ListProviderSeriesForConceptArgs(SchemaModel):
-    """Arguments for list_provider_series_for_concept."""
-
-    provider_id: UUID
-    concept_id: UUID
 
 
 class ListEnumValuesArgs(SchemaModel):
@@ -104,86 +64,6 @@ class MacrodbReadTools:
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
-
-    async def lookup_concept(self, args: LookupConceptArgs) -> ConceptRead | None:
-        """Return the concept with the requested code, or None."""
-
-        concept = await self._session.scalar(
-            select(Concept).where(Concept.code == args.code),
-        )
-        if concept is None:
-            return None
-        return ConceptRead.model_validate(concept)
-
-    async def search_concepts(
-        self,
-        query: str,
-        limit: int = 10,
-    ) -> list[ConceptSearchHit]:
-        """Return ranked semantic-search hits for concept rows."""
-
-        query_vector = await embed_text(query)
-        ranking_rows = (
-            await self._session.execute(
-                text(
-                    """
-                    SELECT id, 1 - (embedding <=> CAST(:query_vec AS vector)) AS similarity
-                    FROM concepts
-                    WHERE embedding IS NOT NULL
-                    ORDER BY embedding <=> CAST(:query_vec AS vector)
-                    LIMIT :limit
-                    """,
-                ),
-                {
-                    "query_vec": _vector_literal(query_vector),
-                    "limit": limit,
-                },
-            )
-        ).mappings().all()
-        if not ranking_rows:
-            return []
-
-        ranked_ids = [row["id"] for row in ranking_rows]
-        concept_rows = (
-            await self._session.execute(
-                select(Concept).where(Concept.id.in_(ranked_ids)),
-            )
-        ).scalars().all()
-        concepts_by_id = {concept.id: concept for concept in concept_rows}
-        return [
-            ConceptSearchHit(
-                concept=ConceptRead.model_validate(concepts_by_id[row["id"]]),
-                similarity=_clamp_similarity(float(row["similarity"])),
-            )
-            for row in ranking_rows
-        ]
-
-    async def lookup_indicator(
-        self, args: LookupIndicatorArgs
-    ) -> IndicatorReadDetail | None:
-        """Return the indicator with its variant rows, or None."""
-
-        indicator = await self._session.scalar(
-            select(Indicator)
-            .where(Indicator.code == args.code)
-            .options(selectinload(Indicator.variants)),
-        )
-        if indicator is None:
-            return None
-        return IndicatorReadDetail.model_validate(indicator)
-
-    async def find_sibling_series(
-        self, args: FindSiblingSeriesArgs
-    ) -> list[SeriesRead]:
-        """Return series rows attached to an indicator."""
-
-        result = await self._session.execute(
-            select(Series)
-            .join(IndicatorVariant, IndicatorVariant.series_id == Series.id)
-            .where(IndicatorVariant.indicator_id == args.indicator_id)
-            .order_by(IndicatorVariant.is_default.desc(), Series.code),
-        )
-        return [SeriesRead.model_validate(series) for series in result.scalars().all()]
 
     async def list_selector_types(self) -> list[str]:
         """Return registered selector_type names."""
@@ -243,42 +123,6 @@ class MacrodbReadTools:
             values=_parse_check_constraint_values(str(constraint_definition)),
         )
 
-    async def list_provider_series_for_concept(
-        self,
-        args: ListProviderSeriesForConceptArgs,
-    ) -> list[SeriesRead]:
-        """Return provider-linked series for a concept."""
-
-        result = await self._session.execute(
-            select(Series)
-            .join(IndicatorVariant, IndicatorVariant.series_id == Series.id)
-            .join(Indicator, Indicator.id == IndicatorVariant.indicator_id)
-            .join(SeriesSource, SeriesSource.series_id == Series.id)
-            .join(
-                ProviderCatalog, ProviderCatalog.id == SeriesSource.provider_catalog_id
-            )
-            .where(
-                Indicator.concept_id == args.concept_id,
-                ProviderCatalog.provider_id == args.provider_id,
-            )
-            .order_by(Series.code),
-        )
-        return [SeriesRead.model_validate(series) for series in result.scalars().all()]
-
-    async def list_series_for_concept(
-        self, args: ListSeriesForConceptArgs
-    ) -> list[SeriesRead]:
-        """Return series belonging to any indicator for a concept."""
-
-        result = await self._session.execute(
-            select(Series)
-            .join(IndicatorVariant, IndicatorVariant.series_id == Series.id)
-            .join(Indicator, Indicator.id == IndicatorVariant.indicator_id)
-            .where(Indicator.concept_id == args.concept_id)
-            .order_by(Series.code),
-        )
-        return [SeriesRead.model_validate(series) for series in result.scalars().all()]
-
     async def search_series(
         self,
         query: str,
@@ -322,51 +166,6 @@ class MacrodbReadTools:
             for row in ranking_rows
         ]
 
-    async def search_indicators(
-        self,
-        query: str,
-        limit: int = 10,
-    ) -> list[IndicatorSearchHit]:
-        """Return ranked semantic-search hits for indicator rows."""
-
-        query_vector = await embed_text(query)
-        ranking_rows = (
-            await self._session.execute(
-                text(
-                    """
-                    SELECT id, 1 - (embedding <=> CAST(:query_vec AS vector)) AS similarity
-                    FROM indicators
-                    WHERE embedding IS NOT NULL
-                    ORDER BY embedding <=> CAST(:query_vec AS vector)
-                    LIMIT :limit
-                    """,
-                ),
-                {
-                    "query_vec": _vector_literal(query_vector),
-                    "limit": limit,
-                },
-            )
-        ).mappings().all()
-        if not ranking_rows:
-            return []
-
-        ranked_ids = [row["id"] for row in ranking_rows]
-        indicator_rows = (
-            await self._session.execute(
-                select(Indicator)
-                .where(Indicator.id.in_(ranked_ids))
-                .options(selectinload(Indicator.variants)),
-            )
-        ).scalars().all()
-        indicators_by_id = {indicator.id: indicator for indicator in indicator_rows}
-        return [
-            IndicatorSearchHit(
-                indicator=IndicatorReadDetail.model_validate(indicators_by_id[row["id"]]),
-                similarity=_clamp_similarity(float(row["similarity"])),
-            )
-            for row in ranking_rows
-        ]
-
 
 def _parse_check_constraint_values(constraint_definition: str) -> list[str]:
     values = [
@@ -392,12 +191,7 @@ def _clamp_similarity(value: float) -> float:
 
 __all__ = [
     "EnumValuesRead",
-    "FindSiblingSeriesArgs",
     "ListEnumValuesArgs",
-    "ListProviderSeriesForConceptArgs",
-    "ListSeriesForConceptArgs",
-    "LookupConceptArgs",
-    "LookupIndicatorArgs",
     "MacrodbReadTools",
     "SelectorConfigValidationArgs",
     "SelectorSchemaArgs",

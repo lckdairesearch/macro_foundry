@@ -6,8 +6,6 @@ from enum import Enum
 class ProposalType(str, Enum):
     ADD_PROVIDER_SERIES = "add_provider_series"
     ADD_DERIVED_SERIES = "add_derived_series"
-    ADD_INDICATOR = "add_indicator"
-    ADD_CONCEPT = "add_concept"
     CODE_AND_DB_CHANGE = "code_and_db_change"
     SCHEMA_CHANGE = "schema_change"
     MIXED = "mixed"
@@ -44,9 +42,7 @@ class ItemType(str, Enum):
 
 
 class TargetType(str, Enum):
-    CONCEPTS = "concepts"
     SERIES = "series"
-    INDICATORS = "indicators"
     SERIES_SOURCES = "series_sources"
     INGESTION_FEEDS = "ingestion_feeds"
     FILE = "file"
@@ -57,8 +53,6 @@ class TargetType(str, Enum):
     DERIVED_SERIES = "derived_series"
     DERIVATION_INPUTS = "derivation_inputs"
     GEOGRAPHIES = "geographies"
-    TAGS = "tags"
-    INDICATOR_VARIANTS = "indicator_variants"
     GEOGRAPHY_MEMBERSHIPS = "geography_memberships"
     CREDENTIAL_REF = "credential_ref"
     ENUM_VALUE = "enum_value"

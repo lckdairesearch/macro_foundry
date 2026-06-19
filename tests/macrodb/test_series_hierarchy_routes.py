@@ -20,7 +20,7 @@ from macro_foundry.enums import (
     UnitKind,
     UnitScale,
 )
-from macro_foundry.models import Concept, Geography, Observation, Series, Indicator, IndicatorVariant
+from macro_foundry.models import Geography, Observation, Series
 
 
 async def _seeded_country(session: AsyncSession, *, code: str = "USA") -> Geography:
@@ -54,41 +54,8 @@ async def _create_series(
     return series
 
 
-async def _create_family_member(
-    session: AsyncSession,
-    *,
-    concept_code: str,
-    family_code: str,
-    series: Series,
-    geography: Geography,
-) -> None:
-    concept = await session.scalar(select(Concept).where(Concept.code == concept_code))
-    if concept is None:
-        concept = Concept(code=concept_code, name=f"{concept_code} concept")
-        session.add(concept)
-        await session.flush()
-
-    family = Indicator(
-        code=family_code,
-        name=f"{family_code} family",
-        concept_id=concept.id,
-        geography_id=geography.id,
-    )
-    session.add(family)
-    await session.flush()
-
-    session.add(
-        IndicatorVariant(
-            indicator_id=family.id,
-            series_id=series.id,
-            label=series.code,
-            is_default=False,
-        ),
-    )
-
-
 @pytest.mark.asyncio
-async def test_create_series_hierarchy_edge_links_real_same_concept_series(
+async def test_create_series_hierarchy_edge_links_real_series(
     client: AsyncClient,
     session: AsyncSession,
     auth_headers: dict[str, str],
@@ -96,20 +63,6 @@ async def test_create_series_hierarchy_edge_links_real_same_concept_series(
     geography = await _seeded_country(session)
     parent = await _create_series(session, code="US_CPI_PARENT", geography=geography)
     child = await _create_series(session, code="US_CPI_CHILD", geography=geography)
-    await _create_family_member(
-        session,
-        concept_code="MF_HIERARCHY_CPI",
-        family_code="US_CPI_PARENT_FAMILY",
-        series=parent,
-        geography=geography,
-    )
-    await _create_family_member(
-        session,
-        concept_code="MF_HIERARCHY_CPI",
-        family_code="US_CPI_CHILD_FAMILY",
-        series=child,
-        geography=geography,
-    )
     await session.commit()
 
     response = await client.post(
@@ -138,44 +91,6 @@ async def test_create_series_hierarchy_edge_links_real_same_concept_series(
 
 
 @pytest.mark.asyncio
-async def test_create_series_hierarchy_edge_rejects_cross_concept_edges(
-    client: AsyncClient,
-    session: AsyncSession,
-    auth_headers: dict[str, str],
-) -> None:
-    geography = await _seeded_country(session)
-    parent = await _create_series(session, code="US_RETAIL_PARENT", geography=geography)
-    child = await _create_series(session, code="US_CPI_WRONG_CONCEPT_CHILD", geography=geography)
-    await _create_family_member(
-        session,
-        concept_code="MF_HIERARCHY_RETAIL",
-        family_code="US_RETAIL_PARENT_FAMILY",
-        series=parent,
-        geography=geography,
-    )
-    await _create_family_member(
-        session,
-        concept_code="MF_HIERARCHY_CPI",
-        family_code="US_CPI_WRONG_CONCEPT_CHILD_FAMILY",
-        series=child,
-        geography=geography,
-    )
-    await session.commit()
-
-    response = await client.post(
-        "/api/v1/series-hierarchy-edges/",
-        headers=auth_headers,
-        json={
-            "parent_series_id": str(parent.id),
-            "child_series_id": str(child.id),
-        },
-    )
-
-    assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
-    assert "one concept" in response.json()["detail"]
-
-
-@pytest.mark.asyncio
 async def test_series_hierarchy_supports_ragged_additive_children_without_replacing_parent_observations(
     client: AsyncClient,
     session: AsyncSession,
@@ -185,14 +100,6 @@ async def test_series_hierarchy_supports_ragged_additive_children_without_replac
     parent = await _create_series(session, code="US_CPI_RAGGED_PARENT", geography=geography)
     child = await _create_series(session, code="US_CPI_RAGGED_CHILD", geography=geography)
     grandchild = await _create_series(session, code="US_CPI_RAGGED_GRANDCHILD", geography=geography)
-    for series in (parent, child, grandchild):
-        await _create_family_member(
-            session,
-            concept_code="MF_HIERARCHY_RAGGED_CPI",
-            family_code=f"{series.code}_FAMILY",
-            series=series,
-            geography=geography,
-        )
 
     parent_observation = Observation(
         series_id=parent.id,
@@ -254,14 +161,6 @@ async def test_series_hierarchy_rejects_hidden_placeholder_nodes(
     geography = await _seeded_country(session)
     parent = await _create_series(session, code="US_CPI_NO_PLACEHOLDER_PARENT", geography=geography)
     child = await _create_series(session, code="US_CPI_NO_PLACEHOLDER_CHILD", geography=geography)
-    for series in (parent, child):
-        await _create_family_member(
-            session,
-            concept_code="MF_HIERARCHY_NO_PLACEHOLDER_CPI",
-            family_code=f"{series.code}_FAMILY",
-            series=series,
-            geography=geography,
-        )
     await session.commit()
 
     response = await client.post(

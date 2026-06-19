@@ -14,7 +14,7 @@ from macro_foundry.enums import CodeStandard, GeographyType
 from macro_foundry.models._schema_policy import enum_column, fk_uuid
 
 if TYPE_CHECKING:
-    from macro_foundry.models.series import Series, Indicator
+    from macro_foundry.models.series import Series
 
 
 class Geography(TimestampedBase):
@@ -81,12 +81,6 @@ class Geography(TimestampedBase):
     )
     series: Mapped[list["Series"]] = relationship(
         "Series",
-        back_populates="geography",
-        lazy="selectin",
-        passive_deletes=True,
-    )
-    indicators: Mapped[list["Indicator"]] = relationship(
-        "Indicator",
         back_populates="geography",
         lazy="selectin",
         passive_deletes=True,

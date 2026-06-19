@@ -7,7 +7,6 @@ from datetime import date
 from macro_foundry.seed.data.geographies import BLOCS, COUNTRIES, SUBNATIONALS, SUBNATIONAL_REGIONS, WORLD
 from macro_foundry.seed.data.memberships import GEOGRAPHY_MEMBERSHIPS
 from macro_foundry.seed.data.providers import PROVIDER_CATALOGS, PROVIDERS
-from macro_foundry.seed.data.tags import TAGS
 from macro_foundry.seed.run import SeedTarget, parse_seed_targets
 
 
@@ -95,26 +94,6 @@ def test_bloc_membership_seed_tracks_2026_emu_and_mercosur_status() -> None:
 
     assert emu_memberships["BGR"]["start_date"] == date(2026, 1, 1)
     assert mercosur_memberships["VEN"]["end_date"] == date(2017, 8, 5)
-
-
-def test_tags_match_topical_taxonomy() -> None:
-    assert TAGS == [
-        ("PRICES", "Prices"),
-        ("MONETARY_BANKING", "Monetary and Banking Variables"),
-        ("POPULATION_LABOR", "Population and Labor Market"),
-        ("PRODUCTION_BUSINESS_ACTIVITY", "Production and Business Activity"),
-        ("RETAIL_CONSUMPTION", "Retail and Consumption"),
-        ("NATIONAL_ACCOUNTS", "National Accounts"),
-        ("GOVERNMENT_FISCAL", "Government and Fiscal"),
-        ("INTERNATIONAL", "International"),
-        ("FINANCIAL_INDICATORS", "Financial Indicators"),
-        ("OTHER", "Others"),
-    ]
-
-
-def test_tag_codes_are_uppercase() -> None:
-    for code, _name in TAGS:
-        assert code == code.upper()
 
 
 def test_default_provider_seed_set_matches_phase_8_scope() -> None:

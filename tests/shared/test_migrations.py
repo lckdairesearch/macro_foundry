@@ -16,7 +16,6 @@ EXPECTED_TABLES = {
     "change_proposal_items",
     "change_proposals",
     "computation_run_logs",
-    "concepts",
     "derivation_inputs",
     "derived_series",
     "geographies",
@@ -28,16 +27,12 @@ EXPECTED_TABLES = {
     "observations",
     "provider_catalogs",
     "providers",
-    "indicators",
-    "indicator_variants",
     "series",
     "series_hierarchy_edges",
     "series_sources",
-    "concept_tags",
-    "tags",
 }
 
-EMBEDDED_TABLES = ("concepts", "series", "indicators")
+EMBEDDED_TABLES = ("series",)
 EMBEDDED_COLUMNS = ("embedding", "embedding_input_hash", "embedding_model")
 VECTOR_LITERAL = "[" + ",".join(["0.1"] * 1536) + "]"
 
@@ -185,15 +180,9 @@ async def _assert_catalog_embedding_schema() -> None:
             assert {
                 (row.table_name, row.column_name, row.udt_name) for row in column_rows
             } == {
-                ("concepts", "embedding", "vector"),
-                ("concepts", "embedding_input_hash", "text"),
-                ("concepts", "embedding_model", "text"),
                 ("series", "embedding", "vector"),
                 ("series", "embedding_input_hash", "text"),
                 ("series", "embedding_model", "text"),
-                ("indicators", "embedding", "vector"),
-                ("indicators", "embedding_input_hash", "text"),
-                ("indicators", "embedding_model", "text"),
             }
 
             index_rows = await conn.execute(
@@ -214,39 +203,40 @@ async def _assert_catalog_embedding_schema() -> None:
             }
             assert set(index_defs_by_table) == set(EMBEDDED_TABLES)
 
-            concept_id = (
+            # pgvector end-to-end smoke on the one remaining embedded catalog
+            # table (`series`). Needs a seeded geography for the FK.
+            geography_id = (
+                await conn.execute(text("SELECT id FROM geographies LIMIT 1"))
+            ).scalar_one()
+
+            series_id = (
                 await conn.execute(
                     text(
                         """
-                        INSERT INTO concepts (
-                            code,
-                            name,
-                            description,
-                            embedding,
-                            embedding_model,
-                            embedding_input_hash
+                        INSERT INTO series (
+                            code, name, origin_type, geography_id, frequency,
+                            temporal_stock_flow, unit_kind, unit_scale, measure,
+                            annualized, seasonal_adjustment, is_active,
+                            embedding, embedding_model, embedding_input_hash
                         )
                         VALUES (
-                            :code,
-                            :name,
-                            :description,
+                            :code, :name, 'ingested', :geography_id, 'M',
+                            'index', 'index', 'one', 'level',
+                            false, 'NSA', true,
                             CAST(:embedding AS vector(1536)),
-                            :embedding_model,
-                            :embedding_input_hash
+                            :embedding_model, :embedding_input_hash
                         )
                         ON CONFLICT (code) DO UPDATE
-                        SET name = EXCLUDED.name,
-                            description = EXCLUDED.description,
-                            embedding = EXCLUDED.embedding,
+                        SET embedding = EXCLUDED.embedding,
                             embedding_model = EXCLUDED.embedding_model,
                             embedding_input_hash = EXCLUDED.embedding_input_hash
                         RETURNING id
                         """,
                     ),
                     {
-                        "code": "TEST_EMBEDDING_CONCEPT",
-                        "name": "Test embedding concept",
-                        "description": "Vector migration smoke test",
+                        "code": "TEST_EMBEDDING_SERIES",
+                        "name": "Test embedding series",
+                        "geography_id": geography_id,
                         "embedding": VECTOR_LITERAL,
                         "embedding_model": "text-embedding-3-small",
                         "embedding_input_hash": "test-input-hash",
@@ -259,7 +249,7 @@ async def _assert_catalog_embedding_schema() -> None:
                     text(
                         """
                         SELECT id
-                        FROM concepts
+                        FROM series
                         WHERE embedding IS NOT NULL
                         ORDER BY embedding <=> CAST(:embedding AS vector(1536))
                         LIMIT 1
@@ -268,7 +258,13 @@ async def _assert_catalog_embedding_schema() -> None:
                     {"embedding": VECTOR_LITERAL},
                 )
             ).scalar_one()
-            assert nearest_id == concept_id
+            assert nearest_id == series_id
+
+            # Leave the catalog clean for later tests on the shared session DB.
+            await conn.execute(
+                text("DELETE FROM series WHERE code = 'TEST_EMBEDDING_SERIES'"),
+            )
+            await conn.commit()
     finally:
         await owner_engine.dispose()
 
@@ -313,11 +309,7 @@ async def _assert_catalog_embedding_schema_removed_but_extension_persists() -> N
             hnsw_indexes = [
                 row.indexname
                 for row in index_rows
-                if row.indexname in {
-                    "ix_concepts_embedding_hnsw",
-                    "ix_series_embedding_hnsw",
-                    "ix_indicators_embedding_hnsw",
-                }
+                if row.indexname == "ix_series_embedding_hnsw"
             ]
             assert hnsw_indexes == []
     finally:

@@ -30,11 +30,13 @@ references and supersedes the old one — don't edit the old one.
 | [0017](0017-cli-interface-standardisation.md) | `macrodb` CLI interface standardisation | Accepted |
 | [0018](0018-scoping-three-node-split.md) | Scoping subgraph splits clarify, verify, and brief authoring into separate nodes | Accepted |
 | [0019](0019-check-db-node-for-onboarding.md) | `check_db` node for catalog-duplicate detection in onboarding | Proposed |
-| [0020](0020-catalog-embeddings-for-semantic-search.md) | Catalog embeddings for semantic search | Proposed |
-| [0021](0021-rename-series-family-to-indicator.md) | Rename `series_family` to `indicator` | Accepted |
-| [0022](0022-concept-grained-topical-tags.md) | Concept-grained topical tags | Accepted |
+| [0020](0020-catalog-embeddings-for-semantic-search.md) | Catalog embeddings for semantic search | Proposed (partially reversed by 0025) |
+| [0021](0021-rename-series-family-to-indicator.md) | Rename `series_family` to `indicator` | Accepted (substantially reversed by 0025) |
+| [0022](0022-concept-grained-topical-tags.md) | Concept-grained topical tags | Superseded by 0025 |
 | [0023](0023-retire-legacy-agent-package.md) | Retire the legacy `agent` package; `onboarding_agent` is canonical | Accepted (amends ADR 0021) |
 | [0024](0024-agent-mcp-connection-lifecycle.md) | Agent reaches macrodb-mcp over a persistent per-run session | Proposed |
+| [0025](0025-collapse-concept-indicator-tag-into-category-tree.md) | Collapse concept / indicator / tag into a category tree | Accepted (supersedes 0022; extended by 0026) |
+| [0026](0026-top-level-category-taxonomy-and-concept-naming.md) | Top-level category taxonomy and concept-naming rules | Accepted (extends 0025; supersedes 0022 §3) |
 
 ## Format
 

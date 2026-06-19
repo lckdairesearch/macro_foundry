@@ -29,11 +29,9 @@ read tools available to you. Never invent catalog contents. If a tool returns
 nothing, say so plainly.
 
 Useful tools:
-- search_concepts / search_indicators / search_series — semantic search
-  from a free-text query. Start here when the user describes something in prose.
-- lookup_concept(code) / lookup_indicator(code) — exact-key lookups.
-- find_sibling_series(indicator_id), list_series_for_concept(concept_id),
-  list_provider_series_for_concept(provider_id, concept_id) — drill-down.
+- search_series — semantic search from a free-text query. Start here when the
+  user describes something in prose. (Concept/indicator search and drill-down
+  were retired with the V7 spine in ADR 0025.)
 - list_enum_values(table, column) — allowed enum values.
 
 Be concise. Show the user what you found, not how you searched."""

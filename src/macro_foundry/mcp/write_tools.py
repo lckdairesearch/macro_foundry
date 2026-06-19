@@ -14,50 +14,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from macro_foundry.enums import (
     Action,
     AuthScheme,
-    FeedMethod,
-    Frequency,
     ItemType,
-    Measure,
-    MeasureHorizon,
-    OriginType,
-    PriceBasis,
     ProposalStatus,
     ProposalType,
-    ProviderRole,
     ProviderType,
-    ReferenceKind,
     RequestedBy,
     RiskLevel,
-    SeasonalAdjustment,
     TargetType,
-    TemporalStockFlow,
-    UnitKind,
-    UnitScale,
     ValidationStatus,
 )
 from macro_foundry.models import (
     ChangeProposal,
     ChangeProposalItem,
-    Concept,
     Geography,
-    IngestionFeed,
-    IngestionFeedMember,
     Provider,
-    ProviderCatalog,
-    Series,
-    Indicator,
-    IndicatorVariant,
-    SeriesHierarchyEdge,
-    SeriesSource,
 )
-from macro_foundry.schemas import ConceptCreate, SeriesCreate, IndicatorCreate
+from macro_foundry.schemas import SeriesCreate
 from macro_foundry.schemas._base import SchemaModel
-from macro_foundry.services.registration import (
-    ensure_series_embedding_current,
-    register_concept,
-    register_indicator,
-    register_series,
-)
+from macro_foundry.services.registration import register_series
 
 
 class ProposeCreateSeriesArgs(SchemaModel):
@@ -128,224 +102,14 @@ class MacrodbWriteTools:
         self._session = session
 
     async def propose_create_series(self, args: ProposeCreateSeriesArgs) -> dict[str, Any]:
-        from macro_foundry.agent.proposal import DraftProposal
-
-        draft = DraftProposal.model_validate(args.payload)
-        now = datetime.now(timezone.utc)
-
-        # Resolve geography by code (shared by indicator and series)
-        geography = (
-            await self._session.execute(
-                select(Geography).where(Geography.code == draft.family.geography_code)
-            )
-        ).scalar_one_or_none()
-        if geography is None:
-            raise ValueError(f"Geography {draft.family.geography_code!r} not found")
-
-        # Get or create Concept
-        concept = (
-            await self._session.execute(
-                select(Concept).where(Concept.code == draft.concept.code)
-            )
-        ).scalar_one_or_none()
-        if concept is None:
-            if draft.concept.action != "new":
-                raise ValueError(f"Concept {draft.concept.code!r} not found")
-            concept = await register_concept(
-                self._session,
-                ConceptCreate(
-                    code=draft.concept.code,
-                    name=draft.concept.name,
-                    description=draft.concept.description,
-                ),
-            )
-
-        # Get or create Indicator
-        indicator = (
-            await self._session.execute(
-                select(Indicator).where(Indicator.code == draft.family.code)
-            )
-        ).scalar_one_or_none()
-        if indicator is None:
-            if draft.family.action != "new":
-                raise ValueError(f"Indicator {draft.family.code!r} not found")
-            indicator = await register_indicator(
-                self._session,
-                IndicatorCreate(
-                    code=draft.family.code,
-                    name=draft.family.name,
-                    description=draft.family.description,
-                    concept_id=concept.id,
-                    geography_id=geography.id,
-                ),
-            )
-
-        # Create Series
-        series = await register_series(
-            self._session,
-            SeriesCreate(
-                code=draft.series.code,
-                name=draft.series.name,
-                alt_name=getattr(draft.series, "alt_name", None),
-                description=draft.series.description,
-                origin_type=OriginType(draft.series.origin_type),
-                geography_id=geography.id,
-                frequency=Frequency(draft.series.frequency),
-                temporal_stock_flow=TemporalStockFlow(draft.series.temporal_stock_flow),
-                unit_kind=UnitKind(draft.series.unit_kind),
-                unit_scale=UnitScale(draft.series.unit_scale),
-                unit_label=getattr(draft.series, "unit_label", None),
-                price_basis=PriceBasis(draft.series.price_basis) if draft.series.price_basis else None,
-                currency_code=draft.series.currency_code,
-                measure=Measure(draft.series.measure),
-                measure_horizon=MeasureHorizon(draft.series.measure_horizon) if draft.series.measure_horizon else None,
-                annualized=draft.series.annualized,
-                seasonal_adjustment=SeasonalAdjustment(draft.series.seasonal_adjustment),
-                reference_kind=ReferenceKind(draft.series.reference_kind) if draft.series.reference_kind else None,
-                reference_year=draft.series.reference_year,
-                reference_label=draft.series.reference_label,
-                start_date=date_type.fromisoformat(draft.series.start_date) if draft.series.start_date else None,
-                end_date=date_type.fromisoformat(draft.series.end_date) if draft.series.end_date else None,
-                is_active=draft.series.is_active,
-            ),
+        # The end-to-end onboarding create path materialized the V7 conceptual
+        # spine (concept -> indicator -> indicator_variant -> series), which ADR
+        # 0025 dropped. Rebuilding it against the `categories` tree is tracked as
+        # the V8 rebootstrap slice; until then this tool is intentionally inert.
+        raise NotImplementedError(
+            "propose_create_series is disabled pending the V8 rebootstrap slice "
+            "(ADR 0025): the concept/indicator/variant catalog path was dropped."
         )
-
-        # Create IndicatorVariant
-        indicator_variant = IndicatorVariant(
-            indicator_id=indicator.id,
-            series_id=series.id,
-            label=draft.family_member.variant,
-            is_default=draft.family_member.is_primary,
-        )
-        self._session.add(indicator_variant)
-        await self._session.flush()
-        series = await ensure_series_embedding_current(self._session, series)
-
-        # Resolve Provider → ProviderCatalog by provider name
-        provider = (
-            await self._session.execute(
-                select(Provider).where(Provider.name == draft.source.provider_name)
-            )
-        ).scalar_one_or_none()
-        if provider is None:
-            raise ValueError(f"Provider {draft.source.provider_name!r} not found")
-
-        provider_catalog = (
-            await self._session.execute(
-                select(ProviderCatalog)
-                .where(ProviderCatalog.provider_id == provider.id)
-                .order_by(ProviderCatalog.is_placeholder)
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-        if provider_catalog is None:
-            raise ValueError(f"No ProviderCatalog found for provider {draft.source.provider_name!r}")
-
-        # Create SeriesSource
-        series_source = SeriesSource(
-            series_id=series.id,
-            provider_catalog_id=provider_catalog.id,
-            external_code=draft.source.external_code,
-            external_name=draft.source.external_name,
-            priority=draft.source.priority,
-            provider_role=ProviderRole(draft.source.provider_role),
-        )
-        self._session.add(series_source)
-        await self._session.flush()
-
-        # Create IngestionFeed + IngestionFeedMember
-        feed = IngestionFeed(
-            feed_method=FeedMethod(draft.feed.feed_method),
-            endpoint_url=draft.feed.fetch_url,
-            cron_schedule=draft.feed.cron_schedule,
-            is_active=draft.feed.is_active,
-        )
-        self._session.add(feed)
-        await self._session.flush()
-
-        feed_member = IngestionFeedMember(
-            ingestion_feed_id=feed.id,
-            series_source_id=series_source.id,
-            selector_type=draft.feed.selector_type,
-            selector_config=draft.feed.selector_config,
-            is_active=True,
-        )
-        self._session.add(feed_member)
-        await self._session.flush()
-
-        # Hierarchy edges (parent/child by code; skip if either side not found)
-        for edge in draft.hierarchy_edges:
-            parent = (
-                await self._session.execute(
-                    select(Series).where(Series.code == edge.parent_series_code)
-                )
-            ).scalar_one_or_none()
-            child = (
-                await self._session.execute(
-                    select(Series).where(Series.code == edge.child_series_code)
-                )
-            ).scalar_one_or_none()
-            if parent and child:
-                self._session.add(
-                    SeriesHierarchyEdge(
-                        parent_series_id=parent.id,
-                        child_series_id=child.id,
-                    )
-                )
-        if draft.hierarchy_edges:
-            await self._session.flush()
-
-        for item in args.harmonisation_items:
-            if item.get("schema_field") != "series.description":
-                continue
-            target_code = item.get("target_series_code")
-            proposed_value = item.get("proposed_value")
-            if not target_code or proposed_value is None:
-                continue
-            target_series = (
-                await self._session.execute(
-                    select(Series).where(Series.code == target_code)
-                )
-            ).scalar_one_or_none()
-            if target_series is not None:
-                target_series.description = proposed_value
-        if args.harmonisation_items:
-            await self._session.flush()
-
-        # Audit ChangeProposal (status=APPLIED — Gate 1 already approved)
-        audit_proposal = ChangeProposal(
-            title=f"Onboarding proposal — session {args.session_id}",
-            proposal_type=ProposalType.ADD_PROVIDER_SERIES,
-            status=ProposalStatus.APPLIED,
-            requested_by=RequestedBy.AGENT,
-            risk_level=RiskLevel.LOW,
-            rationale=args.rationale,
-            source_agent_session_id=args.session_id,
-            created_by_agent="onboarding_agent",
-            applied_at=now,
-        )
-        self._session.add(audit_proposal)
-        await self._session.flush()
-
-        audit_item = ChangeProposalItem(
-            proposal_id=audit_proposal.id,
-            item_type=ItemType.DB_ROW,
-            target_type=TargetType.SERIES,
-            action=Action.INSERT,
-            proposed_data={"series_code": series.code, "series_id": str(series.id)},
-            validation_status=ValidationStatus.PASSED,
-        )
-        self._session.add(audit_item)
-        await self._session.flush()
-
-        return {
-            "proposal_id": str(audit_proposal.id),
-            "item_id": str(audit_item.id),
-            "series_id": str(series.id),
-            "indicator_id": str(indicator.id),
-            "concept_id": str(concept.id),
-            "feed_id": str(feed.id),
-        }
 
     async def apply_approved_proposal(self, args: ApplyApprovedProposalArgs) -> dict[str, Any]:
         result = await self._session.execute(
@@ -384,10 +148,7 @@ class MacrodbWriteTools:
         items: list[ChangeProposalItem],
     ) -> list[ChangeProposalItem]:
         priority = {
-            TargetType.CONCEPTS: 0,
-            TargetType.INDICATORS: 1,
-            TargetType.SERIES: 2,
-            TargetType.INDICATOR_VARIANTS: 3,
+            TargetType.SERIES: 0,
         }
         return sorted(
             items,
@@ -403,31 +164,7 @@ class MacrodbWriteTools:
             return
 
         data = dict(item.proposed_data or {})
-        if item.target_type == TargetType.CONCEPTS:
-            concept = await register_concept(
-                self._session,
-                ConceptCreate.model_validate(
-                    {field: data[field] for field in ConceptCreate.model_fields if field in data}
-                ),
-            )
-            item.target_id = concept.id
-            item.target_ref = concept.code
-        elif item.target_type == TargetType.INDICATORS:
-            indicator = await register_indicator(
-                self._session,
-                IndicatorCreate.model_validate(
-                    {
-                        "code": data["code"],
-                        "name": data["name"],
-                        "description": data.get("description"),
-                        "concept_id": await self._resolve_concept_id(data),
-                        "geography_id": await self._resolve_geography_id(data),
-                    }
-                ),
-            )
-            item.target_id = indicator.id
-            item.target_ref = indicator.code
-        elif item.target_type == TargetType.SERIES:
+        if item.target_type == TargetType.SERIES:
             series_payload = {
                 field: data[field]
                 for field in SeriesCreate.model_fields
@@ -440,19 +177,6 @@ class MacrodbWriteTools:
             )
             item.target_id = series.id
             item.target_ref = series.code
-        elif item.target_type == TargetType.INDICATOR_VARIANTS:
-            indicator = await self._resolve_indicator(data)
-            series = await self._resolve_series(data)
-            indicator_variant = IndicatorVariant(
-                indicator_id=indicator.id,
-                series_id=series.id,
-                label=data.get("label"),
-                is_default=data.get("is_default", True),
-            )
-            self._session.add(indicator_variant)
-            await self._session.flush()
-            refreshed_series = await ensure_series_embedding_current(self._session, series)
-            item.target_ref = f"{indicator.code}:{refreshed_series.code}"
         else:
             raise ValueError(
                 "apply_approved_proposal does not support DB-row inserts for "
@@ -479,59 +203,6 @@ class MacrodbWriteTools:
         if geography is None:
             raise ValueError(f"Geography {geography_code!r} not found")
         return geography.id
-
-    async def _resolve_concept_id(self, data: dict[str, Any]) -> UUID:
-        if concept_id := data.get("concept_id"):
-            concept = await self._session.get(Concept, UUID(str(concept_id)))
-            if concept is None:
-                raise ValueError(f"Concept {concept_id!r} not found")
-            return concept.id
-
-        concept_code = data.get("concept_code")
-        if not concept_code:
-            raise ValueError("concept_id or concept_code is required")
-        concept = (
-            await self._session.execute(select(Concept).where(Concept.code == concept_code))
-        ).scalar_one_or_none()
-        if concept is None:
-            raise ValueError(f"Concept {concept_code!r} not found")
-        return concept.id
-
-    async def _resolve_indicator(self, data: dict[str, Any]) -> Indicator:
-        if indicator_id := data.get("indicator_id"):
-            indicator = await self._session.get(Indicator, UUID(str(indicator_id)))
-            if indicator is None:
-                raise ValueError(f"Indicator {indicator_id!r} not found")
-            return indicator
-
-        indicator_code = data.get("indicator_code")
-        if not indicator_code:
-            raise ValueError("indicator_id or indicator_code is required")
-        indicator = (
-            await self._session.execute(
-                select(Indicator).where(Indicator.code == indicator_code)
-            )
-        ).scalar_one_or_none()
-        if indicator is None:
-            raise ValueError(f"Indicator {indicator_code!r} not found")
-        return indicator
-
-    async def _resolve_series(self, data: dict[str, Any]) -> Series:
-        if series_id := data.get("series_id"):
-            series = await self._session.get(Series, UUID(str(series_id)))
-            if series is None:
-                raise ValueError(f"Series {series_id!r} not found")
-            return series
-
-        series_code = data.get("series_code")
-        if not series_code:
-            raise ValueError("series_id or series_code is required")
-        series = (
-            await self._session.execute(select(Series).where(Series.code == series_code))
-        ).scalar_one_or_none()
-        if series is None:
-            raise ValueError(f"Series {series_code!r} not found")
-        return series
 
     async def trigger_feed_execution(self, args: TriggerFeedExecutionArgs) -> dict[str, Any]:
         from macro_foundry.ingestion.runtime.runner import execute_feed

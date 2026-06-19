@@ -1,7 +1,7 @@
 """SQLAdmin views for series-domain models."""
 
 from macro_foundry.backend.admin._base import BaseModelView, relation_formatter
-from macro_foundry.models import Series, Indicator, IndicatorVariant, SeriesHierarchyEdge
+from macro_foundry.models import Series, SeriesHierarchyEdge
 
 
 class SeriesAdmin(BaseModelView, model=Series):
@@ -55,62 +55,6 @@ class SeriesAdmin(BaseModelView, model=Series):
     ]
 
 
-class IndicatorAdmin(BaseModelView, model=Indicator):
-    name = "Indicator"
-    name_plural = "Indicators"
-    category = "Series Catalog"
-    category_icon = "ti ti-chart-line"
-    column_list = [
-        Indicator.code,
-        Indicator.name,
-        Indicator.concept,
-        Indicator.geography,
-        Indicator.updated_at,
-    ]
-    column_searchable_list = [Indicator.code, Indicator.name, "concept.code", "concept.name", "geography.code"]
-    column_sortable_list = [Indicator.code, Indicator.name, Indicator.updated_at]
-    column_default_sort = [(Indicator.code, False)]
-    column_formatters = {
-        Indicator.concept: relation_formatter("concept"),
-        Indicator.geography: relation_formatter("geography"),
-    }
-    form_columns = [
-        Indicator.code,
-        Indicator.name,
-        Indicator.description,
-        Indicator.concept,
-        Indicator.geography,
-    ]
-
-
-class IndicatorVariantAdmin(BaseModelView, model=IndicatorVariant):
-    name = "Indicator variant"
-    name_plural = "Indicator variants"
-    category = "Series Catalog"
-    category_icon = "ti ti-chart-line"
-    column_list = [
-        IndicatorVariant.indicator,
-        IndicatorVariant.series,
-        IndicatorVariant.label,
-        IndicatorVariant.is_default,
-        IndicatorVariant.updated_at,
-    ]
-    column_searchable_list = ["indicator.code", "indicator.name", "series.code", "series.name", IndicatorVariant.label]
-    column_filters = [IndicatorVariant.is_default]
-    column_sortable_list = [IndicatorVariant.label, IndicatorVariant.updated_at]
-    column_default_sort = [(IndicatorVariant.updated_at, True)]
-    column_formatters = {
-        IndicatorVariant.indicator: relation_formatter("indicator"),
-        IndicatorVariant.series: relation_formatter("series"),
-    }
-    form_columns = [
-        IndicatorVariant.indicator,
-        IndicatorVariant.series,
-        IndicatorVariant.label,
-        IndicatorVariant.is_default,
-    ]
-
-
 class SeriesHierarchyEdgeAdmin(BaseModelView, model=SeriesHierarchyEdge):
     name = "Series hierarchy edge"
     name_plural = "Series hierarchy edges"
@@ -137,4 +81,4 @@ class SeriesHierarchyEdgeAdmin(BaseModelView, model=SeriesHierarchyEdge):
     ]
 
 
-__all__ = ["SeriesAdmin", "IndicatorAdmin", "IndicatorVariantAdmin", "SeriesHierarchyEdgeAdmin"]
+__all__ = ["SeriesAdmin", "SeriesHierarchyEdgeAdmin"]

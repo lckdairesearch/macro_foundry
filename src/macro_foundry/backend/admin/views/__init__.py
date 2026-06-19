@@ -1,6 +1,5 @@
 """Concrete SQLAdmin model views."""
 
-from macro_foundry.backend.admin.views.concept import ConceptAdmin
 from macro_foundry.backend.admin.views.derived import DerivationInputAdmin, DerivedSeriesAdmin
 from macro_foundry.backend.admin.views.geography import GeographyAdmin, GeographyMembershipAdmin
 from macro_foundry.backend.admin.views.governance import ChangeProposalAdmin, ChangeProposalItemAdmin
@@ -14,27 +13,19 @@ from macro_foundry.backend.admin.views.run_log import (
 )
 from macro_foundry.backend.admin.views.series import (
     SeriesAdmin,
-    IndicatorAdmin,
-    IndicatorVariantAdmin,
     SeriesHierarchyEdgeAdmin,
 )
-from macro_foundry.backend.admin.views.tag import ConceptTagAdmin, TagAdmin
 
 ADMIN_VIEWS = (
     GeographyAdmin,
     GeographyMembershipAdmin,
-    ConceptAdmin,
-    TagAdmin,
     ProviderAdmin,
     ProviderCatalogAdmin,
     SeriesSourceAdmin,
     IngestionFeedAdmin,
     IngestionFeedMemberAdmin,
     SeriesAdmin,
-    IndicatorAdmin,
-    IndicatorVariantAdmin,
     SeriesHierarchyEdgeAdmin,
-    ConceptTagAdmin,
     DerivedSeriesAdmin,
     DerivationInputAdmin,
     ObservationAdmin,

@@ -8,6 +8,50 @@ When you find yourself defining a new domain term, add it here.
 
 ## Core conceptual layer
 
+### Category tree: domain → subdomain → concept
+
+macrodb organizes every series under one strict, single-parent `categories`
+tree (ADR 0025), seeded and ruled by ADR 0026. The tree is exactly three tiers,
+and each tier has a **standard name**:
+
+- **Domain** (L1, `kind=topic`) — a top-level subject area and distinct
+  *measurement kind*: `PRICES`, `LABOR`, `HEALTH`, `INTERNATIONAL`. ~15 of them,
+  flat (no super-roots). A theme that cuts across measurement kinds (housing,
+  energy+commodities) is **not** a domain; it routes across several and is
+  reassembled by a future `series_collections` view. ("Root" is a structural
+  synonym for domain.)
+- **Subdomain** (L2, `kind=topic`, 3–6 per domain) — a browse grouping inside a
+  domain, sliced by measurement kind not theme (`PROPERTY_PRICES` sits under
+  `PRICES`, not a "housing" subdomain). A subdomain may itself be the concept
+  (`kind=concept`, no children) when it maps to a single idea.
+- **Concept** (L3, `kind=concept`) — the attachable economic idea a `series`
+  points at (`series.category_id`). Minted only when a subdomain holds ≥2 distinct,
+  cross-country ideas series must be told apart by (`CONSUMER_PRICES` →
+  `CPI_ALL_ITEMS`, `CPI_CORE`). Depth is **ragged**: the concept grain may land
+  at L2 or L3.
+
+A series attaches to its most-specific **concept** node; its subdomain and domain
+are the ancestors walked up the tree. An "indicator" (`US_CPI`) is the derived
+query `(concept, geography)`, not a stored row (ADR 0025).
+
+**Concept identity.** A concept names the economic *function*, not a country's
+statistical *label* (`BROAD_MONEY`, never `M2`/`M3`). The native label,
+composition, and methodology live on the **series**. A concept is the
+generalizable idea; a methodological flavour is a series-level **flag**
+(structured when it needs cross-series filtering, prose when rare), never a new
+concept. The following dimensions are **always series flags, never concepts**:
+sector/industry; direction in/out (the `NET_*`/`*_BALANCE` figure excepted);
+basis nominal/real or value/volume (GDP excepted); normalization (per-capita,
+/GDP, per-area); substance/commodity/pollutant; and component/breakdown (age,
+cause, product). See ADR 0026 §5 and its grain-discipline sweep for the full
+rule and the kept-distinct exceptions.
+
+**Codes.** Concept `code` is singular, `name` keeps the idiomatic plural
+(`BANK_DEPOSIT` / "Bank Deposits"); domain and subdomain codes may stay plural.
+Abbreviations are spelled out except the allow-list `CPI, PPI, GDP, GNI, FDI,
+PMI, CDS, CO2, GHG, PM25`. `_RATE` appears in a code only when the rate is the
+sole canonical form (`UNEMPLOYMENT_RATE`, `BIRTH_RATE`).
+
 ### Concept
 
 A geography-neutral economic idea. Examples: `CPI`, `GDP`, `UNEMPLOYMENT_RATE`,
@@ -18,6 +62,11 @@ a geography — the same concept manifests differently in different countries.
 
 Concepts are curated. They live in the `concepts` table and are typically added
 via the API or admin (not seeded en masse).
+
+Under the V8 categories model (ADR 0025/0026), a concept is the **L3
+`kind=concept` node** of the `categories` tree — see *Category tree* above. This
+entry describes the live V7 `concepts` table; the two reconcile when the V8
+slice lands.
 
 ### Geography
 

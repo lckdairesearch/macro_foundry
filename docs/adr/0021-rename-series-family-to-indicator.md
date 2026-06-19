@@ -1,6 +1,6 @@
 # ADR 0021 — Rename `series_family` to `indicator`
 
-**Status:** Accepted
+**Status:** Accepted (substantially reversed by [ADR 0025](0025-collapse-concept-indicator-tag-into-category-tree.md) — indicator is no longer a stored entity)
 
 **Date:** 2026-06-13
 

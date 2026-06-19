@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from typing import Self
 from uuid import UUID
 
-from pydantic import Field, model_validator
+from pydantic import model_validator
 
 from macro_foundry.enums import (
     Frequency,
@@ -20,9 +20,8 @@ from macro_foundry.enums import (
     UnitKind,
     UnitScale,
 )
-from macro_foundry.schemas._base import ReadSchema, SchemaModel, TimestampedReadSchema
+from macro_foundry.schemas._base import SchemaModel, TimestampedReadSchema
 from macro_foundry.schemas.geography import GeographyRead
-from macro_foundry.schemas.tag import TagRead
 
 
 def _validate_series_constraints(
@@ -142,71 +141,6 @@ class SeriesReadDetail(SeriesRead):
     """Series read model including selected cross-domain relationships."""
 
     geography: GeographyRead
-    tags: list[TagRead] = Field(default_factory=list)
-
-
-class IndicatorBase(SchemaModel):
-    """Shared indicator fields."""
-
-    code: str
-    name: str
-    description: str | None = None
-    concept_id: UUID
-    geography_id: UUID
-
-
-class IndicatorCreate(IndicatorBase):
-    """Payload for creating an indicator."""
-
-
-class IndicatorUpdate(SchemaModel):
-    """PATCH payload for an indicator."""
-
-    code: str | None = None
-    name: str | None = None
-    description: str | None = None
-    concept_id: UUID | None = None
-    geography_id: UUID | None = None
-
-
-class IndicatorRead(TimestampedReadSchema, IndicatorBase):
-    """API read model for an indicator."""
-
-
-class IndicatorSearchHit(SchemaModel):
-    """Semantic-search wrapper for an indicator hit."""
-
-    indicator: IndicatorReadDetail
-    similarity: float
-
-
-class IndicatorVariantBase(SchemaModel):
-    """Shared indicator-variant fields."""
-
-    indicator_id: UUID
-    series_id: UUID
-    label: str | None = None
-    is_default: bool
-
-
-class IndicatorVariantCreate(IndicatorVariantBase):
-    """Payload for creating an indicator variant."""
-
-
-class IndicatorVariantUpdate(SchemaModel):
-    """PATCH payload for an indicator variant."""
-
-    indicator_id: UUID | None = None
-    series_id: UUID | None = None
-    label: str | None = None
-    is_default: bool | None = None
-
-
-class IndicatorVariantRead(ReadSchema, IndicatorVariantBase):
-    """API read model for an indicator variant."""
-
-    created_at: datetime
-    updated_at: datetime
 
 
 class SeriesHierarchyEdgeBase(SchemaModel):
@@ -241,25 +175,9 @@ class SeriesHierarchyEdgeRead(TimestampedReadSchema, SeriesHierarchyEdgeBase):
     """API read model for a canonical series hierarchy edge."""
 
 
-class IndicatorReadDetail(IndicatorRead):
-    """Read model including same-domain indicator variants."""
-
-    variants: list[IndicatorVariantRead] = Field(default_factory=list)
-
-
 __all__ = [
     "SeriesBase",
     "SeriesCreate",
-    "IndicatorBase",
-    "IndicatorCreate",
-    "IndicatorVariantBase",
-    "IndicatorVariantCreate",
-    "IndicatorVariantRead",
-    "IndicatorSearchHit",
-    "IndicatorVariantUpdate",
-    "IndicatorRead",
-    "IndicatorReadDetail",
-    "IndicatorUpdate",
     "SeriesHierarchyEdgeBase",
     "SeriesHierarchyEdgeCreate",
     "SeriesHierarchyEdgeRead",

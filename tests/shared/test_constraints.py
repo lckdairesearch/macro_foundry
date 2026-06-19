@@ -28,7 +28,6 @@ from macro_foundry.enums import (
     UnitScale,
 )
 from macro_foundry.models import (
-    Concept,
     DerivedSeries,
     Geography,
     IngestionFeed,
@@ -107,19 +106,6 @@ async def _create_provider_catalog(
     await session.commit()
     await session.refresh(catalog)
     return catalog
-
-
-@pytest.mark.asyncio
-async def test_concept_code_is_unique(
-    session: AsyncSession,
-) -> None:
-    session.add(Concept(code="MF_DUPLICATE", name="First concept"))
-    await session.commit()
-
-    session.add(Concept(code="MF_DUPLICATE", name="Second concept"))
-    with pytest.raises(IntegrityError):
-        await session.commit()
-    await session.rollback()
 
 
 @pytest.mark.asyncio

@@ -3,13 +3,10 @@
 from macro_foundry.backend.api.change_proposal_items import router as change_proposal_items_router
 from macro_foundry.backend.api.change_proposals import router as change_proposals_router
 from macro_foundry.backend.api.computation_run_logs import router as computation_run_logs_router
-from macro_foundry.backend.api.concepts import router as concepts_router
 from macro_foundry.backend.api.derivation_inputs import router as derivation_inputs_router
 from macro_foundry.backend.api.derived_series import router as derived_series_router
 from macro_foundry.backend.api.geographies import router as geographies_router
 from macro_foundry.backend.api.geography_memberships import router as geography_memberships_router
-from macro_foundry.backend.api.indicator_variants import router as indicator_variants_router
-from macro_foundry.backend.api.indicators import router as indicators_router
 from macro_foundry.backend.api.ingestion_feed_members import router as ingestion_feed_members_router
 from macro_foundry.backend.api.ingestion_feeds import router as ingestion_feeds_router
 from macro_foundry.backend.api.ingestion_run_log_members import router as ingestion_run_log_members_router
@@ -20,20 +17,15 @@ from macro_foundry.backend.api.providers import router as providers_router
 from macro_foundry.backend.api.series import router as series_router
 from macro_foundry.backend.api.series_hierarchy_edges import router as series_hierarchy_edges_router
 from macro_foundry.backend.api.series_sources import router as series_sources_router
-from macro_foundry.backend.api.concept_tags import router as concept_tags_router
-from macro_foundry.backend.api.tags import router as tags_router
 
 API_ROUTERS = (
     change_proposal_items_router,
     change_proposals_router,
     computation_run_logs_router,
-    concepts_router,
     derivation_inputs_router,
     derived_series_router,
     geographies_router,
     geography_memberships_router,
-    indicator_variants_router,
-    indicators_router,
     ingestion_feed_members_router,
     ingestion_feeds_router,
     ingestion_run_log_members_router,
@@ -44,8 +36,6 @@ API_ROUTERS = (
     series_router,
     series_hierarchy_edges_router,
     series_sources_router,
-    concept_tags_router,
-    tags_router,
 )
 
 __all__ = ["API_ROUTERS"]

@@ -25,14 +25,24 @@ from macro_foundry.seed import run_seed
 
 
 @pytest.mark.no_db
-def test_target_type_uses_indicator_vocabulary() -> None:
-    assert TargetType.INDICATORS.value == "indicators"
-    assert TargetType.INDICATOR_VARIANTS.value == "indicator_variants"
+def test_v7_spine_vocabulary_is_gone() -> None:
+    """ADR 0025 / issue #78 dropped the conceptual-spine governance vocabulary."""
 
+    target_values = {member.value for member in TargetType}
+    proposal_values = {member.value for member in ProposalType}
 
-@pytest.mark.no_db
-def test_proposal_type_uses_indicator_vocabulary() -> None:
-    assert ProposalType.ADD_INDICATOR.value == "add_indicator"
+    for retired in ("concepts", "indicators", "tags", "indicator_variants"):
+        assert retired not in target_values
+
+    for retired in ("add_indicator", "add_concept"):
+        assert retired not in proposal_values
+
+    assert not hasattr(TargetType, "INDICATORS")
+    assert not hasattr(TargetType, "INDICATOR_VARIANTS")
+    assert not hasattr(TargetType, "CONCEPTS")
+    assert not hasattr(TargetType, "TAGS")
+    assert not hasattr(ProposalType, "ADD_INDICATOR")
+    assert not hasattr(ProposalType, "ADD_CONCEPT")
 
 
 @pytest.mark.no_db
@@ -139,15 +149,20 @@ async def _reseed_seed_tables() -> None:
 
 
 def test_migration_0014_renames_existing_governance_rows(alembic_config: Config) -> None:
-    """Rows persisted under the old vocabulary are carried across by 0014."""
+    """Rows persisted under the old vocabulary are carried across by 0014.
+
+    Upgrades only to 0016 (the last revision where the indicator vocabulary still
+    exists): 0017 retires `indicators`/`add_indicator` entirely, so the probe rows
+    are asserted and cleaned up before head is reached.
+    """
 
     command.downgrade(alembic_config, "0013")
     try:
         asyncio.run(_insert_old_vocab_proposal())
-        command.upgrade(alembic_config, "head")
+        command.upgrade(alembic_config, "0016")
         asyncio.run(_assert_rows_renamed_and_constraints_tightened())
     finally:
         command.upgrade(alembic_config, "head")
-        # Upgrading back to head re-runs 0015_tags_code, whose DELETE FROM tags
-        # empties the shared session seed; restore it for later tests.
+        # The downgrade/upgrade cycle truncates seeded data; restore it for later
+        # tests on the shared session database.
         asyncio.run(_reseed_seed_tables())

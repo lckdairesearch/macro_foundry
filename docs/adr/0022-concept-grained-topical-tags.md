@@ -1,6 +1,6 @@
 # ADR 0022 — Concept-grained topical tags
 
-**Status:** Accepted
+**Status:** Superseded by [ADR 0025](0025-collapse-concept-indicator-tag-into-category-tree.md)
 
 **Date:** 2026-06-13
 

@@ -1,6 +1,6 @@
 # ADR 0020 — Catalog embeddings for semantic search
 
-**Status:** Proposed
+**Status:** Proposed (indicator-grain embedding reversed by [ADR 0025](0025-collapse-concept-indicator-tag-into-category-tree.md); concept embedding moves to the category node)
 
 **Date:** 2026-06-12
 

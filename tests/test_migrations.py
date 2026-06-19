@@ -15,13 +15,10 @@ EXPECTED_TABLES = {
     "change_proposal_items",
     "change_proposals",
     "computation_run_logs",
-    "concepts",
     "derivation_inputs",
     "derived_series",
     "geographies",
     "geography_memberships",
-    "indicators",
-    "indicator_variants",
     "ingestion_feed_members",
     "ingestion_feeds",
     "ingestion_run_log_members",
@@ -32,8 +29,6 @@ EXPECTED_TABLES = {
     "series",
     "series_hierarchy_edges",
     "series_sources",
-    "concept_tags",
-    "tags",
 }
 
 

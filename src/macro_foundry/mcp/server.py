@@ -12,12 +12,7 @@ from mcp.server.fastmcp import FastMCP
 
 from macro_foundry.db.session import create_async_engine_for_url, create_session_factory
 from macro_foundry.mcp.read_tools import (
-    FindSiblingSeriesArgs,
     ListEnumValuesArgs,
-    ListProviderSeriesForConceptArgs,
-    ListSeriesForConceptArgs,
-    LookupConceptArgs,
-    LookupIndicatorArgs,
     MacrodbReadTools,
     SelectorConfigValidationArgs,
     SelectorSchemaArgs,
@@ -35,13 +30,6 @@ from macro_foundry.mcp.write_tools import (
 
 
 READ_ONLY_TOOL_NAMES = {
-    "lookup_concept",
-    "lookup_indicator",
-    "find_sibling_series",
-    "list_series_for_concept",
-    "list_provider_series_for_concept",
-    "search_concepts",
-    "search_indicators",
     "search_series",
     "list_selector_types",
     "get_selector_schema",
@@ -88,67 +76,6 @@ def _register_read_tools(
     with_read: Callable[[Callable[[MacrodbReadTools], Awaitable[Any]]], Awaitable[Any]],
 ) -> None:
     """Register all read tools on a server instance."""
-
-    @server.tool(name="lookup_concept")
-    async def lookup_concept(code: str) -> dict[str, Any] | None:
-        result = await with_read(
-            lambda tools: tools.lookup_concept(LookupConceptArgs(code=code))
-        )
-        return None if result is None else result.model_dump(mode="json")
-
-    @server.tool(name="lookup_indicator")
-    async def lookup_indicator(code: str) -> dict[str, Any] | None:
-        result = await with_read(
-            lambda tools: tools.lookup_indicator(LookupIndicatorArgs(code=code))
-        )
-        return None if result is None else result.model_dump(mode="json")
-
-    @server.tool(name="find_sibling_series")
-    async def find_sibling_series(indicator_id: str) -> list[dict[str, Any]]:
-        result = await with_read(
-            lambda tools: tools.find_sibling_series(
-                FindSiblingSeriesArgs(indicator_id=indicator_id)
-            ),
-        )
-        return [series.model_dump(mode="json") for series in result]
-
-    @server.tool(name="list_series_for_concept")
-    async def list_series_for_concept(concept_id: str) -> list[dict[str, Any]]:
-        result = await with_read(
-            lambda tools: tools.list_series_for_concept(
-                ListSeriesForConceptArgs(concept_id=concept_id)
-            ),
-        )
-        return [series.model_dump(mode="json") for series in result]
-
-    @server.tool(name="list_provider_series_for_concept")
-    async def list_provider_series_for_concept(
-        provider_id: str, concept_id: str
-    ) -> list[dict[str, Any]]:
-        result = await with_read(
-            lambda tools: tools.list_provider_series_for_concept(
-                ListProviderSeriesForConceptArgs(
-                    provider_id=provider_id,
-                    concept_id=concept_id,
-                ),
-            ),
-        )
-        return [series.model_dump(mode="json") for series in result]
-
-    @server.tool(name="search_concepts")
-    async def search_concepts(query: str, limit: int = 10) -> list[dict[str, Any]]:
-        result = await with_read(lambda tools: tools.search_concepts(query, limit))
-        return [hit.model_dump(mode="json") for hit in result]
-
-    @server.tool(name="search_indicators")
-    async def search_indicators(
-        query: str,
-        limit: int = 10,
-    ) -> list[dict[str, Any]]:
-        result = await with_read(
-            lambda tools: tools.search_indicators(query, limit),
-        )
-        return [hit.model_dump(mode="json") for hit in result]
 
     @server.tool(name="search_series")
     async def search_series(query: str, limit: int = 10) -> list[dict[str, Any]]:

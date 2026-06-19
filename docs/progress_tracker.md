@@ -12,6 +12,63 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-20] Issue 78 — drop the V7 conceptual spine (ADR 0025 §1)
+
+Destructive half of the V8 collapse: removed `concepts`, `indicators`,
+`indicator_variants`, `tags`, and `concept_tags` end-to-end. A drop-and-rebootstrap,
+not a data migration — the catalog is regenerable. Blocked-by #77 (V8 `db_er.txt`
+canonical) is closed.
+
+Migration `0017_drop_v7_conceptual_spine` (down_revision `0016`, single head):
+- `upgrade` drops the 5 tables (FK-safe order) and tightens both governance CHECKs;
+- `downgrade` re-admits the dropped vocabulary and recreates all 5 tables at their
+  head shape (embedding columns + HNSW indexes on `concepts`/`indicators`, the
+  `tags.code` key, the renamed indicator constraints) so the round-trip is clean;
+- assumes the governance audit tables carry none of the dropped vocabulary
+  (guaranteed under ADR 0025's reset/reseed/rebootstrap workflow) — no silent
+  row deletion.
+
+Governance enums: dropped `TargetType.{CONCEPTS,INDICATORS,TAGS,INDICATOR_VARIANTS}`
+and `ProposalType.{ADD_INDICATOR,ADD_CONCEPT}` (the latter beyond #78's strict
+`target_type` scope, per operator decision). The named CHECKs follow the ADR-0014
+widen→tighten pattern.
+
+App surface removed: SQLAlchemy models (`Concept`, `Indicator`, `IndicatorVariant`,
+`Tag`, `ConceptTag`) + the `Series.indicator_variant` / `Geography.indicators`
+relationships; Pydantic schemas (`Concept*`, `Tag*`, `Indicator*`,
+`IndicatorVariant*`); 5 CRUD routers + their registration; 2 SQLAdmin views +
+the concept/indicator admin stats; `series` detail tag-flattening. The
+`series-hierarchy-edges` route's same-concept guard (which rode the indicator
+chain) was reduced to distinct-existing-endpoint validation — flag: re-introduce a
+same-category guard once `series.category_id` lands.
+
+Callers neutralized (full rewrite deferred to the rebootstrap slice): the series
+embedding recipe drops indicator/concept context; `register_concept`/
+`register_indicator` removed (only `register_series` remains); `embeddings backfill`
+and the MCP read tools are series-only (concept/indicator lookup, drill-down, and
+search retired); `propose_create_series` + the MCP apply-path spine branches and
+both bootstrap entrypoints (`fred_us_macro`, `debug_smoke`) are stubbed to raise
+`NotImplementedError` (curated specs preserved in git history); tag seed removed.
+
+Tests: deleted `test_fred_bootstrap` / `test_debug_bootstrap`; rewrote the
+embedding/registration/MCP-read suites to series-only; trimmed seed/schema/
+constraint/admin/series-route coverage; added `tests/shared/test_drop_v7_spine.py`
+(tables absent at head + CHECK rejects the dropped values) and reframed the #69
+governance enum test (upgrades to 0016, then asserts the V7 vocabulary is gone).
+
+Verification: `uv run ruff check src/macro_foundry` clean; full package imports and
+the FastAPI app boots (86 routes, no dropped tables mapped); changed `-m no_db`
+tests green (13 passed). **Operator to run with Docker up:** the migration
+round-trip (`tests/shared/test_migrations.py`, `tests/shared/test_drop_v7_spine.py`,
+`tests/shared/test_governance_enum_rename.py`) and the DB-backed `tests/macrodb`
+suite — the local test DB was not reachable this session.
+
+Follow-ups (out of #78 scope): CONTEXT.md glossary + `architecture.md` natural-key
+prose still describe the V7 spine (separate doc sweep); the V8 rebootstrap slice
+rebuilds bootstrap/registration/MCP-write against the `categories` tree; the
+pre-existing `macro_foundry.agent` collection failures (ADR 0023 retirement) are
+unrelated and untouched.
+
 ### [2026-06-13] ADR 0023 — retire the legacy `agent` package; correct ADR 0021's embeddings claim
 
 Wrote `docs/adr/0023-retire-legacy-agent-package.md` (Accepted, amends ADR 0021)

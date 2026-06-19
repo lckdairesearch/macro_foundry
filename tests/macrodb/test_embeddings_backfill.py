@@ -1,8 +1,11 @@
-"""Coverage for `macrodb embeddings backfill`."""
+"""Coverage for `macrodb embeddings backfill`.
+
+Concepts and indicators lost their embeddings with the V7 spine (ADR 0025); the
+backfill now scans only canonical `series`.
+"""
 
 from __future__ import annotations
 
-import uuid
 from collections.abc import Sequence
 
 import pytest
@@ -21,7 +24,7 @@ from macro_foundry.enums import (
     UnitKind,
     UnitScale,
 )
-from macro_foundry.models import Concept, Geography, Series, Indicator, IndicatorVariant
+from macro_foundry.models import Geography, Series
 
 runner = CliRunner()
 
@@ -61,7 +64,7 @@ def test_embeddings_backfill_cli_prints_summary_and_forwards_batch_size(
     ) -> dict[str, int]:
         called["target"] = target
         called["batch_size"] = batch_size
-        return {"concepts": 2, "indicators": 1, "series": 0}
+        return {"series": 3}
 
     monkeypatch.setattr(
         "macro_foundry.cli.embeddings.run_embeddings_backfill",
@@ -75,9 +78,7 @@ def test_embeddings_backfill_cli_prints_summary_and_forwards_batch_size(
         "target": EnvTarget.STAGING,
         "batch_size": 50,
     }
-    assert "concepts: 2 stale -> embedded" in result.output
-    assert "indicators: 1 stale -> embedded" in result.output
-    assert "series: 0 stale -> embedded" in result.output
+    assert "series: 3 stale -> embedded" in result.output
 
 
 @pytest.mark.asyncio
@@ -87,7 +88,7 @@ async def test_run_embeddings_backfill_repairs_stale_rows_and_is_idempotent(
     from macro_foundry.cli.embeddings import run_embeddings_backfill_with_session_factory
     from macro_foundry.services.embeddings import EMBEDDING_DIMENSIONS, EMBEDDING_MODEL
 
-    geography_id, concept_id, family_id, series_id = await _seed_embedded_catalog_slice(test_session_factory)
+    geography_id, series_id = await _seed_stale_series_row(test_session_factory)
     batch_sizes: list[int] = []
 
     async def fake_embed_batch(texts: Sequence[str]) -> list[list[float]]:
@@ -102,25 +103,13 @@ async def test_run_embeddings_backfill_repairs_stale_rows_and_is_idempotent(
         embed_batch=fake_embed_batch,
     )
 
-    assert first == {
-        "concepts": 1,
-        "indicators": 1,
-        "series": 1,
-    }
-    assert batch_sizes == [1, 1, 1]
+    assert first == {"series": 1}
+    assert batch_sizes == [1]
 
     async with test_session_factory() as session:
-        concept = await session.get(Concept, concept_id)
-        family = await session.get(Indicator, family_id)
         series = await session.get(Series, series_id)
-        assert concept is not None
-        assert family is not None
         assert series is not None
-        assert concept.embedding is not None
-        assert family.embedding is not None
         assert series.embedding is not None
-        assert concept.embedding_model == EMBEDDING_MODEL
-        assert family.embedding_model == EMBEDDING_MODEL
         assert series.embedding_model == EMBEDDING_MODEL
 
         series.description = "Updated description from SQLAdmin-style edit"
@@ -132,11 +121,7 @@ async def test_run_embeddings_backfill_repairs_stale_rows_and_is_idempotent(
         embed_batch=fake_embed_batch,
     )
 
-    assert second == {
-        "concepts": 0,
-        "indicators": 0,
-        "series": 1,
-    }
+    assert second == {"series": 1}
     assert batch_sizes == [1]
 
     batch_sizes.clear()
@@ -145,11 +130,7 @@ async def test_run_embeddings_backfill_repairs_stale_rows_and_is_idempotent(
         embed_batch=fake_embed_batch,
     )
 
-    assert third == {
-        "concepts": 0,
-        "indicators": 0,
-        "series": 0,
-    }
+    assert third == {"series": 0}
     assert batch_sizes == []
 
     async with test_session_factory() as session:
@@ -164,7 +145,7 @@ async def test_run_embeddings_backfill_batches_single_openai_call_per_50_rows(
     from macro_foundry.cli.embeddings import run_embeddings_backfill_with_session_factory
     from macro_foundry.services.embeddings import EMBEDDING_DIMENSIONS
 
-    await _seed_stale_concepts(test_session_factory, count=51)
+    await _seed_stale_series(test_session_factory, count=51)
     batch_sizes: list[int] = []
 
     async def fake_embed_batch(texts: Sequence[str]) -> list[list[float]]:
@@ -176,71 +157,50 @@ async def test_run_embeddings_backfill_batches_single_openai_call_per_50_rows(
         embed_batch=fake_embed_batch,
     )
 
-    assert result["concepts"] == 51
+    assert result["series"] == 51
     assert batch_sizes == [50, 1]
 
 
-async def _seed_embedded_catalog_slice(
+def _stale_series(geography, *, code: str) -> Series:
+    return Series(
+        code=code,
+        name=f"{code} name",
+        description="Still stale",
+        origin_type=OriginType.INGESTED,
+        geography=geography,
+        frequency=Frequency.MONTHLY,
+        temporal_stock_flow=TemporalStockFlow.STOCK,
+        unit_kind=UnitKind.INDEX,
+        unit_scale=UnitScale.ONE,
+        unit_label="index",
+        measure=Measure.LEVEL,
+        annualized=False,
+        seasonal_adjustment=SeasonalAdjustment.NSA,
+        is_active=True,
+    )
+
+
+async def _seed_stale_series_row(
     session_factory: async_sessionmaker[AsyncSession],
-) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID]:
+):
     async with session_factory() as session:
         geography = await session.scalar(select(Geography).where(Geography.code == "USA"))
         assert geography is not None
-
-        concept = Concept(
-            code="EMBED_TEST_CONCEPT",
-            name="Embedding Test Concept",
-            description="Initial concept description",
-        )
-        family = Indicator(
-            code="EMBED_TEST_FAMILY",
-            name="Embedding Test Family",
-            description="Initial family description",
-            concept=concept,
-            geography=geography,
-        )
-        series = Series(
-            code="EMBED_TEST_SERIES",
-            name="Embedding Test Series",
-            alt_name=["Alias"],
-            description="Initial series description",
-            origin_type=OriginType.INGESTED,
-            geography=geography,
-            frequency=Frequency.MONTHLY,
-            temporal_stock_flow=TemporalStockFlow.STOCK,
-            unit_kind=UnitKind.INDEX,
-            unit_scale=UnitScale.ONE,
-            unit_label="index",
-            measure=Measure.LEVEL,
-            annualized=False,
-            seasonal_adjustment=SeasonalAdjustment.NSA,
-            is_active=True,
-        )
-        member = IndicatorVariant(
-            indicator=family,
-            series=series,
-            label="Headline",
-            is_default=True,
-        )
-
-        session.add_all([concept, family, series, member])
+        series = _stale_series(geography, code="EMBED_TEST_SERIES")
+        session.add(series)
         await session.commit()
-        return geography.id, concept.id, family.id, series.id
+        return geography.id, series.id
 
 
-async def _seed_stale_concepts(
+async def _seed_stale_series(
     session_factory: async_sessionmaker[AsyncSession],
     *,
     count: int,
 ) -> None:
     async with session_factory() as session:
-        concepts = [
-            Concept(
-                code=f"EMBED_BATCH_{index}",
-                name=f"Embedding Batch {index}",
-                description="Still stale",
-            )
-            for index in range(count)
-        ]
-        session.add_all(concepts)
+        geography = await session.scalar(select(Geography).where(Geography.code == "USA"))
+        assert geography is not None
+        session.add_all(
+            [_stale_series(geography, code=f"EMBED_BATCH_{index}") for index in range(count)],
+        )
         await session.commit()

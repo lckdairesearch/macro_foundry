@@ -8,14 +8,13 @@ from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from macro_foundry.config import logger
-from macro_foundry.models import Geography, GeographyMembership, Provider, ProviderCatalog, Tag
+from macro_foundry.models import Geography, GeographyMembership, Provider, ProviderCatalog
 from macro_foundry.seed._shared import SeedOutcome
 from macro_foundry.seed.runners import (
     seed_geographies,
     seed_geography_memberships,
     seed_provider_catalogs,
     seed_providers,
-    seed_tags,
 )
 
 
@@ -24,7 +23,6 @@ class SeedTarget(str, Enum):
 
     GEOGRAPHIES = "geographies"
     GEOGRAPHY_MEMBERSHIPS = "geography_memberships"
-    TAGS = "tags"
     PROVIDERS = "providers"
     PROVIDER_CATALOGS = "provider_catalogs"
 
@@ -32,7 +30,6 @@ class SeedTarget(str, Enum):
 SEED_ORDER: tuple[SeedTarget, ...] = (
     SeedTarget.GEOGRAPHIES,
     SeedTarget.GEOGRAPHY_MEMBERSHIPS,
-    SeedTarget.TAGS,
     SeedTarget.PROVIDERS,
     SeedTarget.PROVIDER_CATALOGS,
 )
@@ -40,7 +37,6 @@ SEED_ORDER: tuple[SeedTarget, ...] = (
 RESET_ORDER: tuple[SeedTarget, ...] = (
     SeedTarget.PROVIDER_CATALOGS,
     SeedTarget.PROVIDERS,
-    SeedTarget.TAGS,
     SeedTarget.GEOGRAPHY_MEMBERSHIPS,
     SeedTarget.GEOGRAPHIES,
 )
@@ -76,8 +72,6 @@ async def run_seed(session: AsyncSession, *, only: set[SeedTarget] | None = None
             summary[target] = await seed_geographies(session)
         elif target is SeedTarget.GEOGRAPHY_MEMBERSHIPS:
             summary[target] = await seed_geography_memberships(session)
-        elif target is SeedTarget.TAGS:
-            summary[target] = await seed_tags(session)
         elif target is SeedTarget.PROVIDERS:
             summary[target] = await seed_providers(session)
         elif target is SeedTarget.PROVIDER_CATALOGS:
@@ -98,8 +92,6 @@ async def reset_seed_tables(session: AsyncSession, *, only: set[SeedTarget] | No
             await session.execute(delete(ProviderCatalog))
         elif target is SeedTarget.PROVIDERS:
             await session.execute(delete(Provider))
-        elif target is SeedTarget.TAGS:
-            await session.execute(delete(Tag))
         elif target is SeedTarget.GEOGRAPHY_MEMBERSHIPS:
             await session.execute(delete(GeographyMembership))
         elif target is SeedTarget.GEOGRAPHIES:

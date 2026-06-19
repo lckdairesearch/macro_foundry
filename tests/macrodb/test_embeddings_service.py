@@ -20,87 +20,26 @@ from macro_foundry.enums.series import (
     UnitKind,
     UnitScale,
 )
-from macro_foundry.models.concept import Concept
 from macro_foundry.models.geography import Geography
-from macro_foundry.models.series import Indicator, IndicatorVariant, Series
+from macro_foundry.models.series import Series
 from macro_foundry.services.embeddings import FREQUENCY_HUMAN
 from macro_foundry.services.embeddings import MEASURE_HUMAN
 from macro_foundry.services.embeddings import SEASONAL_ADJUSTMENT_HUMAN
 from macro_foundry.services.embeddings import UNIT_KIND_HUMAN
-from macro_foundry.services.embeddings import compose_concept_embedding_input
-from macro_foundry.services.embeddings import compose_indicator_embedding_input
 from macro_foundry.services.embeddings import compose_series_embedding_input
 from macro_foundry.services.embeddings import embed_text
 from macro_foundry.services.embeddings import hash_embedding_input
 
 
 @pytest.mark.no_db
-def test_compose_concept_embedding_input_uses_locked_recipe_labels() -> None:
-    concept = Concept(
-        code="CPI",
-        name="Consumer Price Index",
-        description="Measures consumer price inflation.",
-    )
-
-    assert compose_concept_embedding_input(concept) == (
-        "Type: Concept\n"
-        "Code: CPI\n"
-        "Name: Consumer Price Index\n"
-        "Description: Measures consumer price inflation."
-    )
-
-
-@pytest.mark.no_db
-def test_compose_indicator_embedding_input_includes_parent_context() -> None:
-    concept = Concept(
-        code="CPI",
-        name="Consumer Price Index",
-        description="Measures consumer price inflation.",
-    )
+def test_compose_series_embedding_input_humanizes_enums() -> None:
+    # The indicator/concept context lines were dropped with the V7 spine
+    # (ADR 0025); the series recipe now composes from the series' own fields.
     geography = Geography(
         code="USA",
         name="United States",
         type=GeographyType.COUNTRY,
         code_standard=CodeStandard.ISO_3166_1,
-    )
-    family = Indicator(
-        code="USA_CPI",
-        name="USA CPI",
-        description="Consumer price index family for the United States.",
-        concept=concept,
-        geography=geography,
-    )
-
-    assert compose_indicator_embedding_input(family) == (
-        "Type: Indicator\n"
-        "Code: USA_CPI\n"
-        "Name: USA CPI\n"
-        "Description: Consumer price index family for the United States.\n"
-        "Geography: United States\n"
-        "Concept: Consumer Price Index (CPI)\n"
-        "Concept description: Measures consumer price inflation."
-    )
-
-
-@pytest.mark.no_db
-def test_compose_series_embedding_input_humanizes_enums_and_includes_parents() -> None:
-    concept = Concept(
-        code="CPI",
-        name="Consumer Price Index",
-        description="Measures consumer price inflation.",
-    )
-    geography = Geography(
-        code="USA",
-        name="United States",
-        type=GeographyType.COUNTRY,
-        code_standard=CodeStandard.ISO_3166_1,
-    )
-    family = Indicator(
-        code="USA_CPI",
-        name="USA CPI",
-        description="Consumer price index family for the United States.",
-        concept=concept,
-        geography=geography,
     )
     series = Series(
         code="USA_CPI_HEADLINE_M_NSA",
@@ -119,12 +58,6 @@ def test_compose_series_embedding_input_humanizes_enums_and_includes_parents() -
         is_active=True,
     )
     series.alt_name = ["Headline CPI", "CPI-U All Items"]
-    IndicatorVariant(
-        indicator=family,
-        series=series,
-        label="Headline",
-        is_default=True,
-    )
 
     assert compose_series_embedding_input(series) == (
         "Type: Series\n"
@@ -137,9 +70,7 @@ def test_compose_series_embedding_input_humanizes_enums_and_includes_parents() -
         "Unit: index\n"
         "Unit label: index\n"
         "Measure: level\n"
-        "Seasonal adjustment: not seasonally adjusted\n"
-        "Indicator: USA CPI (USA_CPI)\n"
-        "Concept: Consumer Price Index (CPI)"
+        "Seasonal adjustment: not seasonally adjusted"
     )
 
 

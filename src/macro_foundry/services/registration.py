@@ -8,12 +8,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from macro_foundry.models import Concept, Geography, Series, Indicator, IndicatorVariant
-from macro_foundry.schemas import ConceptCreate, SeriesCreate, IndicatorCreate
+from macro_foundry.models import Geography, Series
+from macro_foundry.schemas import SeriesCreate
 from macro_foundry.services.embeddings import (
     EMBEDDING_MODEL,
-    compose_concept_embedding_input,
-    compose_indicator_embedding_input,
     compose_series_embedding_input,
     embed_text,
     hash_embedding_input,
@@ -41,9 +39,6 @@ async def ensure_series_embedding_current(
             .execution_options(populate_existing=True)
             .options(
                 selectinload(Series.geography),
-                selectinload(Series.indicator_variant)
-                .selectinload(IndicatorVariant.indicator)
-                .selectinload(Indicator.concept),
             )
             .where(Series.id == series.id),
         )
@@ -66,46 +61,6 @@ async def ensure_series_embedding_current(
     async with _registration_lock(session):
         await session.flush()
     return hydrated
-
-
-async def register_concept(
-    session: AsyncSession,
-    payload: ConceptCreate,
-) -> Concept:
-    """Create a concept row with embedding metadata populated."""
-
-    concept = Concept(**payload.model_dump())
-    text = compose_concept_embedding_input(concept)
-    concept.embedding = await embed_text(text)
-    concept.embedding_model = EMBEDDING_MODEL
-    concept.embedding_input_hash = hash_embedding_input(text)
-    async with _registration_lock(session):
-        session.add(concept)
-        await session.flush()
-    return concept
-
-
-async def register_indicator(
-    session: AsyncSession,
-    payload: IndicatorCreate,
-) -> Indicator:
-    """Create an indicator row with embedding metadata populated."""
-
-    async with _registration_lock(session):
-        concept = await session.get(Concept, payload.concept_id)
-        geography = await session.get(Geography, payload.geography_id)
-
-    indicator = Indicator(**payload.model_dump())
-    indicator.concept = concept
-    indicator.geography = geography
-    text = compose_indicator_embedding_input(indicator)
-    indicator.embedding = await embed_text(text)
-    indicator.embedding_model = EMBEDDING_MODEL
-    indicator.embedding_input_hash = hash_embedding_input(text)
-    async with _registration_lock(session):
-        session.add(indicator)
-        await session.flush()
-    return indicator
 
 
 async def register_series(
@@ -131,7 +86,5 @@ async def register_series(
 
 __all__ = [
     "ensure_series_embedding_current",
-    "register_concept",
-    "register_indicator",
     "register_series",
 ]

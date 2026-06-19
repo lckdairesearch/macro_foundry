@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import date
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ARRAY, Boolean, CheckConstraint, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import ARRAY, Boolean, CheckConstraint, Date, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from macro_foundry.db.base import Base, TimestampedBase
+from macro_foundry.db.base import TimestampedBase
 from macro_foundry.enums import (
     Frequency,
     Measure,
@@ -29,7 +28,6 @@ from macro_foundry.models._vector import Vector
 _EMBEDDING_DIMENSIONS = 1536
 
 if TYPE_CHECKING:
-    from macro_foundry.models.concept import Concept
     from macro_foundry.models.derived import DerivationInput, DerivedSeries
     from macro_foundry.models.geography import Geography
     from macro_foundry.models.observation import Observation
@@ -159,13 +157,6 @@ class Series(TimestampedBase):
         lazy="selectin",
         uselist=False,
     )
-    indicator_variant: Mapped["IndicatorVariant | None"] = relationship(
-        "IndicatorVariant",
-        back_populates="series",
-        lazy="selectin",
-        passive_deletes=True,
-        uselist=False,
-    )
     series_sources: Mapped[list["SeriesSource"]] = relationship(
         "SeriesSource",
         back_populates="series",
@@ -247,87 +238,4 @@ class SeriesHierarchyEdge(TimestampedBase):
     )
 
 
-class Indicator(TimestampedBase):
-    """Operationalized, unit-bearing measure of one concept for one geography."""
-
-    __tablename__ = "indicators"
-    __table_args__ = (UniqueConstraint("code", name="uq_indicators_code"),)
-
-    code: Mapped[str] = mapped_column(String(), nullable=False)
-    name: Mapped[str] = mapped_column(String(), nullable=False)
-    description: Mapped[str | None] = mapped_column(String(), nullable=True)
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(_EMBEDDING_DIMENSIONS), nullable=True)
-    embedding_model: Mapped[str | None] = mapped_column(String(), nullable=True)
-    embedding_input_hash: Mapped[str | None] = mapped_column(String(), nullable=True)
-    concept_id: Mapped[uuid.UUID] = fk_uuid(
-        "concepts.id",
-        ondelete="RESTRICT",
-        nullable=False,
-    )
-    geography_id: Mapped[uuid.UUID] = fk_uuid(
-        "geographies.id",
-        ondelete="RESTRICT",
-        nullable=False,
-    )
-
-    concept: Mapped["Concept"] = relationship(
-        "Concept",
-        back_populates="indicators",
-        lazy="selectin",
-    )
-    geography: Mapped["Geography"] = relationship(
-        "Geography",
-        back_populates="indicators",
-        lazy="selectin",
-    )
-    variants: Mapped[list["IndicatorVariant"]] = relationship(
-        "IndicatorVariant",
-        back_populates="indicator",
-        lazy="selectin",
-        passive_deletes=True,
-    )
-
-
-class IndicatorVariant(Base):
-    """V3 association row with a composite primary key and timestamps."""
-
-    __tablename__ = "indicator_variants"
-    __table_args__ = (UniqueConstraint("series_id", name="uq_indicator_variants_series_id"),)
-
-    indicator_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("indicators.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    series_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("series.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    label: Mapped[str | None] = mapped_column(String(), nullable=True)
-    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
-
-    indicator: Mapped["Indicator"] = relationship(
-        "Indicator",
-        back_populates="variants",
-        lazy="selectin",
-    )
-    series: Mapped["Series"] = relationship(
-        "Series",
-        back_populates="indicator_variant",
-        lazy="selectin",
-    )
-
-
-__all__ = ["Indicator", "IndicatorVariant", "Series", "SeriesHierarchyEdge"]
+__all__ = ["Series", "SeriesHierarchyEdge"]

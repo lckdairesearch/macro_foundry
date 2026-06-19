@@ -9,19 +9,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from macro_foundry.enums import OriginType
 from macro_foundry.models import (
-    Concept,
     IngestionFeed,
     Observation,
     Provider,
     Series,
-    Indicator,
 )
 
 
 @dataclass
 class AdminStats:
-    concept_count: int
-    indicator_count: int
     series_count_by_origin_type: dict[str, int]
     observation_count: int
     provider_count: int
@@ -29,10 +25,6 @@ class AdminStats:
 
 
 async def admin_stats(session: AsyncSession) -> AdminStats:
-    concept_count = await session.scalar(select(func.count()).select_from(Concept)) or 0
-    indicator_count = (
-        await session.scalar(select(func.count()).select_from(Indicator)) or 0
-    )
     observation_count = (
         await session.scalar(select(func.count()).select_from(Observation)) or 0
     )
@@ -50,8 +42,6 @@ async def admin_stats(session: AsyncSession) -> AdminStats:
     }
 
     return AdminStats(
-        concept_count=concept_count,
-        indicator_count=indicator_count,
         series_count_by_origin_type=series_count_by_origin_type,
         observation_count=observation_count,
         provider_count=provider_count,

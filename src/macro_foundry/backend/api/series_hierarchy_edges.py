@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from macro_foundry.backend.deps import get_session, verify_token
-from macro_foundry.models import Series, Indicator, IndicatorVariant, SeriesHierarchyEdge
+from macro_foundry.models import Series, SeriesHierarchyEdge
 from macro_foundry.schemas import SeriesHierarchyEdgeCreate, SeriesHierarchyEdgeRead, SeriesHierarchyEdgeUpdate
 
 router = APIRouter(prefix="/series-hierarchy-edges", tags=["series-hierarchy-edges"])
@@ -20,16 +20,10 @@ async def _fetch_edge(session: AsyncSession, edge_id: UUID) -> SeriesHierarchyEd
     return await session.scalar(select(SeriesHierarchyEdge).where(SeriesHierarchyEdge.id == edge_id))
 
 
-async def _concept_id_for_series(session: AsyncSession, series_id: UUID) -> UUID | None:
-    statement = (
-        select(Indicator.concept_id)
-        .join(IndicatorVariant, IndicatorVariant.indicator_id == Indicator.id)
-        .where(IndicatorVariant.series_id == series_id)
-    )
-    return await session.scalar(statement)
-
-
-async def _validate_same_concept_edge(session: AsyncSession, parent_series_id: UUID, child_series_id: UUID) -> None:
+async def _validate_edge_endpoints(session: AsyncSession, parent_series_id: UUID, child_series_id: UUID) -> None:
+    # The same-concept guard rode on the indicator chain dropped in ADR 0025;
+    # re-introduce a same-category guard once series.category_id lands. For now
+    # only the structural invariants remain: distinct, existing endpoints.
     if parent_series_id == child_series_id:
         raise HTTPException(
             status_code=422,
@@ -40,19 +34,6 @@ async def _validate_same_concept_edge(session: AsyncSession, parent_series_id: U
     child = await session.scalar(select(Series).where(Series.id == child_series_id))
     if parent is None or child is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Series not found")
-
-    parent_concept_id = await _concept_id_for_series(session, parent_series_id)
-    child_concept_id = await _concept_id_for_series(session, child_series_id)
-    if parent_concept_id is None or child_concept_id is None:
-        raise HTTPException(
-            status_code=422,
-            detail="Both hierarchy endpoints must belong to an indicator",
-        )
-    if parent_concept_id != child_concept_id:
-        raise HTTPException(
-            status_code=422,
-            detail="Series hierarchy edges must stay within one concept",
-        )
 
 
 async def _commit_or_conflict(session: AsyncSession) -> None:
@@ -106,7 +87,7 @@ async def create_series_hierarchy_edge(
     session: AsyncSession = Depends(get_session),
     _: None = Depends(verify_token),
 ) -> SeriesHierarchyEdge:
-    await _validate_same_concept_edge(session, payload.parent_series_id, payload.child_series_id)
+    await _validate_edge_endpoints(session,payload.parent_series_id, payload.child_series_id)
     edge = SeriesHierarchyEdge(**payload.model_dump(exclude_unset=True))
     session.add(edge)
     await _commit_or_conflict(session)
@@ -129,7 +110,7 @@ async def update_series_hierarchy_edge(
     parent_series_id = update_data.get("parent_series_id", edge.parent_series_id)
     child_series_id = update_data.get("child_series_id", edge.child_series_id)
     if "parent_series_id" in update_data or "child_series_id" in update_data:
-        await _validate_same_concept_edge(session, parent_series_id, child_series_id)
+        await _validate_edge_endpoints(session,parent_series_id, child_series_id)
 
     for field_name, field_value in update_data.items():
         setattr(edge, field_name, field_value)

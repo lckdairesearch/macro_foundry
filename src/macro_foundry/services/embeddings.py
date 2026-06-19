@@ -16,7 +16,7 @@ import openai
 
 from macro_foundry.config import settings
 from macro_foundry.enums import Frequency, Measure, SeasonalAdjustment, UnitKind
-from macro_foundry.models import Concept, Indicator, Series
+from macro_foundry.models import Series
 
 EMBEDDING_MODEL = "text-embedding-3-small"
 EMBEDDING_DIMENSIONS = 1536
@@ -68,44 +68,11 @@ def _compose(lines: list[str | None]) -> str:
     return "\n".join(line for line in lines if line is not None)
 
 
-def compose_concept_embedding_input(concept: Concept) -> str:
-    return _compose(
-        [
-            _line("Type", "Concept"),
-            _line("Code", concept.code),
-            _line("Name", concept.name),
-            _line("Description", concept.description),
-        ],
-    )
-
-
-def compose_indicator_embedding_input(indicator: Indicator) -> str:
-    # NOTE: the "Type" label below is "Indicator" to match the renamed schema
-    # (ADR 0021). This string is part of the text fed to the embedding model, so
-    # this value drifts every stored embedding_input_hash on `indicators` and
-    # requires an indicators-only re-embed (`macrodb embeddings backfill`). This
-    # is the sanctioned `compose_indicator` label change in ADR 0020's
-    # recipe-change scope table.
-    return _compose(
-        [
-            _line("Type", "Indicator"),
-            _line("Code", indicator.code),
-            _line("Name", indicator.name),
-            _line("Description", indicator.description),
-            _line("Geography", indicator.geography.name if indicator.geography else None),
-            _line(
-                "Concept",
-                f"{indicator.concept.name} ({indicator.concept.code})" if indicator.concept else None,
-            ),
-            _line("Concept description", indicator.concept.description if indicator.concept else None),
-        ],
-    )
-
-
 def compose_series_embedding_input(series: Series) -> str:
+    # The indicator/concept context lines were dropped with the V7 spine
+    # (ADR 0025); the series embedding now composes from the series' own fields.
+    # Category context will be reintroduced once series.category_id lands.
     alt_names = ", ".join(series.alt_name) if series.alt_name else None
-    indicator = series.indicator_variant.indicator if series.indicator_variant else None
-    concept = indicator.concept if indicator else None
     return _compose(
         [
             _line("Type", "Series"),
@@ -119,8 +86,6 @@ def compose_series_embedding_input(series: Series) -> str:
             _line("Unit label", series.unit_label),
             _line("Measure", MEASURE_HUMAN.get(series.measure)),
             _line("Seasonal adjustment", SEASONAL_ADJUSTMENT_HUMAN.get(series.seasonal_adjustment)),
-            _line("Indicator", f"{indicator.name} ({indicator.code})" if indicator else None),
-            _line("Concept", f"{concept.name} ({concept.code})" if concept else None),
         ],
     )
 
