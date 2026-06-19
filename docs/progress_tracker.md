@@ -2800,4 +2800,16 @@ ADR 0024 (Proposed):
   decided here (narrow scope per user).
 - `docs/adr/README.md` index updated for ADR 0024
 
+### Issue #77 — V8 schema promoted to canonical (2026-06-20)
+
+- replaced `docs/schema/db_er.txt` (V7) with the full V8 source from
+  `docs/schema/db_er_proposed.txt`; header now reads "Schema V8 (category-tree
+  collapse + provider source groups)"
+- removed STATUS: PROPOSED note; canonical note ("this is the source of truth")
+  inserted in its place
+- `db_er_proposed.txt` kept as reference (unchanged)
+- CLAUDE.md + AGENTS.md updated: V3 → V8 references in the schema section
+- acceptance test added: `tests/test_schema_v8_canonical.sh` (13/13 PASS)
+- no code or model changes; schema doc only (ADR 0025 + 0026 contract)
+
 ### [Future entries go above this line]

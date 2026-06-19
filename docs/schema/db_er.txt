@@ -1,34 +1,51 @@
 // =============================================================
-// macrodb — Schema V7 (semantic-search embeddings + governance audit vocabulary)
+// macrodb — Schema V8 (category-tree collapse + provider source groups)
 // Layout: tables ordered root → leaf, all FKs written child > parent
 // This gives eraser.io a consistent signal for top-down auto-layout
-//
-// Dependency levels:
-//   L0 (roots):   geographies, concepts, tags, providers, ingestion_feeds
-//   L1:           series, indicators, provider_catalogs
-//   L2:           concept_tags, indicator_variants, series_hierarchy_edges, series_sources, derived_series
-//   L3:           ingestion_feed_members, derivation_inputs
-//   L4:           ingestion_run_logs, computation_run_logs
-//   L5:           ingestion_run_log_members
-//   L6:           observations
-//   Governance:   change_proposals, change_proposal_items
 //
 // Note: this is the canonical source of truth for the schema.
 // SQLAlchemy models, Alembic migrations, Pydantic schemas, and tests must
 // agree with this file. If a discrepancy is found, this is authoritative.
 //
-// V7 adds (over V6 member-level observation provenance):
-//   - pgvector embeddings on concepts, indicators, series — embedding vector(1536)
-//     + embedding_model + embedding_input_hash; all nullable, populated out-of-band;
-//     each backed by an HNSW cosine index (ix_<table>_embedding_hnsw)
-//   - change_proposals.applied_by + change_proposals.source_agent_session_id audit columns
-//   - widened governance enums: target_type adds credential_ref | enum_value;
-//     action adds suggest_human_apply | suggest_credential_provisioning | suggest_enum_addition;
-//     validation_status adds pending_human_apply | applied_by_operator | declined_by_operator
+// Dependency levels:
+//   L0 (roots):   geographies, categories, providers, ingestion_feeds
+//   L1:           series, category_edges, provider_catalogs
+//   L2:           series_hierarchy_edges, series_sources, derived_series, source_groups
+//   L3:           ingestion_feed_members, derivation_inputs, source_group_members
+//   L4:           ingestion_run_logs, computation_run_logs
+//   L5:           ingestion_run_log_members
+//   L6:           observations
+//   Governance:   change_proposals, change_proposal_items
 //
-// Intentionally NOT enforced (decisions to keep, not gaps):
-//   - No `reference_kind IS NOT NULL → reference_year IS NOT NULL` CHECK
-//   - No partial unique on indicator_variants(indicator_id) WHERE is_default=true
+// V8 changes over V7 (ADR 0025):
+//   - REMOVED concepts, indicators, indicator_variants, tags, concept_tags.
+//   - ADDED categories (one tree; kind=topic|concept; concept node carries the
+//     old concept embedding) + category_edges (strict tree, UNIQUE(child)).
+//   - series GAINS category_id (nullable FK to a kind=concept node, the
+//     "lowest matchable level") + is_default (former indicator_variants.is_default).
+//   - indicator (US_CPI) is now a DERIVED query (category_id, geography_id), not
+//     a stored row; indicator-grain embedding/description retired.
+//   - ADDED source_groups (typed, self-nesting provider publication unit) +
+//     source_group_members (link series_sources). series_hierarchy_edges KEPT.
+//   - change_proposal_items.target_type: dropped {concepts, indicators, tags,
+//     indicator_variants}; added {categories, source_groups}.
+//
+// Settled rules carried from V7 (unchanged):
+//   - No native pg ENUMs; values enforced via named CHECK constraints.
+//   - No DB triggers; updated_at via ORM onupdate.
+//   - The "series attaches only to a kind=concept node" rule is APP-ENFORCED
+//     (Pydantic + service), not a DB constraint (ADR 0025 §3).
+//
+// Color legend (by conceptual layer, for eraser.io rendering):
+//   orange = geography            (geographies, geography_memberships)
+//   purple = catalog identity     (categories, category_edges)
+//   green  = series core          (series, series_hierarchy_edges)
+//   blue   = provider & publication (providers, provider_catalogs, series_sources,
+//                                    source_groups, source_group_members)
+//   teal   = ingestion runtime    (ingestion_feeds + members + run logs)
+//   yellow = derivation           (derived_series, derivation_inputs, computation_run_logs)
+//   red    = observations
+//   gray   = governance           (change_proposals, change_proposal_items)
 // =============================================================
 
 // =======================
@@ -58,22 +75,21 @@ geography_memberships [icon: user-round, color: orange] {
   updated_at timestamp
 }
 
-concepts [icon: brain, color: purple] {
+// One tree replacing V7 concepts + tags + concept_tags (and, via series.category_id
+// + is_default, the addressable role of indicators + indicator_variants).
+categories [icon: folder-tree, color: purple] {
   id uuid pk
-  code string unique              // e.g. CPI, GDP, UNEMPLOYMENT_RATE, CURRENT_ACCOUNT_BALANCE
-  name string                     // curated taxonomy; added through API/admin/bootstrap flows
+  code string unique              // canonical UPPERCASE SCREAMING_SNAKE; PRICES, CONSUMER_PRICES, CPI_ALL_ITEMS
+  name string                     // human display label
   description string              // nullable
-  embedding vector                // nullable; 1536-dim; semantic search; HNSW cosine index ix_concepts_embedding_hnsw
+  kind string                     // ENUM: topic | concept
+                                  //   topic   = browse/navigation node, NOT attachable by series (PRICES)
+                                  //   concept = attachable economic idea, the old `concept` grain (CPI_ALL_ITEMS)
+                                  //   Series-attach-to-concept-only is enforced APP-SIDE (Pydantic/service), not DB.
+                                  //   Depth ≤ 3 is a curation convention, not a CHECK.
+  embedding vector                // nullable; 1536-dim; semantic search; populated for kind=concept; HNSW cosine index ix_categories_embedding_hnsw
   embedding_model string          // nullable; model id that produced the embedding
   embedding_input_hash string     // nullable; hash of embedded input text, for staleness detection
-  created_at timestamp
-  updated_at timestamp
-}
-
-tags [icon: tag, color: orange] {
-  id uuid pk
-  code string unique              // canonical UPPERCASE key, modeled like concepts (no code_standard)
-  name string                     // human display label
   created_at timestamp
   updated_at timestamp
 }
@@ -95,7 +111,7 @@ providers [icon: building, color: blue] {
   updated_at timestamp
 }
 
-ingestion_feeds [icon: rss, color: blue] {
+ingestion_feeds [icon: rss, color: teal] {
   id uuid pk
   feed_method string              // ENUM: api | file | scrape
   endpoint_url string             // nullable
@@ -122,6 +138,8 @@ series [icon: activity, color: green] {
   embedding_model string          // nullable; model id that produced the embedding
   embedding_input_hash string     // nullable; hash of embedded input text, for staleness detection
   origin_type string              // ENUM: ingested | derived | both
+  category_id uuid fk             // nullable; FK -> categories.id; the MOST-SPECIFIC (kind=concept) node this series belongs to ("lowest matchable level"). Nullable allows draft/unclassified series. Concept-only rule enforced APP-SIDE.
+  is_default boolean              // default reading within (category_id, geography_id); former indicator_variants.is_default. No partial-unique enforced.
   geography_id uuid fk            // FK -> geographies.id
   frequency string                // ENUM: D | W | M | Q | S | A; S for semi-annual
   temporal_stock_flow string      // ENUM: stock | flow | rate | index | unknown
@@ -145,16 +163,14 @@ series [icon: activity, color: green] {
   updated_at timestamp
 }
 
-indicators [icon: layers, color: purple] {
+// Parent/child relation for the categories tree. STRICT TREE via
+// UNIQUE(child_category_id) = at most one parent per node. Roots have no row.
+// Drop that UNIQUE to allow a DAG later (ADR 0025 §2).
+category_edges [icon: git-branch, color: purple] {
   id uuid pk
-  code string unique              // e.g. JP_CPI, US_CPI, JP_HOUSEHOLD_CONSUMPTION
-  name string
-  description string              // nullable
-  embedding vector                // nullable; 1536-dim; semantic search; HNSW cosine index ix_indicators_embedding_hnsw
-  embedding_model string          // nullable; model id that produced the embedding
-  embedding_input_hash string     // nullable; hash of embedded input text, for staleness detection
-  concept_id uuid fk              // FK -> concepts.id
-  geography_id uuid fk            // FK -> geographies.id
+  parent_category_id uuid fk      // FK -> categories.id; parent_category_id != child_category_id
+  child_category_id uuid fk       // FK -> categories.id; UNIQUE(child_category_id) -> single parent = tree
+  sort_order int                  // nullable; stable sibling ordering for browse
   created_at timestamp
   updated_at timestamp
 }
@@ -175,21 +191,7 @@ provider_catalogs [icon: list, color: blue] {
 // L2 — Junction and Second-level Dependents
 // =======================
 
-concept_tags [icon: tag, color: orange] {
-  concept_id uuid pk fk           // FK -> concepts.id
-  tag_id uuid pk fk               // FK -> tags.id
-}
-
-indicator_variants [icon: list, color: purple] {
-  indicator_id uuid pk fk         // FK -> indicators.id
-  series_id uuid pk fk           // FK -> series.id
-  label string                    // nullable; human-readable variant label e.g. "Core ex fresh food", "Two-or-more-person households"
-  is_default boolean
-  created_at timestamp
-  updated_at timestamp
-}
-
-series_hierarchy_edges [icon: git-branch, color: purple] {
+series_hierarchy_edges [icon: git-branch, color: green] {
   id uuid pk
   parent_series_id uuid fk        // FK -> series.id; parent_series_id != child_series_id
   child_series_id uuid fk         // FK -> series.id; unique on parent_series_id, child_series_id
@@ -228,11 +230,27 @@ derived_series [icon: cpu, color: yellow] {
   updated_at timestamp
 }
 
+// Provider-side PUBLICATION unit (FRED release, release table, dataset, dashboard).
+// Distinct from series_hierarchy_edges (canonical decomposition) and from
+// ingestion_feed (runtime fetch unit). Typed and self-nesting (ADR 0025 §4).
+source_groups [icon: folder, color: blue] {
+  id uuid pk
+  provider_catalog_id uuid fk     // FK -> provider_catalogs.id
+  parent_group_id uuid            // nullable; FK -> source_groups.id; self-nesting (release -> table); parent != id
+  group_type string               // ENUM: release | table | dataset | dashboard | other
+  code string                     // nullable; provider's id e.g. "rid=21"; UNIQUE (provider_catalog_id, code)
+  name string                     // e.g. "Employment Situation" | "Table B-1"
+  source_url string               // nullable; the published page
+  notes string                    // nullable
+  created_at timestamp
+  updated_at timestamp
+}
+
 // =======================
-// L3 — Runtime Configuration and Inputs
+// L3 — Runtime Configuration, Inputs, and Group Membership
 // =======================
 
-ingestion_feed_members [icon: list, color: blue] {
+ingestion_feed_members [icon: list, color: teal] {
   id uuid pk
   ingestion_feed_id uuid fk       // FK -> ingestion_feeds.id
   series_source_id uuid fk        // FK -> series_sources.id; unique, exactly one member per series_source
@@ -253,11 +271,23 @@ derivation_inputs [icon: git-merge, color: yellow] {
   updated_at timestamp
 }
 
+// Membership of a provider representation in a publication group. M:N, so a
+// series_source is NOT fixed to one table (release + table + dashboard at once).
+source_group_members [icon: rows, color: blue] {
+  id uuid pk
+  source_group_id uuid fk         // FK -> source_groups.id
+  series_source_id uuid fk        // FK -> series_sources.id; the provider representation in this group; UNIQUE (source_group_id, series_source_id)
+  row_label string                // nullable; label as printed in the table (may differ from series.name)
+  sort_order int                  // nullable; order within the group
+  created_at timestamp
+  updated_at timestamp
+}
+
 // =======================
 // L4 — Run Logs
 // =======================
 
-ingestion_run_logs [icon: clock, color: blue] {
+ingestion_run_logs [icon: clock, color: teal] {
   id uuid pk
   ingestion_feed_id uuid fk       // FK -> ingestion_feeds.id
   started_at timestamp
@@ -299,7 +329,7 @@ computation_run_logs [icon: clock, color: yellow] {
 // L5 — Member Outcomes
 // =======================
 
-ingestion_run_log_members [icon: clock, color: blue] {
+ingestion_run_log_members [icon: clock, color: teal] {
   id uuid pk
   ingestion_run_log_id uuid fk    // FK -> ingestion_run_logs.id; unique on ingestion_run_log_id, ingestion_feed_member_id
   ingestion_feed_member_id uuid fk // FK -> ingestion_feed_members.id
@@ -339,10 +369,10 @@ observations [icon: database, color: red] {
 // Governance Layer
 // =======================
 
-change_proposals [icon: clipboard, color: purple] {
+change_proposals [icon: clipboard, color: gray] {
   id uuid pk
   title string
-  proposal_type string            // ENUM: add_provider_series | add_derived_series | add_indicator | add_concept | code_and_db_change | schema_change | mixed
+  proposal_type string            // ENUM: add_provider_series | add_derived_series | add_category | code_and_db_change | schema_change | mixed   (V8: add_indicator + add_concept collapse to add_category)
   status string                   // ENUM: proposed | approved | applied | rejected | failed | superseded
   requested_by string             // ENUM: user | agent | system
   created_by_agent string         // nullable; specific agent identifier when requested_by = agent e.g. "claude-opus-4-7", "gpt-4o"
@@ -360,11 +390,11 @@ change_proposals [icon: clipboard, color: purple] {
   updated_at timestamp
 }
 
-change_proposal_items [icon: list-checks, color: purple] {
+change_proposal_items [icon: list-checks, color: gray] {
   id uuid pk
   proposal_id uuid fk             // FK -> change_proposals.id
   item_type string                // ENUM: db_row | code_change | migration | test | validation | documentation
-  target_type string              // ENUM: concepts | series | indicators | series_sources | ingestion_feeds | file | function | test | providers | provider_catalogs | derived_series | derivation_inputs | geographies | tags | indicator_variants | geography_memberships | credential_ref | enum_value
+  target_type string              // ENUM: categories | series | series_sources | ingestion_feeds | file | function | test | providers | provider_catalogs | derived_series | derivation_inputs | geographies | source_groups | geography_memberships | credential_ref | enum_value
   action string                   // ENUM: insert | update | deactivate | create_file | modify_file | run_test | validate | suggest_human_apply | suggest_credential_provisioning | suggest_enum_addition
   target_id uuid                  // nullable; existing DB row if update or deactivate; polymorphic, no FK enforcement
   target_ref string               // nullable; file path, function path, artifact path
@@ -379,7 +409,6 @@ change_proposal_items [icon: list-checks, color: purple] {
 // =============================================================
 // Relationships
 // All written as child.fk > parent.id (arrow points child → parent)
-// Gives eraser.io a consistent signal: parents render above children
 // `ON DELETE` annotations below are canonical for Phase 5 models and Phase 6 migrations.
 // =============================================================
 
@@ -388,17 +417,14 @@ geographies.parent_geography_id > geographies.id // ON DELETE RESTRICT
 geographies.id < geography_memberships.member_geography_id // ON DELETE CASCADE
 geographies.id < geography_memberships.group_geography_id // ON DELETE CASCADE
 
+// ---- Category tree ----
+category_edges.parent_category_id > categories.id // ON DELETE RESTRICT
+category_edges.child_category_id > categories.id // ON DELETE CASCADE
+
 // ---- Series core (anchor table + direct attributes) ----
+series.category_id > categories.id // ON DELETE RESTRICT; kind=concept enforced app-side
 series.geography_id > geographies.id // ON DELETE RESTRICT
 series.replaced_by_series_id - series.id // ON DELETE RESTRICT
-
-// ---- Concept / indicator cluster ----
-indicators.concept_id > concepts.id // ON DELETE RESTRICT
-concept_tags.concept_id > concepts.id // ON DELETE CASCADE
-concept_tags.tag_id > tags.id // ON DELETE CASCADE
-indicators.geography_id > geographies.id // ON DELETE RESTRICT
-indicator_variants.indicator_id > indicators.id // ON DELETE CASCADE
-indicator_variants.series_id - series.id // ON DELETE CASCADE
 series_hierarchy_edges.parent_series_id > series.id // ON DELETE RESTRICT
 series_hierarchy_edges.child_series_id > series.id // ON DELETE RESTRICT
 
@@ -411,6 +437,12 @@ ingestion_feed_members.series_source_id - series_sources.id // ON DELETE CASCADE
 ingestion_run_logs.ingestion_feed_id > ingestion_feeds.id // ON DELETE RESTRICT
 ingestion_run_log_members.ingestion_run_log_id > ingestion_run_logs.id // ON DELETE RESTRICT
 ingestion_run_log_members.ingestion_feed_member_id > ingestion_feed_members.id // ON DELETE RESTRICT
+
+// ---- Provider source groups (publication layout) ----
+source_groups.provider_catalog_id > provider_catalogs.id // ON DELETE RESTRICT
+source_groups.parent_group_id > source_groups.id // ON DELETE RESTRICT
+source_group_members.source_group_id > source_groups.id // ON DELETE CASCADE
+source_group_members.series_source_id > series_sources.id // ON DELETE CASCADE
 
 // ---- Derivation chain ----
 derived_series.series_id - series.id // ON DELETE CASCADE
@@ -426,3 +458,12 @@ observations.computation_run_log_id > computation_run_logs.id // ON DELETE RESTR
 // ---- Governance (intentionally isolated) ----
 change_proposals.superseded_by_proposal_id > change_proposals.id // ON DELETE RESTRICT
 change_proposal_items.proposal_id > change_proposals.id // ON DELETE CASCADE
+
+// =============================================================
+// DERIVED (no longer stored) — how to recover the old entities
+//   indicator (US_CPI)   = series WHERE category_id = <concept node> AND geography_id = <geo>
+//   "CPI everywhere"      = series WHERE category_id = <CPI_ALL_ITEMS>
+//   "everything in Prices"= series WHERE category_id IN descendants(<PRICES>)  -- recursive CTE over category_edges
+//   topic(series)         = ancestors(series.category_id)                      -- recursive CTE over category_edges
+//   default reading       = ... AND is_default
+// =============================================================

@@ -26,9 +26,9 @@ Before any work, load these files. They are short by design — read all of them
 6. `docs/progress_tracker.md` — what's done, what's next
 7. `docs/adr/` — skim the index; read in full any ADR relevant to the work at hand
 
-For schema work, the **canonical source** is `docs/schema/db_er.txt` (V3 eraser.io source).
-SQLAlchemy models, Alembic migrations, Pydantic schemas, and tests must all agree with V3.
-If a discrepancy is found, V3 is the source of truth — flag the discrepancy and propose
+For schema work, the **canonical source** is `docs/schema/db_er.txt` (V8 eraser.io source).
+SQLAlchemy models, Alembic migrations, Pydantic schemas, and tests must all agree with V8.
+If a discrepancy is found, V8 is the source of truth — flag the discrepancy and propose
 the fix.
 
 ## Guardrails — non-negotiable rules
