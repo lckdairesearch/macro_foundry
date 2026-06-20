@@ -16,7 +16,7 @@ import openai
 
 from macro_foundry.config import settings
 from macro_foundry.enums import Frequency, Measure, SeasonalAdjustment, UnitKind
-from macro_foundry.models import Series
+from macro_foundry.models import Category, Series
 
 EMBEDDING_MODEL = "text-embedding-3-small"
 EMBEDDING_DIMENSIONS = 1536
@@ -86,6 +86,26 @@ def compose_series_embedding_input(series: Series) -> str:
             _line("Unit label", series.unit_label),
             _line("Measure", MEASURE_HUMAN.get(series.measure)),
             _line("Seasonal adjustment", SEASONAL_ADJUSTMENT_HUMAN.get(series.seasonal_adjustment)),
+        ],
+    )
+
+
+def compose_category_embedding_input(category: Category, *, parent_name: str | None = None) -> str:
+    """Compose the embedding input for a `kind=concept` category node (ADR 0025 §1).
+
+    The embedding that lived on the V7 `concepts` table now lives on the concept
+    node of the `categories` tree. The recipe is intentionally narrow: the node's
+    own identity (code/name/description) plus its parent subdomain for topical
+    context. Topic nodes are not embedded.
+    """
+
+    return _compose(
+        [
+            _line("Type", "Concept"),
+            _line("Code", category.code),
+            _line("Name", category.name),
+            _line("Subdomain", parent_name),
+            _line("Description", category.description),
         ],
     )
 

@@ -6,15 +6,16 @@ import asyncio
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from macro_foundry.enums import CategoryKind
-from macro_foundry.models import Category, Geography, Series
+from macro_foundry.models import Category, CategoryEdge, Geography, Series
 from macro_foundry.schemas import SeriesCreate
 from macro_foundry.services.embeddings import (
     EMBEDDING_MODEL,
+    compose_category_embedding_input,
     compose_series_embedding_input,
     embed_text,
     hash_embedding_input,
@@ -59,6 +60,75 @@ async def ensure_category_is_concept(
             "category_id must reference a kind=concept node, "
             f"got {category.kind.value} '{category.code}'",
         )
+
+
+async def register_concept_node(
+    session: AsyncSession,
+    *,
+    code: str,
+    name: str,
+    parent_code: str,
+    description: str | None = None,
+) -> Category:
+    """Find-or-mint the `kind=concept` node a series will attach to (ADR 0025/0026).
+
+    Concepts accrete as series arrive: a universal concept seeded under the
+    subdomain skeleton is returned as-is; a not-yet-existing concept is minted as
+    a `kind=concept` node, embedded (ADR 0025 §1 — the concept node carries the
+    embedding that lived on the V7 `concepts` table), and linked under its parent
+    subdomain via a `category_edge`. Idempotent on `categories.code`.
+
+    The parent subdomain must already exist (seeded skeleton). Minting a concept
+    under a missing parent — or returning a node that is not itself a concept —
+    is rejected rather than papered over with a placeholder (ADR 0010).
+    """
+
+    async with _registration_lock(session):
+        existing = await session.scalar(select(Category).where(Category.code == code))
+    if existing is not None:
+        if existing.kind is not CategoryKind.CONCEPT:
+            raise CategoryAttachmentError(
+                f"category '{code}' already exists as kind={existing.kind.value}, "
+                "not an attachable concept node",
+            )
+        return existing
+
+    async with _registration_lock(session):
+        parent = await session.scalar(select(Category).where(Category.code == parent_code))
+    if parent is None:
+        raise CategoryAttachmentError(
+            f"parent subdomain '{parent_code}' for concept '{code}' does not exist; "
+            "seed the subdomain skeleton before accreting concepts",
+        )
+
+    concept = Category(
+        code=code,
+        name=name,
+        description=description,
+        kind=CategoryKind.CONCEPT,
+    )
+    text = compose_category_embedding_input(concept, parent_name=parent.name)
+    concept.embedding = await embed_text(text)
+    concept.embedding_model = EMBEDDING_MODEL
+    concept.embedding_input_hash = hash_embedding_input(text)
+
+    async with _registration_lock(session):
+        session.add(concept)
+        await session.flush()
+        next_sort_order = await session.scalar(
+            select(func.count())
+            .select_from(CategoryEdge)
+            .where(CategoryEdge.parent_category_id == parent.id),
+        )
+        session.add(
+            CategoryEdge(
+                parent_category_id=parent.id,
+                child_category_id=concept.id,
+                sort_order=next_sort_order,
+            ),
+        )
+        await session.flush()
+    return concept
 
 
 async def ensure_series_embedding_current(
@@ -124,5 +194,6 @@ __all__ = [
     "CategoryAttachmentError",
     "ensure_category_is_concept",
     "ensure_series_embedding_current",
+    "register_concept_node",
     "register_series",
 ]

@@ -3,6 +3,7 @@
 from macro_foundry.services.embeddings import (
     EMBEDDING_DIMENSIONS,
     EMBEDDING_MODEL,
+    compose_category_embedding_input,
     compose_series_embedding_input,
     embed_text,
     embed_texts,
@@ -12,6 +13,7 @@ from macro_foundry.services.registration import (
     CategoryAttachmentError,
     ensure_category_is_concept,
     ensure_series_embedding_current,
+    register_concept_node,
     register_series,
 )
 
@@ -19,11 +21,13 @@ __all__ = [
     "EMBEDDING_DIMENSIONS",
     "EMBEDDING_MODEL",
     "CategoryAttachmentError",
+    "compose_category_embedding_input",
     "compose_series_embedding_input",
     "embed_text",
     "embed_texts",
     "ensure_category_is_concept",
     "ensure_series_embedding_current",
     "hash_embedding_input",
+    "register_concept_node",
     "register_series",
 ]
