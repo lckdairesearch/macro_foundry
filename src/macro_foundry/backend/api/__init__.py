@@ -19,6 +19,8 @@ from macro_foundry.backend.api.providers import router as providers_router
 from macro_foundry.backend.api.series import router as series_router
 from macro_foundry.backend.api.series_hierarchy_edges import router as series_hierarchy_edges_router
 from macro_foundry.backend.api.series_sources import router as series_sources_router
+from macro_foundry.backend.api.source_group_members import router as source_group_members_router
+from macro_foundry.backend.api.source_groups import router as source_groups_router
 
 API_ROUTERS = (
     categories_router,
@@ -40,6 +42,8 @@ API_ROUTERS = (
     series_router,
     series_hierarchy_edges_router,
     series_sources_router,
+    source_groups_router,
+    source_group_members_router,
 )
 
 __all__ = ["API_ROUTERS"]

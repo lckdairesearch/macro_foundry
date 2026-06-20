@@ -34,4 +34,14 @@ class FeedMethod(str, Enum):
     SCRAPE = "scrape"
 
 
-__all__ = ["AuthScheme", "FeedMethod", "ProviderRole", "ProviderType"]
+class SourceGroupType(str, Enum):
+    """Kind of provider-side publication unit (ADR 0025 §4)."""
+
+    RELEASE = "release"
+    TABLE = "table"
+    DATASET = "dataset"
+    DASHBOARD = "dashboard"
+    OTHER = "other"
+
+
+__all__ = ["AuthScheme", "FeedMethod", "ProviderRole", "ProviderType", "SourceGroupType"]

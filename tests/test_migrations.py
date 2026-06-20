@@ -31,6 +31,8 @@ EXPECTED_TABLES = {
     "series",
     "series_hierarchy_edges",
     "series_sources",
+    "source_group_members",
+    "source_groups",
 }
 
 

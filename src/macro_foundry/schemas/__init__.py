@@ -103,6 +103,17 @@ from macro_foundry.schemas.series import (
     SeriesSearchHit,
     SeriesUpdate,
 )
+from macro_foundry.schemas.source_group import (
+    SourceGroupBase,
+    SourceGroupCreate,
+    SourceGroupMemberBase,
+    SourceGroupMemberCreate,
+    SourceGroupMemberRead,
+    SourceGroupMemberUpdate,
+    SourceGroupRead,
+    SourceGroupReadDetail,
+    SourceGroupUpdate,
+)
 
 __all__ = [
     "CategoryBase",
@@ -190,4 +201,13 @@ __all__ = [
     "SeriesSourceRead",
     "SeriesSourceUpdate",
     "SeriesUpdate",
+    "SourceGroupBase",
+    "SourceGroupCreate",
+    "SourceGroupMemberBase",
+    "SourceGroupMemberCreate",
+    "SourceGroupMemberRead",
+    "SourceGroupMemberUpdate",
+    "SourceGroupRead",
+    "SourceGroupReadDetail",
+    "SourceGroupUpdate",
 ]

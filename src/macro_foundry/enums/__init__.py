@@ -17,7 +17,7 @@ from macro_foundry.enums.governance import (
     TargetType,
     ValidationStatus,
 )
-from macro_foundry.enums.provider import AuthScheme, FeedMethod, ProviderRole, ProviderType
+from macro_foundry.enums.provider import AuthScheme, FeedMethod, ProviderRole, ProviderType, SourceGroupType
 from macro_foundry.enums.run import (
     ComputationRunStatus,
     ComputationTriggeredBy,
@@ -65,6 +65,7 @@ __all__ = [
     "RequestedBy",
     "RiskLevel",
     "SeasonalAdjustment",
+    "SourceGroupType",
     "TargetType",
     "TemporalStockFlow",
     "UnitKind",

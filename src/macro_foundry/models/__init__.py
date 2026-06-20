@@ -9,6 +9,7 @@ from macro_foundry.models.observation import Observation
 from macro_foundry.models.provider import Provider, ProviderCatalog, SeriesSource
 from macro_foundry.models.run_log import ComputationRunLog, IngestionRunLog, IngestionRunLogMember
 from macro_foundry.models.series import Series, SeriesHierarchyEdge
+from macro_foundry.models.source_group import SourceGroup, SourceGroupMember
 
 __all__ = [
     "Category",
@@ -30,4 +31,6 @@ __all__ = [
     "Series",
     "SeriesHierarchyEdge",
     "SeriesSource",
+    "SourceGroup",
+    "SourceGroupMember",
 ]

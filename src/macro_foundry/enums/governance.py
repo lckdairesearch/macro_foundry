@@ -54,6 +54,7 @@ class TargetType(str, Enum):
     DERIVED_SERIES = "derived_series"
     DERIVATION_INPUTS = "derivation_inputs"
     GEOGRAPHIES = "geographies"
+    SOURCE_GROUPS = "source_groups"
     GEOGRAPHY_MEMBERSHIPS = "geography_memberships"
     CREDENTIAL_REF = "credential_ref"
     ENUM_VALUE = "enum_value"

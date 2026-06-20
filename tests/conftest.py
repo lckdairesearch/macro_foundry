@@ -30,6 +30,8 @@ TRUNCATE TABLE
     derived_series,
     ingestion_feed_members,
     ingestion_feeds,
+    source_group_members,
+    source_groups,
     series_sources,
     series_hierarchy_edges,
     series,
