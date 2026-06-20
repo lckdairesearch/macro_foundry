@@ -2,19 +2,20 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.encoders import jsonable_encoder
 from pydantic import ValidationError
-from sqlalchemy import Select, select
+from sqlalchemy import Select, literal, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from macro_foundry.backend.deps import get_session, verify_token
-from macro_foundry.models import Series
-from macro_foundry.schemas import GeographyRead, SeriesCreate, SeriesRead, SeriesReadDetail, SeriesUpdate
+from macro_foundry.models import Category, CategoryEdge, Series
+from macro_foundry.schemas import CategoryRead, GeographyRead, SeriesCreate, SeriesRead, SeriesReadDetail, SeriesUpdate
 from macro_foundry.services.registration import CategoryAttachmentError, ensure_category_is_concept
 
 router = APIRouter(prefix="/series", tags=["series"])
@@ -26,11 +27,59 @@ def _series_detail_statement() -> Select[tuple[Series]]:
     )
 
 
-def _serialize_series_detail(series: Series) -> SeriesReadDetail:
+async def _category_paths_for(
+    session: AsyncSession,
+    category_ids: Iterable[UUID | None],
+) -> dict[UUID, list[Category]]:
+    """Walk each category up `category_edges`, most-specific first (ADR 0025 §1).
+
+    One recursive CTE for the whole input set: row 0 of each path is the node
+    itself (the attached concept), then each ancestor up to the domain root. This
+    is explicit and eager — it never relies on relationship lazy-loading.
+    """
+
+    unique_ids = {cid for cid in category_ids if cid is not None}
+    if not unique_ids:
+        return {}
+
+    edges = CategoryEdge.__table__
+    walk = (
+        select(
+            Category.id.label("origin_id"),
+            Category.id.label("category_id"),
+            literal(0).label("depth"),
+        )
+        .where(Category.id.in_(unique_ids))
+        .cte("series_category_path", recursive=True)
+    )
+    walk = walk.union_all(
+        select(
+            walk.c.origin_id,
+            edges.c.parent_category_id,
+            walk.c.depth + 1,
+        ).join(walk, edges.c.child_category_id == walk.c.category_id),
+    )
+    statement = (
+        select(walk.c.origin_id, Category)
+        .join(Category, Category.id == walk.c.category_id)
+        .order_by(walk.c.origin_id, walk.c.depth)
+    )
+
+    paths: dict[UUID, list[Category]] = {}
+    for origin_id, category in await session.execute(statement):
+        paths.setdefault(origin_id, []).append(category)
+    return paths
+
+
+def _serialize_series_detail(
+    series: Series,
+    category_path: list[Category],
+) -> SeriesReadDetail:
     base_payload = SeriesRead.model_validate(series).model_dump()
     return SeriesReadDetail(
         **base_payload,
         geography=GeographyRead.model_validate(series.geography),
+        category_path=[CategoryRead.model_validate(node) for node in category_path],
     )
 
 
@@ -113,7 +162,9 @@ async def list_series(
     statement = statement.order_by(Series.code)
 
     result = await session.execute(statement)
-    return [_serialize_series_detail(series) for series in result.scalars().all()]
+    rows = result.scalars().all()
+    paths = await _category_paths_for(session, (series.category_id for series in rows))
+    return [_serialize_series_detail(series, paths.get(series.category_id, [])) for series in rows]
 
 
 @router.get("/{series_id}", response_model=SeriesReadDetail)
@@ -125,7 +176,8 @@ async def get_series(
     series = await _get_series_by_id(session, series_id, with_detail=True)
     if series is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found")
-    return _serialize_series_detail(series)
+    paths = await _category_paths_for(session, [series.category_id])
+    return _serialize_series_detail(series, paths.get(series.category_id, []))
 
 
 @router.post("/", response_model=SeriesRead, status_code=status.HTTP_201_CREATED)

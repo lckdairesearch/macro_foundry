@@ -6,7 +6,7 @@ from datetime import date
 from typing import Self
 from uuid import UUID
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 
 from macro_foundry.enums import (
     Frequency,
@@ -21,6 +21,7 @@ from macro_foundry.enums import (
     UnitScale,
 )
 from macro_foundry.schemas._base import SchemaModel, TimestampedReadSchema
+from macro_foundry.schemas.category import CategoryRead
 from macro_foundry.schemas.geography import GeographyRead
 
 
@@ -145,6 +146,11 @@ class SeriesReadDetail(SeriesRead):
     """Series read model including selected cross-domain relationships."""
 
     geography: GeographyRead
+    # Lineage walked up `category_edges` from `series.category_id`, most-specific
+    # first: element 0 is the attached `kind=concept` node, then each ancestor up
+    # to the domain root (ADR 0025 §1). The topic of the series is `[1:]`. Empty
+    # when the series carries no `category_id`.
+    category_path: list[CategoryRead] = Field(default_factory=list)
 
 
 class SeriesHierarchyEdgeBase(SchemaModel):
