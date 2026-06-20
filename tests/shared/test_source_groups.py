@@ -426,8 +426,8 @@ async def _reseed_seed_tables() -> None:
         await engine.dispose()
 
 
-def test_migration_0019_round_trips_source_group_layer(alembic_config: Config) -> None:
-    """0019 creates both tables and widens the target_type CHECK; down/up round-trips.
+def test_migration_0020_round_trips_source_group_layer(alembic_config: Config) -> None:
+    """0020 creates both tables and widens the target_type CHECK; down/up round-trips.
 
     Downgrade to 0018 must drop both tables and narrow the CHECK back; upgrading to
     head restores them. The probe asserts the widened CHECK accepts `source_groups`
