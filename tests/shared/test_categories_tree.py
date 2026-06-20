@@ -68,7 +68,7 @@ async def test_create_and_get_category(client: AsyncClient, auth_headers: dict[s
     created = await _create_category(
         client,
         auth_headers,
-        code="CPI_ALL_ITEMS",
+        code="TEST_CPI_ALL_ITEMS",
         name="CPI, all items",
         kind=CategoryKind.CONCEPT,
     )
@@ -77,7 +77,7 @@ async def test_create_and_get_category(client: AsyncClient, auth_headers: dict[s
 
     assert response.status_code == HTTPStatus.OK
     body = response.json()
-    assert body["code"] == "CPI_ALL_ITEMS"
+    assert body["code"] == "TEST_CPI_ALL_ITEMS"
     assert body["kind"] == "concept"
 
 
@@ -86,23 +86,23 @@ async def test_ancestors_and_descendants_walk_the_tree(
     client: AsyncClient,
     auth_headers: dict[str, str],
 ) -> None:
-    prices = await _create_category(client, auth_headers, code="PRICES", name="Prices", kind=CategoryKind.TOPIC)
+    prices = await _create_category(client, auth_headers, code="TEST_PRICES", name="Prices", kind=CategoryKind.TOPIC)
     consumer = await _create_category(
-        client, auth_headers, code="CONSUMER_PRICES", name="Consumer prices", kind=CategoryKind.TOPIC
+        client, auth_headers, code="TEST_CONSUMER_PRICES", name="Consumer prices", kind=CategoryKind.TOPIC
     )
     cpi = await _create_category(
-        client, auth_headers, code="CPI_ALL_ITEMS", name="CPI, all items", kind=CategoryKind.CONCEPT
+        client, auth_headers, code="TEST_CPI_ALL_ITEMS", name="CPI, all items", kind=CategoryKind.CONCEPT
     )
     await _create_edge(client, auth_headers, parent_id=prices["id"], child_id=consumer["id"])
     await _create_edge(client, auth_headers, parent_id=consumer["id"], child_id=cpi["id"])
 
     ancestors = await client.get(f"/api/v1/categories/{cpi['id']}/ancestors", headers=auth_headers)
     assert ancestors.status_code == HTTPStatus.OK
-    assert [row["code"] for row in ancestors.json()] == ["CONSUMER_PRICES", "PRICES"]
+    assert [row["code"] for row in ancestors.json()] == ["TEST_CONSUMER_PRICES", "TEST_PRICES"]
 
     descendants = await client.get(f"/api/v1/categories/{prices['id']}/descendants", headers=auth_headers)
     assert descendants.status_code == HTTPStatus.OK
-    assert [row["code"] for row in descendants.json()] == ["CONSUMER_PRICES", "CPI_ALL_ITEMS"]
+    assert [row["code"] for row in descendants.json()] == ["TEST_CONSUMER_PRICES", "TEST_CPI_ALL_ITEMS"]
 
 
 @pytest.mark.asyncio
@@ -176,17 +176,19 @@ async def test_relationships_eager_load(session: AsyncSession) -> None:
     child = Category(code="EAGER_CHILD", name="Child", kind=CategoryKind.CONCEPT)
     session.add_all([parent, child])
     await session.flush()
-    session.add(CategoryEdge(parent_category_id=parent.id, child_category_id=child.id))
+    parent_id = parent.id
+    child_id = child.id
+    session.add(CategoryEdge(parent_category_id=parent_id, child_category_id=child_id))
     await session.flush()
     session.expire_all()
 
-    loaded_parent = await session.scalar(select(Category).where(Category.id == parent.id))
-    loaded_child = await session.scalar(select(Category).where(Category.id == child.id))
+    loaded_parent = await session.scalar(select(Category).where(Category.id == parent_id))
+    loaded_child = await session.scalar(select(Category).where(Category.id == child_id))
 
     # selectin-loaded; accessing does not raise MissingGreenlet.
-    assert [edge.child_category_id for edge in loaded_parent.child_edges] == [child.id]
+    assert [edge.child_category_id for edge in loaded_parent.child_edges] == [child_id]
     assert loaded_child.parent_edge is not None
-    assert loaded_child.parent_edge.parent_category_id == parent.id
+    assert loaded_child.parent_edge.parent_category_id == parent_id
 
 
 @pytest.mark.asyncio

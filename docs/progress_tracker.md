@@ -2928,4 +2928,32 @@ ADR 0024 (Proposed):
 - acceptance test added: `tests/test_schema_v8_canonical.sh` (13/13 PASS)
 - no code or model changes; schema doc only (ADR 0025 + 0026 contract)
 
+### Issues #80 / #81 / #82 — V8 categories: series attachment, source groups, taxonomy seed (2026-06-20)
+
+Built in parallel (three worktree-isolated TDD agents) + one reviewer pass
+(verdict `ship`), then integrated onto one linear migration chain.
+
+- **#80** — `series.category_id` (nullable FK → categories.id ON DELETE RESTRICT)
+  + `series.is_default` (NOT NULL, server_default false; no partial-unique).
+  Concept-only attachment enforced APP-side (`services.registration.
+  ensure_category_is_concept` + `CategoryAttachmentError`), not a DB constraint
+  (ADR 0025 §3). API gains the derived `(category_id, geography_id)` indicator
+  query, cross-geography read, and `is_default` default-reading filter. Migration
+  `0019`.
+- **#81** — provider-side `source_groups` + `source_group_members` (ADR 0025 §4):
+  typed (`SourceGroupType` non-native enum), self-nesting, owned by a
+  provider_catalog; members link `series_sources` (M:N), no per-member parent
+  pointer. `source_groups` added to `change_proposal_items.target_type`.
+  Migration `0020`.
+- **#82** — seeded the taxonomy skeleton: 15 domains + 71 subdomains + 9 universal
+  concepts (95 nodes / 80 edges), idempotent, single-parent, depth ≤ 3 (ADR 0026
+  §1/§2/§5). The 157-concept long tail is deliberately NOT seeded — it accretes
+  via bootstrap/onboarding. No Alembic migration (content only).
+- **Cleanup** — dropped dead V7 test weight superseded by the V8 `tests/shared/`
+  suite: top-level `test_constraints.py`, `test_seed.py`, `test_crud_generator.py`,
+  `test_e2e.py`, and the legacy `tests/macrodb/` dir (imported the retired
+  `macro_foundry.agent`, ADR 0023).
+- Live V8 suite green (101 passed), schema-canonical 0 failures, single Alembic
+  head `0020`. Implements to canonical `db_er.txt`; no schema-doc deviations.
+
 ### [Future entries go above this line]

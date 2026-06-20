@@ -16,3 +16,4 @@ src/macro_foundry/onboarding_agent/reference/
 
 # Sandbox for agent-proposed selector code; see ADR 0011 / issue #19.
 agent_workspace/
+.claude/
