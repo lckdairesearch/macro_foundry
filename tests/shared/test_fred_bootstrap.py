@@ -2,9 +2,8 @@
 
 The bootstrap attaches each curated series to its most-specific `kind=concept`
 node (`series.category_id`), minting a concept under the seeded subdomain
-skeleton when one does not yet exist (ADR 0025 §3, ADR 0026 §5), and marks the
-default reading with `series.is_default`. The V7 concept/indicator/variant spine
-is gone.
+skeleton when one does not yet exist (ADR 0025 §3, ADR 0026 §5). The V7
+concept/indicator/variant spine is gone.
 
 Runs against the shared session test database (conftest migrates + seeds to head,
 so `CONSUMER_PRICES`, `GDP_AND_GROWTH`, `CPI_ALL_ITEMS`, `GDP_NOMINAL`,
@@ -225,42 +224,6 @@ async def test_bootstrap_accretes_missing_concept_under_seeded_subdomain(
         )
         assert edge is not None
         assert edge.parent_category_id == consumer_prices.id
-
-
-@pytest.mark.asyncio
-async def test_bootstrap_sets_one_default_per_concept_geography_reading(
-    test_session_factory: async_sessionmaker[AsyncSession],
-) -> None:
-    client = _build_fake_client()
-
-    await run_fred_us_macro_bootstrap(
-        target=EnvTarget.TEST,
-        session_factory=test_session_factory,
-        client=client,
-        run_date=date(2026, 6, 9),
-    )
-
-    async with test_session_factory() as session:
-        usa = await session.scalar(select(Geography).where(Geography.code == "USA"))
-        # Each curated series is the sole reading of its (concept, USA) pair, so
-        # each is the default reading.
-        for code in (
-            "CPI_ALL_ITEMS",
-            "CPI_CORE",
-            "GDP_NOMINAL",
-            "GDP_REAL",
-        ):
-            concept = await _category(session, code)
-            defaults = (
-                await session.execute(
-                    select(Series).where(
-                        Series.category_id == concept.id,
-                        Series.geography_id == usa.id,
-                        Series.is_default.is_(True),
-                    ),
-                )
-            ).scalars().all()
-            assert len(defaults) == 1, f"expected exactly one default reading for {code}"
 
 
 @pytest.mark.asyncio

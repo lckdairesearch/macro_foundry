@@ -149,20 +149,22 @@ After the publication boundary, changes to canonical identity are dangerous
 because other database records and future reasoning may already depend on that
 series as defined.
 
-### Default reading (`series.is_default`)
+### Default reading (deferred)
 
-Within a `(concept, geography)` slice, at most one series is the **default
-reading** — the baseline a consumer gets when no extra qualifier is implied.
-Marked by `series.is_default = true`; the convention is one default per
-`(category_id, geography_id)`.
+Within a `(concept, geography)` slice there may eventually be several series (e.g.
+SA vs NSA, level vs YoY) and a need to mark one as the **default reading** — the
+baseline a consumer gets when no extra qualifier is implied. V8 originally carried
+this as `series.is_default`, but the column was **deferred and removed** (ADR
+0027): it was unenforced and disambiguated nothing while every slice was
+single-series. The marker returns under its own ADR when a real multi-series slice
+needs it.
 
 There is no `indicator_variants` row and no free-text `label` in V8 (ADR 0025):
 how a series differs from its siblings is carried by its own structural columns
 (`measure`, `unit_*`, `seasonal_adjustment`, …) plus `name` / `description` /
-`alt_name` prose. A default reading exists only when omitting the qualifier is an
-intentional curation choice, not when scope is still ambiguous. If a distinction
-becomes common enough to need consistent cross-series machine filtering, it earns
-a structured series column rather than more convention piled into prose.
+`alt_name` prose. If a distinction becomes common enough to need consistent
+cross-series machine filtering, it earns a structured series column rather than
+more convention piled into prose.
 
 ### Series hierarchy
 

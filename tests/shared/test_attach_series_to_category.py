@@ -1,10 +1,10 @@
 """Issue #80: attach a series to its most-specific concept node (ADR 0025 §3).
 
 Migration 0019 adds `series.category_id` (nullable FK -> categories.id, ON DELETE
-RESTRICT) and `series.is_default` (NOT NULL, default false). The "concept-only,
-never a topic" rule is an app-layer guardrail (service + API), not a DB
-constraint. The derived "indicator" grain is the query `(category_id,
-geography_id)`; the default reading adds `AND is_default`.
+RESTRICT); 0021 dropped the companion `series.is_default` (ADR 0027). The
+"concept-only, never a topic" rule is an app-layer guardrail (service + API), not
+a DB constraint. The derived "indicator" grain is the query `(category_id,
+geography_id)`.
 
 These run against the shared session test database, which conftest migrates to
 head. Category and geography fixtures are built in-test (no dependence on seed).
@@ -76,7 +76,6 @@ def _series_kwargs(code: str, geography: Geography, **overrides: object) -> dict
         "annualized": False,
         "seasonal_adjustment": SeasonalAdjustment.NSA,
         "is_active": True,
-        "is_default": False,
     }
     base.update(overrides)
     return base
@@ -106,7 +105,8 @@ async def _assert_series_columns_present() -> None:
             )
             columns = {row[0]: (row[1], row[2]) for row in rows}
         assert columns["category_id"][0] == "YES"
-        assert columns["is_default"][0] == "NO"
+        # is_default was dropped in 0021 (ADR 0027) — it must not exist at head.
+        assert "is_default" not in columns
     finally:
         await engine.dispose()
 
@@ -131,7 +131,7 @@ async def _assert_category_fk_restricts_delete() -> None:
         await engine.dispose()
 
 
-def test_series_gains_category_id_and_is_default_columns() -> None:
+def test_series_gains_category_id_column_and_drops_is_default() -> None:
     asyncio.run(_assert_series_columns_present())
 
 
@@ -178,14 +178,13 @@ async def test_missing_category_is_rejected(session: AsyncSession) -> None:
 async def test_series_attaches_to_concept_and_relationship_is_eager(session: AsyncSession) -> None:
     geography = await _make_geography(session, "US")
     concept = await _make_category(session, "CPI_ALL_ITEMS_US", CategoryKind.CONCEPT)
-    series = await _make_series(session, "US_CPI", geography, category_id=concept.id, is_default=True)
+    series = await _make_series(session, "US_CPI", geography, category_id=concept.id)
 
     # Re-fetch through a fresh select; accessing .category must not lazy-load.
     refetched = await session.get(Series, series.id)
     assert refetched is not None
     assert refetched.category is not None
     assert refetched.category.code == "CPI_ALL_ITEMS_US"
-    assert refetched.is_default is True
 
 
 @pytest.mark.asyncio
@@ -203,16 +202,16 @@ async def test_category_delete_is_restricted_while_series_attached(session: Asyn
 
 
 @pytest.mark.asyncio
-async def test_indicator_query_and_default_filter(client, auth_headers, session) -> None:
+async def test_indicator_query_and_cross_geography_read(client, auth_headers, session) -> None:
     us = await _make_geography(session, "US")
     gb = await _make_geography(session, "GB")
     concept = await _make_category(session, "TEST_CPI_CONCEPT", CategoryKind.CONCEPT)
     other_concept = await _make_category(session, "TEST_GDP_CONCEPT", CategoryKind.CONCEPT)
 
-    await _make_series(session, "US_CPI_HEADLINE", us, category_id=concept.id, is_default=True)
-    await _make_series(session, "US_CPI_CORE", us, category_id=concept.id, is_default=False)
-    await _make_series(session, "GB_CPI_HEADLINE", gb, category_id=concept.id, is_default=True)
-    await _make_series(session, "US_GDP", us, category_id=other_concept.id, is_default=True)
+    await _make_series(session, "US_CPI_HEADLINE", us, category_id=concept.id)
+    await _make_series(session, "US_CPI_CORE", us, category_id=concept.id)
+    await _make_series(session, "GB_CPI_HEADLINE", gb, category_id=concept.id)
+    await _make_series(session, "US_GDP", us, category_id=other_concept.id)
     await session.commit()
 
     # Indicator query: (category_id, geography_id) -> the US CPI readings only.
@@ -224,16 +223,6 @@ async def test_indicator_query_and_default_filter(client, auth_headers, session)
     assert resp.status_code == 200
     codes = {hit["code"] for hit in resp.json()}
     assert codes == {"US_CPI_HEADLINE", "US_CPI_CORE"}
-
-    # Default reading within (category_id, geography_id).
-    resp_default = await client.get(
-        "/api/v1/series/",
-        params={"category_id": str(concept.id), "geography_id": str(us.id), "is_default": "true"},
-        headers=auth_headers,
-    )
-    assert resp_default.status_code == 200
-    default_codes = {hit["code"] for hit in resp_default.json()}
-    assert default_codes == {"US_CPI_HEADLINE"}
 
     # Cross-geography concept read: all geographies under the concept node.
     resp_cross = await client.get(

@@ -6,8 +6,7 @@ rebuild attaches each curated series directly to its most-specific
 `kind=concept` node of the `categories` tree (`series.category_id`), minting a
 concept under the seeded subdomain skeleton when one does not yet exist (ADR
 0025 §3, ADR 0026 §5: concepts accrete; no placeholders). The derived "indicator"
-grain (`US_CPI`) is now the query `(category_id, geography_id)` — not a stored
-row — and the default reading is `series.is_default`.
+grain (`US_CPI`) is now the query `(category_id, geography_id)` — not a stored row.
 
 The provider / catalog / series_source / ingestion_feed / observation machinery
 is unchanged from the V7 preset; only the concept/attachment layer moved.
@@ -100,15 +99,13 @@ class RawSeriesSpec:
     """Curated raw FRED series definition, attached to a V8 concept node.
 
     `concept_code` / `concept_parent_code` name the `kind=concept` node the series
-    attaches to and the seeded subdomain it accretes under. `is_default` marks the
-    default reading for the derived `(concept, geography)` indicator grain.
+    attaches to and the seeded subdomain it lives under.
     """
 
     concept_code: str
     concept_name: str
     concept_description: str
     concept_parent_code: str
-    is_default: bool
     series_code: str
     series_name: str
     series_alt_name: tuple[str, ...]
@@ -195,7 +192,6 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
         concept_name="GDP Nominal",
         concept_description="Gross domestic product measured at current market prices, without adjustment for inflation.",
         concept_parent_code="GDP_AND_GROWTH",
-        is_default=True,
         series_code="US_GDP_NOMINAL_Q_SAAR",
         series_name="USA – Gross Domestic Product, Nominal, Seasonally Adjusted Annual Rate, Billions of Dollars",
         series_alt_name=(
@@ -225,7 +221,6 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
         concept_name="GDP Real",
         concept_description="Gross domestic product adjusted for inflation, expressed in constant (chained) prices.",
         concept_parent_code="GDP_AND_GROWTH",
-        is_default=True,
         series_code="US_GDP_REAL_Q_SAAR",
         series_name="USA – Gross Domestic Product, Real, Seasonally Adjusted Annual Rate, Billions of Chained 2017 Dollars",
         series_alt_name=(
@@ -255,7 +250,6 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
         concept_name="CPI All Items",
         concept_description="Consumer price index covering the full basket of goods and services (headline inflation).",
         concept_parent_code="CONSUMER_PRICES",
-        is_default=True,
         series_code="US_CPI_HEADLINE_M_NSA",
         series_name="USA – Consumer Price Index for All Urban Consumers: All Items in U.S. City Average",
         series_alt_name=(
@@ -286,7 +280,6 @@ RAW_SERIES_SPECS: tuple[RawSeriesSpec, ...] = (
         concept_name="CPI Core",
         concept_description="Consumer price index excluding the volatile food and energy components, used to gauge underlying (core) inflation. A cross-country generalizable concept; the exact exclusion list is a series-level methodology detail (ADR 0026 §5).",
         concept_parent_code="CONSUMER_PRICES",
-        is_default=True,
         series_code="US_CPI_CORE_M_SA",
         series_name="USA – Consumer Price Index for All Urban Consumers: All Items Less Food and Energy in U.S. City Average",
         series_alt_name=(
@@ -837,7 +830,6 @@ async def _upsert_series(
             "description",
             "origin_type",
             "category_id",
-            "is_default",
             "geography_id",
             "frequency",
             "temporal_stock_flow",
@@ -969,7 +961,6 @@ def _raw_series_payload(spec: RawSeriesSpec, *, geography_id: Any, category_id: 
         description=spec.series_description,
         origin_type=OriginType.INGESTED,
         category_id=category_id,
-        is_default=spec.is_default,
         geography_id=geography_id,
         frequency=spec.frequency,
         temporal_stock_flow=spec.temporal_stock_flow,

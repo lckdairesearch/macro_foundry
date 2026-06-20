@@ -6,7 +6,7 @@ import uuid
 from datetime import date
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ARRAY, Boolean, CheckConstraint, Date, Integer, String, Text, UniqueConstraint, text
+from sqlalchemy import ARRAY, Boolean, CheckConstraint, Date, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from macro_foundry.db.base import TimestampedBase
@@ -71,14 +71,6 @@ class Series(TimestampedBase):
         "categories.id",
         ondelete="RESTRICT",
         nullable=True,
-    )
-    # Default reading within (category_id, geography_id); former
-    # indicator_variants.is_default. Defaults false at the DB so ORM inserts that
-    # omit it are valid. No partial-unique enforced.
-    is_default: Mapped[bool] = mapped_column(
-        Boolean,
-        nullable=False,
-        server_default=text("false"),
     )
     geography_id: Mapped[uuid.UUID] = fk_uuid(
         "geographies.id",

@@ -46,7 +46,6 @@ class SeriesBase(SchemaModel):
     description: str | None = None
     origin_type: OriginType
     category_id: UUID | None = None
-    is_default: bool = False
     geography_id: UUID
     frequency: Frequency
     temporal_stock_flow: TemporalStockFlow
@@ -91,7 +90,6 @@ class SeriesUpdate(SchemaModel):
     description: str | None = None
     origin_type: OriginType | None = None
     category_id: UUID | None = None
-    is_default: bool | None = None
     geography_id: UUID | None = None
     frequency: Frequency | None = None
     temporal_stock_flow: TemporalStockFlow | None = None

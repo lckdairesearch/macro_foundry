@@ -77,7 +77,6 @@ async def _make_series(session: AsyncSession, code: str, geography: Geography, *
         "annualized": False,
         "seasonal_adjustment": SeasonalAdjustment.NSA,
         "is_active": True,
-        "is_default": False,
     }
     base.update(overrides)
     series = Series(**base)
@@ -105,7 +104,7 @@ async def test_get_series_returns_full_category_path_most_specific_first(
 ) -> None:
     geography = await _make_geography(session, "US")
     concept = await _build_price_tree(session)
-    series = await _make_series(session, "US_CPI_PATH", geography, category_id=concept.id, is_default=True)
+    series = await _make_series(session, "US_CPI_PATH", geography, category_id=concept.id)
     await session.commit()
 
     resp = await client.get(f"/api/v1/series/{series.id}", headers=auth_headers)
@@ -125,7 +124,7 @@ async def test_get_series_returns_full_category_path_most_specific_first(
 async def test_list_series_includes_category_path_per_row(client, auth_headers, session) -> None:
     geography = await _make_geography(session, "US")
     concept = await _build_price_tree(session)
-    await _make_series(session, "US_CPI_LIST_PATH", geography, category_id=concept.id, is_default=True)
+    await _make_series(session, "US_CPI_LIST_PATH", geography, category_id=concept.id)
     await session.commit()
 
     resp = await client.get(

@@ -22,7 +22,7 @@
 //   - ADDED categories (one tree; kind=topic|concept; concept node carries the
 //     old concept embedding) + category_edges (strict tree, UNIQUE(child)).
 //   - series GAINS category_id (nullable FK to a kind=concept node, the
-//     "lowest matchable level") + is_default (former indicator_variants.is_default).
+//     "lowest matchable level"). (is_default was added then deferred — ADR 0027.)
 //   - indicator (US_CPI) is now a DERIVED query (category_id, geography_id), not
 //     a stored row; indicator-grain embedding/description retired.
 //   - ADDED source_groups (typed, self-nesting provider publication unit) +
@@ -75,8 +75,8 @@ geography_memberships [icon: user-round, color: orange] {
   updated_at timestamp
 }
 
-// One tree replacing V7 concepts + tags + concept_tags (and, via series.category_id
-// + is_default, the addressable role of indicators + indicator_variants).
+// One tree replacing V7 concepts + tags + concept_tags (and, via series.category_id,
+// the addressable role of indicators + indicator_variants).
 categories [icon: folder-tree, color: purple] {
   id uuid pk
   code string unique              // canonical UPPERCASE SCREAMING_SNAKE; PRICES, CONSUMER_PRICES, CPI_ALL_ITEMS
@@ -139,7 +139,7 @@ series [icon: activity, color: green] {
   embedding_input_hash string     // nullable; hash of embedded input text, for staleness detection
   origin_type string              // ENUM: ingested | derived | both
   category_id uuid fk             // nullable; FK -> categories.id; the MOST-SPECIFIC (kind=concept) node this series belongs to ("lowest matchable level"). Nullable allows draft/unclassified series. Concept-only rule enforced APP-SIDE.
-  is_default boolean              // default reading within (category_id, geography_id); former indicator_variants.is_default. No partial-unique enforced.
+  // is_default was added (0019) then deferred (0021, ADR 0027): an unenforced default-reading marker, premature while concept+geography slices are single-series. Returns under its own ADR when a real multi-series slice needs it.
   geography_id uuid fk            // FK -> geographies.id
   frequency string                // ENUM: D | W | M | Q | S | A; S for semi-annual
   temporal_stock_flow string      // ENUM: stock | flow | rate | index | unknown
@@ -465,5 +465,5 @@ change_proposal_items.proposal_id > change_proposals.id // ON DELETE CASCADE
 //   "CPI everywhere"      = series WHERE category_id = <CPI_ALL_ITEMS>
 //   "everything in Prices"= series WHERE category_id IN descendants(<PRICES>)  -- recursive CTE over category_edges
 //   topic(series)         = ancestors(series.category_id)                      -- recursive CTE over category_edges
-//   default reading       = ... AND is_default
+//   (default reading: deferred — series.is_default removed in 0021, ADR 0027)
 // =============================================================

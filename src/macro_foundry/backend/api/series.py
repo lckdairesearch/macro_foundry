@@ -140,7 +140,6 @@ async def _commit_series(session: AsyncSession) -> None:
 async def list_series(
     category_id: UUID | None = None,
     geography_id: UUID | None = None,
-    is_default: bool | None = None,
     session: AsyncSession = Depends(get_session),
     _: None = Depends(verify_token),
 ) -> list[SeriesReadDetail]:
@@ -148,8 +147,8 @@ async def list_series(
 
     The "indicator" grain is not a stored row but the query
     `series WHERE category_id = ? AND geography_id = ?`. The cross-geography
-    concept read drops the geography filter, and the default reading adds
-    `AND is_default`. All three are expressed here as optional filters.
+    concept read drops the geography filter. Both are expressed here as optional
+    filters.
     """
 
     statement = _series_detail_statement()
@@ -157,8 +156,6 @@ async def list_series(
         statement = statement.where(Series.category_id == category_id)
     if geography_id is not None:
         statement = statement.where(Series.geography_id == geography_id)
-    if is_default is not None:
-        statement = statement.where(Series.is_default.is_(is_default))
     statement = statement.order_by(Series.code)
 
     result = await session.execute(statement)
