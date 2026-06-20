@@ -8,9 +8,17 @@ from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from macro_foundry.config import logger
-from macro_foundry.models import Geography, GeographyMembership, Provider, ProviderCatalog
+from macro_foundry.models import (
+    Category,
+    CategoryEdge,
+    Geography,
+    GeographyMembership,
+    Provider,
+    ProviderCatalog,
+)
 from macro_foundry.seed._shared import SeedOutcome
 from macro_foundry.seed.runners import (
+    seed_categories,
     seed_geographies,
     seed_geography_memberships,
     seed_provider_catalogs,
@@ -21,6 +29,7 @@ from macro_foundry.seed.runners import (
 class SeedTarget(str, Enum):
     """Supported seed target names for CLI selection."""
 
+    CATEGORIES = "categories"
     GEOGRAPHIES = "geographies"
     GEOGRAPHY_MEMBERSHIPS = "geography_memberships"
     PROVIDERS = "providers"
@@ -28,6 +37,7 @@ class SeedTarget(str, Enum):
 
 
 SEED_ORDER: tuple[SeedTarget, ...] = (
+    SeedTarget.CATEGORIES,
     SeedTarget.GEOGRAPHIES,
     SeedTarget.GEOGRAPHY_MEMBERSHIPS,
     SeedTarget.PROVIDERS,
@@ -39,6 +49,7 @@ RESET_ORDER: tuple[SeedTarget, ...] = (
     SeedTarget.PROVIDERS,
     SeedTarget.GEOGRAPHY_MEMBERSHIPS,
     SeedTarget.GEOGRAPHIES,
+    SeedTarget.CATEGORIES,
 )
 
 
@@ -68,7 +79,9 @@ async def run_seed(session: AsyncSession, *, only: set[SeedTarget] | None = None
         if target not in selected_targets:
             continue
         logger.info("Seeding %s", target.value)
-        if target is SeedTarget.GEOGRAPHIES:
+        if target is SeedTarget.CATEGORIES:
+            summary[target] = await seed_categories(session)
+        elif target is SeedTarget.GEOGRAPHIES:
             summary[target] = await seed_geographies(session)
         elif target is SeedTarget.GEOGRAPHY_MEMBERSHIPS:
             summary[target] = await seed_geography_memberships(session)
@@ -96,6 +109,9 @@ async def reset_seed_tables(session: AsyncSession, *, only: set[SeedTarget] | No
             await session.execute(delete(GeographyMembership))
         elif target is SeedTarget.GEOGRAPHIES:
             await session.execute(delete(Geography))
+        elif target is SeedTarget.CATEGORIES:
+            await session.execute(delete(CategoryEdge))
+            await session.execute(delete(Category))
     await session.flush()
 
 
