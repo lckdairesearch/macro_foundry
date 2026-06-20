@@ -64,10 +64,12 @@ has **no** geography — the same concept manifests differently in different
 countries (the geography lives on each series). See *Category tree* above for the
 naming rules (function not country label; methodological variants are series flags).
 
-Concepts are curated and largely *generated*, not seeded en masse: ADR 0026 seeds
-a skeleton of universal concepts, and the long tail **accretes** as series arrive
-during bootstrap/onboarding — a series needing a concept that does not yet exist
-mints one under its subdomain (no placeholder concepts, ADR 0010).
+Concepts are curated reference data: the **full** taxonomy (15 domains, 71
+subdomains, 157 concepts) is seeded up front, like geographies (ADR 0027,
+amending ADR 0026 §5). Onboarding may still **accrete** a genuinely novel concept
+the taxonomy lacks — `register_concept_node` mints one under its subdomain (no
+placeholder concepts, ADR 0010) — but that is now the fallback, not the norm.
+Seeded concepts carry no embedding until `embeddings backfill` runs.
 
 ### Geography
 

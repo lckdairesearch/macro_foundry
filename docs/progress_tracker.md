@@ -12,6 +12,45 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-20] ADR 0027 — defer `series.is_default`; seed the full concept taxonomy
+
+Operator-review adjustments to the just-landed V8 catalog (#78–#85), recorded as
+ADR 0027 (amends ADR 0025 §1 and ADR 0026 §5). No `categories` schema-shape change.
+GDP granularity was reviewed and **kept** as-is (`GDP_NOMINAL` / `GDP_REAL` /
+`GDP_DEFLATOR` per ADR 0026 §5.2 — the operator confirmed the split).
+
+**Defer `series.is_default` (migration 0021).** The boolean was inert — unenforced
+(no partial-unique), absent from the admin surface, disambiguating nothing while
+every `(concept, geography)` slice was single-series. Dropped end-to-end: column +
+Series model + `SeriesBase`/`SeriesUpdate` + bootstrap spec/payload + the
+`list_series` filter; `db_er.txt` (canonical) and CONTEXT.md mark the default
+reading deferred. The marker returns under its own ADR when a real multi-series
+slice needs it. Downgrade re-adds the column at its 0019 shape.
+
+**Seed the full taxonomy (ADR 0027 §2).** Replaced the skeleton-plus-universal seed
+with all 243 curated nodes (15 domains, 71 subdomains, 157 L3 concepts; 171
+`kind=concept`), baked from the xlsx "Seed rows (flat)" tab into
+`seed/data/categories.py` (`UNIVERSAL_CONCEPTS` → `CONCEPTS`). Live test DB verified
+at 243 nodes / 228 edges / 171 concepts. Runtime accretion
+(`register_concept_node`) stays as the novel-concept fallback; the FRED bootstrap
+now *finds* its four concepts pre-seeded (the mint path is covered by
+`test_concept_accretion` against a synthetic non-seeded code).
+
+**Concept embeddings backfill (consequence).** Seeded concepts are unembedded (the
+seed runner is offline). Extended `macrodb embeddings backfill` with a `categories`
+pass over `kind=concept` nodes (eager-loading each parent subdomain for the recipe,
+via `compose_category_embedding_input`); `kind=topic` nodes are never embedded;
+idempotent once current.
+
+Verification: full live V8 suite (`tests/shared tests/docs tests/test_admin_auth.py
+tests/test_migrations.py`) → **132 passed**; `ruff` clean; app boots (109 routes);
+migration head `0021`, single head; `embeddings backfill` mocked in tests.
+**Owed (operator):** one `embeddings backfill --target {dev,staging}` run to
+populate the 171 seeded concepts' embeddings (needs a live `OPENAI_API_KEY`).
+
+Committed across four slices: `0021` is_default removal; full-taxonomy seed;
+backfill extension; this ADR + doc reconciliation.
+
 ### [2026-06-20] Issues 83–85 — V8 rebootstrap, operator surface, and doc reconciliation
 
 Closed the V8 category collapse (ADR 0025/0026) across the catalog generator, the

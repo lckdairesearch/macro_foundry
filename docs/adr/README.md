@@ -35,8 +35,9 @@ references and supersedes the old one — don't edit the old one.
 | [0022](0022-concept-grained-topical-tags.md) | Concept-grained topical tags | Superseded by 0025 |
 | [0023](0023-retire-legacy-agent-package.md) | Retire the legacy `agent` package; `onboarding_agent` is canonical | Accepted (amends ADR 0021) |
 | [0024](0024-agent-mcp-connection-lifecycle.md) | Agent reaches macrodb-mcp over a persistent per-run session | Proposed |
-| [0025](0025-collapse-concept-indicator-tag-into-category-tree.md) | Collapse concept / indicator / tag into a category tree | Accepted (supersedes 0022; extended by 0026) |
-| [0026](0026-top-level-category-taxonomy-and-concept-naming.md) | Top-level category taxonomy and concept-naming rules | Accepted (extends 0025; supersedes 0022 §3) |
+| [0025](0025-collapse-concept-indicator-tag-into-category-tree.md) | Collapse concept / indicator / tag into a category tree | Accepted (supersedes 0022; extended by 0026; §1 is_default amended by 0027) |
+| [0026](0026-top-level-category-taxonomy-and-concept-naming.md) | Top-level category taxonomy and concept-naming rules | Accepted (extends 0025; supersedes 0022 §3; §5 seed stance amended by 0027) |
+| [0027](0027-defer-is-default-and-seed-full-taxonomy.md) | Defer `series.is_default`; seed the full concept taxonomy | Accepted (amends 0025 §1 and 0026 §5) |
 
 ## Format
 
