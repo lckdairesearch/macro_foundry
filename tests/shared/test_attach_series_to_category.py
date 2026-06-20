@@ -150,19 +150,19 @@ async def test_null_category_is_accepted(session: AsyncSession) -> None:
 
 @pytest.mark.asyncio
 async def test_concept_category_is_accepted(session: AsyncSession) -> None:
-    concept = await _make_category(session, "CPI_ALL_ITEMS", CategoryKind.CONCEPT)
+    concept = await _make_category(session, "TEST_CPI_CONCEPT", CategoryKind.CONCEPT)
     await ensure_category_is_concept(session, concept.id)  # no raise
 
 
 @pytest.mark.asyncio
 async def test_topic_category_is_rejected_with_clear_error(session: AsyncSession) -> None:
-    topic = await _make_category(session, "PRICES", CategoryKind.TOPIC)
+    topic = await _make_category(session, "TEST_PRICES_TOPIC", CategoryKind.TOPIC)
     with pytest.raises(CategoryAttachmentError) as exc_info:
         await ensure_category_is_concept(session, topic.id)
     message = str(exc_info.value)
     assert "kind=concept" in message
     assert "topic" in message
-    assert "PRICES" in message
+    assert "TEST_PRICES_TOPIC" in message
 
 
 @pytest.mark.asyncio
@@ -206,8 +206,8 @@ async def test_category_delete_is_restricted_while_series_attached(session: Asyn
 async def test_indicator_query_and_default_filter(client, auth_headers, session) -> None:
     us = await _make_geography(session, "US")
     gb = await _make_geography(session, "GB")
-    concept = await _make_category(session, "CPI_ALL_ITEMS", CategoryKind.CONCEPT)
-    other_concept = await _make_category(session, "GDP_REAL", CategoryKind.CONCEPT)
+    concept = await _make_category(session, "TEST_CPI_CONCEPT", CategoryKind.CONCEPT)
+    other_concept = await _make_category(session, "TEST_GDP_CONCEPT", CategoryKind.CONCEPT)
 
     await _make_series(session, "US_CPI_HEADLINE", us, category_id=concept.id, is_default=True)
     await _make_series(session, "US_CPI_CORE", us, category_id=concept.id, is_default=False)
@@ -249,7 +249,7 @@ async def test_indicator_query_and_default_filter(client, auth_headers, session)
 @pytest.mark.asyncio
 async def test_create_series_rejects_topic_category(client, auth_headers, session) -> None:
     geography = await _make_geography(session, "US")
-    topic = await _make_category(session, "PRICES", CategoryKind.TOPIC)
+    topic = await _make_category(session, "TEST_PRICES_TOPIC", CategoryKind.TOPIC)
     await session.commit()
 
     payload = _series_kwargs("US_BAD", geography, category_id=str(topic.id))
