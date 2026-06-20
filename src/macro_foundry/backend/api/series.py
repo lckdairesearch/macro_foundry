@@ -15,6 +15,7 @@ from sqlalchemy.orm import selectinload
 from macro_foundry.backend.deps import get_session, verify_token
 from macro_foundry.models import Series
 from macro_foundry.schemas import GeographyRead, SeriesCreate, SeriesRead, SeriesReadDetail, SeriesUpdate
+from macro_foundry.services.registration import CategoryAttachmentError, ensure_category_is_concept
 
 router = APIRouter(prefix="/series", tags=["series"])
 
@@ -61,6 +62,20 @@ async def _raise_if_code_taken(
         )
 
 
+async def _ensure_category_attachable(
+    session: AsyncSession,
+    category_id: UUID | None,
+) -> None:
+    """Reject attaching a series to a non-concept node (ADR 0025 §3, app-side)."""
+    try:
+        await ensure_category_is_concept(session, category_id)
+    except CategoryAttachmentError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+
+
 async def _commit_series(session: AsyncSession) -> None:
     try:
         await session.commit()
@@ -70,6 +85,35 @@ async def _commit_series(session: AsyncSession) -> None:
             status_code=status.HTTP_409_CONFLICT,
             detail="Request violates a database constraint",
         ) from exc
+
+
+@router.get("/", response_model=list[SeriesReadDetail])
+async def list_series(
+    category_id: UUID | None = None,
+    geography_id: UUID | None = None,
+    is_default: bool | None = None,
+    session: AsyncSession = Depends(get_session),
+    _: None = Depends(verify_token),
+) -> list[SeriesReadDetail]:
+    """Derived reads over the V8 category attachment (ADR 0025 §3).
+
+    The "indicator" grain is not a stored row but the query
+    `series WHERE category_id = ? AND geography_id = ?`. The cross-geography
+    concept read drops the geography filter, and the default reading adds
+    `AND is_default`. All three are expressed here as optional filters.
+    """
+
+    statement = _series_detail_statement()
+    if category_id is not None:
+        statement = statement.where(Series.category_id == category_id)
+    if geography_id is not None:
+        statement = statement.where(Series.geography_id == geography_id)
+    if is_default is not None:
+        statement = statement.where(Series.is_default.is_(is_default))
+    statement = statement.order_by(Series.code)
+
+    result = await session.execute(statement)
+    return [_serialize_series_detail(series) for series in result.scalars().all()]
 
 
 @router.get("/{series_id}", response_model=SeriesReadDetail)
@@ -91,6 +135,7 @@ async def create_series(
     _: None = Depends(verify_token),
 ) -> Series:
     await _raise_if_code_taken(session, payload.code)
+    await _ensure_category_attachable(session, payload.category_id)
     series = Series(**payload.model_dump())
     session.add(series)
     await _commit_series(session)
@@ -125,6 +170,9 @@ async def update_series(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=jsonable_encoder(exc.errors()),
         ) from exc
+
+    if "category_id" in update_data:
+        await _ensure_category_attachable(session, update_data["category_id"])
 
     for field_name, field_value in update_data.items():
         setattr(series, field_name, field_value)

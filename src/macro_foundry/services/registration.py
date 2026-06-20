@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import asyncio
 
+from uuid import UUID
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from macro_foundry.models import Geography, Series
+from macro_foundry.enums import CategoryKind
+from macro_foundry.models import Category, Geography, Series
 from macro_foundry.schemas import SeriesCreate
 from macro_foundry.services.embeddings import (
     EMBEDDING_MODEL,
@@ -25,6 +28,37 @@ def _registration_lock(session: AsyncSession) -> asyncio.Lock:
     new_lock = asyncio.Lock()
     session.info["_registration_lock"] = new_lock
     return new_lock
+
+
+class CategoryAttachmentError(ValueError):
+    """A series was attached to a category that is not an attachable concept node."""
+
+
+async def ensure_category_is_concept(
+    session: AsyncSession,
+    category_id: UUID | None,
+) -> None:
+    """Enforce ADR 0025 §3: a series attaches only to a `kind=concept` node.
+
+    `None` is allowed (a draft / deliberately-unclassified series). A non-null
+    `category_id` must reference an existing `kind=concept` node; a `topic`
+    (browse) node or a missing node is rejected with a clear, specific error.
+    This is the app-layer guardrail that the DB FK deliberately does not enforce.
+    """
+
+    if category_id is None:
+        return
+
+    category = await session.get(Category, category_id)
+    if category is None:
+        raise CategoryAttachmentError(
+            f"category_id {category_id} does not reference an existing category",
+        )
+    if category.kind is not CategoryKind.CONCEPT:
+        raise CategoryAttachmentError(
+            "category_id must reference a kind=concept node, "
+            f"got {category.kind.value} '{category.code}'",
+        )
 
 
 async def ensure_series_embedding_current(
@@ -69,6 +103,8 @@ async def register_series(
 ) -> Series:
     """Create a series row with embedding metadata populated."""
 
+    await ensure_category_is_concept(session, payload.category_id)
+
     async with _registration_lock(session):
         geography = await session.get(Geography, payload.geography_id)
 
@@ -85,6 +121,8 @@ async def register_series(
 
 
 __all__ = [
+    "CategoryAttachmentError",
+    "ensure_category_is_concept",
     "ensure_series_embedding_current",
     "register_series",
 ]

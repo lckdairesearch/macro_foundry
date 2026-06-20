@@ -6,7 +6,7 @@ import uuid
 from datetime import date
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ARRAY, Boolean, CheckConstraint, Date, Integer, String, Text, UniqueConstraint
+from sqlalchemy import ARRAY, Boolean, CheckConstraint, Date, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from macro_foundry.db.base import TimestampedBase
@@ -28,6 +28,7 @@ from macro_foundry.models._vector import Vector
 _EMBEDDING_DIMENSIONS = 1536
 
 if TYPE_CHECKING:
+    from macro_foundry.models.category import Category
     from macro_foundry.models.derived import DerivationInput, DerivedSeries
     from macro_foundry.models.geography import Geography
     from macro_foundry.models.observation import Observation
@@ -63,6 +64,21 @@ class Series(TimestampedBase):
         "origin_type",
         OriginType,
         nullable=False,
+    )
+    # Nullable: draft/unclassified series allowed. Concept-only rule (never a
+    # topic node) is enforced app-side (ADR 0025 §3), not by the DB.
+    category_id: Mapped[uuid.UUID | None] = fk_uuid(
+        "categories.id",
+        ondelete="RESTRICT",
+        nullable=True,
+    )
+    # Default reading within (category_id, geography_id); former
+    # indicator_variants.is_default. Defaults false at the DB so ORM inserts that
+    # omit it are valid. No partial-unique enforced.
+    is_default: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
     )
     geography_id: Mapped[uuid.UUID] = fk_uuid(
         "geographies.id",
@@ -140,6 +156,11 @@ class Series(TimestampedBase):
     geography: Mapped["Geography"] = relationship(
         "Geography",
         back_populates="series",
+        lazy="selectin",
+    )
+    category: Mapped["Category | None"] = relationship(
+        "Category",
+        foreign_keys=lambda: [Series.category_id],
         lazy="selectin",
     )
     replaced_by_series: Mapped["Series | None"] = relationship(
