@@ -12,6 +12,8 @@ from macro_foundry.config import settings
 from macro_foundry.seed import run_seed
 
 EXPECTED_TABLES = {
+    "categories",
+    "category_edges",
     "change_proposal_items",
     "change_proposals",
     "computation_run_logs",
