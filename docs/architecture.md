@@ -118,8 +118,8 @@ macro_foundry/
 │   ├── models/                     # SQLAlchemy ORM — macrodb tables
 │   │   ├── __init__.py             # exports all models so Alembic sees metadata
 │   │   ├── geography.py
-│   │   ├── concept.py
-│   │   ├── tag.py
+│   │   ├── category.py             # categories + category_edges (V8 tree)
+│   │   ├── source_group.py         # source_groups + source_group_members
 │   │   ├── provider.py
 │   │   ├── series.py
 │   │   ├── observation.py
@@ -132,8 +132,8 @@ macro_foundry/
 │   │   ├── __init__.py
 │   │   ├── _base.py                # shared mixins
 │   │   ├── geography.py
-│   │   ├── concept.py
-│   │   ├── tag.py
+│   │   ├── category.py
+│   │   ├── source_group.py
 │   │   ├── provider.py
 │   │   ├── series.py
 │   │   ├── observation.py
@@ -143,7 +143,7 @@ macro_foundry/
 │   │   └── governance.py
 │   │
 │   ├── seed/                       # idempotent seed data
-│   │   ├── data/                   # typed Python data (COUNTRIES, BLOCS, TAGS, PROVIDERS, PROVIDER_CATALOGS, MEMBERSHIPS)
+│   │   ├── data/                   # typed Python data (COUNTRIES, BLOCS, CATEGORIES, PROVIDERS, PROVIDER_CATALOGS, MEMBERSHIPS)
 │   │   ├── runners/                # async upsert / natural-key reconciliation logic
 │   │   └── run.py                  # orchestrator, dependency order
 │   │
@@ -158,8 +158,8 @@ macro_foundry/
 │       ├── crud.py                 # ~150-line thin CRUD generator
 │       ├── deps.py                 # get_session, verify_token
 │       ├── api/                    # one router per table; simple ones use crud_router
-│       │   ├── concepts.py
-│       │   ├── tags.py
+│       │   ├── categories.py
+│       │   ├── source_groups.py
 │       │   ├── providers.py
 │       │   ├── series.py           # hand-written
 │       │   ├── observations.py     # hand-written
@@ -316,9 +316,10 @@ The DB stores the value as a `VARCHAR` with a named CHECK constraint. Adding new
 enum values later requires a hand-written Alembic migration (autogenerate is
 unreliable for CHECK changes). This tradeoff is accepted.
 
-`tags` are the explicit exception: they are curated lookup data seeded into the
-database, not Python enums, because application code does not branch on a fixed
-tag taxonomy.
+The `categories` tree is the explicit exception: it is curated lookup data seeded
+into the database (ADR 0025/0026), not a Python enum, because application code does
+not branch on a fixed category taxonomy and the long tail of concepts accretes at
+runtime.
 
 ## Foreign-key deletion policy
 
@@ -334,17 +335,18 @@ Alembic owns schema. A separate Typer CLI owns seed data. They do not mix.
 
 Seed data lives in `src/macro_foundry/seed/data/` as typed Python (not YAML/JSON —
 the data is curated by developers and benefits from type-checked enum constants).
-Where the schema exposes a stable natural key (`geographies.code`, `tags.code`,
-`providers.name`), runners use `INSERT ... ON CONFLICT DO UPDATE`. Where V3 does
+Where the schema exposes a stable natural key (`geographies.code`,
+`categories.code`, `providers.name`), runners use `INSERT ... ON CONFLICT DO UPDATE`. Where V3 does
 not expose a uniqueness constraint (`provider_catalogs`, `geography_memberships`),
 the seed runner reconciles by curated natural keys before insert/update. Re-running
 `uv run macrodb seed` on an existing DB is safe and updates any fields whose
 values have changed in the data files.
 
 In-scope for this phase: geographies (ISO countries + major blocs + key
-subnationals + selected subnational regions where curated)
-and tags (the 7 fixed categories), plus a small default provider/provider-catalog
-seed set. Concepts, series, and families still come later via the API/admin.
+subnationals + selected subnational regions where curated) and the `categories`
+tree (the ~15-domain / ~70-subdomain skeleton plus universal concepts, ADR 0026),
+plus a small default provider/provider-catalog seed set. The long tail of concepts
+and the series catalog come later, generated via bootstrap/onboarding.
 
 ## Testing philosophy
 
@@ -355,10 +357,10 @@ them all is wasted effort. Instead:
 
 - 1 test: Alembic round-trip
 - 3 tests: seed idempotency
-- 8 tests: CRUD generator behavior (against one representative table — `concepts`)
+- 8 tests: CRUD generator behavior (against one representative table — `categories`)
 - 10 tests: DB-level constraint enforcement (UNIQUEs, CHECKs, FKs, the view)
 - 5 tests: hand-tuned route integration (series create, observations bulk, etc.)
-- 1 test: end-to-end smoke (concept → family → series → source → observation → view)
+- 1 test: end-to-end smoke (category → series → source → observation → view)
 
 Per-test transaction rollback for isolation. Seeds run once per session.
 

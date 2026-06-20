@@ -54,19 +54,20 @@ sole canonical form (`UNEMPLOYMENT_RATE`, `BIRTH_RATE`).
 
 ### Concept
 
-A geography-neutral economic idea. Examples: `CPI`, `GDP`, `UNEMPLOYMENT_RATE`,
+A geography-neutral economic idea — the attachable grain a `series` points at via
+`series.category_id`. Examples: `CPI_ALL_ITEMS`, `GDP_REAL`, `UNEMPLOYMENT_RATE`,
 `CURRENT_ACCOUNT_BALANCE`, `HOUSEHOLD_CONSUMPTION`.
 
-A concept has a `code` (canonical identifier) and a `name`. It does **not** have
-a geography — the same concept manifests differently in different countries.
+A concept is a `kind=concept` node of the `categories` tree (ADR 0025/0026), not a
+table of its own. It has a `code` and a `name`, carries the catalog embedding, and
+has **no** geography — the same concept manifests differently in different
+countries (the geography lives on each series). See *Category tree* above for the
+naming rules (function not country label; methodological variants are series flags).
 
-Concepts are curated. They live in the `concepts` table and are typically added
-via the API or admin (not seeded en masse).
-
-Under the V8 categories model (ADR 0025/0026), a concept is the **L3
-`kind=concept` node** of the `categories` tree — see *Category tree* above. This
-entry describes the live V7 `concepts` table; the two reconcile when the V8
-slice lands.
+Concepts are curated and largely *generated*, not seeded en masse: ADR 0026 seeds
+a skeleton of universal concepts, and the long tail **accretes** as series arrive
+during bootstrap/onboarding — a series needing a concept that does not yet exist
+mints one under its subdomain (no placeholder concepts, ADR 0010).
 
 ### Geography
 
@@ -97,27 +98,24 @@ country" rather than "is the only grouping tree for this country."
 to force one subnational-region hierarchy; those memberships live in
 `geography_memberships`.
 
-### Indicator
+### Indicator (derived, not stored)
 
-A group of related series within a single geography for a single concept.
-Examples: `US_CPI`, `JP_CPI`, `JP_HOUSEHOLD_CONSUMPTION`.
+The set of series for one concept in one geography. `US_CPI` is shorthand for the
+series matching `(category_id = CPI_ALL_ITEMS, geography_id = USA)`. Under V8 this
+is a **derived query, not a stored row** (ADR 0025): there is no `indicators`
+table, no indicator id, and no indicator embedding. The term survives only as a
+way to talk about that `(concept, geography)` slice.
 
-An indicator connects a concept (geography-neutral) to a geography. Within an
-indicator, multiple series may exist — different variants of the same underlying
-measurement.
-
-Examples within `US_CPI`:
+Example — the `(CPI_ALL_ITEMS, USA)` slice:
 - US CPI All Items, NSA, monthly index, level
 - US CPI All Items, SA, monthly index, level
-- US CPI Core (ex food and energy), SA, monthly index, level
 - US CPI All Items, YoY % change, monthly
 
-Each is a separate `series` row attached to the `US_CPI` indicator.
-
-A series can belong to at most one indicator (enforced by `UNIQUE(series_id)` on
-`indicator_variants`). If a series feels like it belongs to multiple indicators,
-it probably needs to be a variant of one or a derived series in another, not
-double-assigned.
+Each is a separate `series` row, all attached to the same `CPI_ALL_ITEMS` concept
+node with `geography = USA`. A *core* reading is its own concept (`CPI_CORE`) per
+the naming rules, not a variant. A series attaches to **at most one** concept node
+(`series.category_id`); a reading that seems to belong to two concepts is either a
+flag on one or a derived series in another, not double-assigned.
 
 ### Series
 
@@ -151,32 +149,20 @@ After the publication boundary, changes to canonical identity are dangerous
 because other database records and future reasoning may already depend on that
 series as defined.
 
-### Indicator variant
+### Default reading (`series.is_default`)
 
-A membership row in `indicator_variants` linking a series to its indicator.
-The `label` field carries a human-readable description of how this series
-differs from its siblings in the indicator. Examples: "Core ex fresh food",
-"Two-or-more-person households", "Headline NSA".
+Within a `(concept, geography)` slice, at most one series is the **default
+reading** — the baseline a consumer gets when no extra qualifier is implied.
+Marked by `series.is_default = true`; the convention is one default per
+`(category_id, geography_id)`.
 
-`label` is intentionally free text. The structural distinctions (measure, unit,
-seasonal_adjustment, etc.) are encoded on the series itself; `label` is the
-human label for the combination.
-
-### Default variant
-
-An indicator's default variant is the methodological scope that macrodb treats
-as the baseline reading for that indicator when no extra qualifier is included
-in the canonical `series.code`. Marked by `indicator_variants.is_default = true`.
-
-Not every provider-exposed distinction needs to become part of canonical
-identity. A default variant exists only when the omission is an intentional
-curation choice, not when the scope is still ambiguous.
-
-`label` is robust enough for human-facing cataloging and rare methodological
-edge cases inside an indicator. It is not a normalized taxonomy column. If a
-distinction becomes common enough that the system needs consistent cross-series
-machine filtering on it, that should become a separate structured field or
-model rather than more convention piled into free text.
+There is no `indicator_variants` row and no free-text `label` in V8 (ADR 0025):
+how a series differs from its siblings is carried by its own structural columns
+(`measure`, `unit_*`, `seasonal_adjustment`, …) plus `name` / `description` /
+`alt_name` prose. A default reading exists only when omitting the qualifier is an
+intentional curation choice, not when scope is still ambiguous. If a distinction
+becomes common enough to need consistent cross-series machine filtering, it earns
+a structured series column rather than more convention piled into prose.
 
 ### Series hierarchy
 
@@ -442,7 +428,7 @@ applied`, or `rejected`, or `failed`, or `superseded`. Carries the `requested_by
 
 The line items of a proposal. Each item is one concrete change: insert this
 row, modify this file, run this test, etc. `target_type` identifies what kind
-of entity (concepts, series, indicators, providers, geographies, etc., or
+of entity (categories, source_groups, series, providers, geographies, etc., or
 file/function/test). `action` is the operation. `proposed_data` carries the
 content. `validation_status` tracks whether the item has been validated.
 
@@ -451,11 +437,12 @@ content. `validation_status` tracks whether the item has been validated.
 ### Code
 
 In macrodb, "code" almost always means the canonical short identifier of an
-entity: `USA` for a geography, `CPI` for a concept, `US_CPI` for a family, etc.
-Always UNIQUE within its table. The user-facing identifier; the UUID is internal.
+entity: `USA` for a geography, `CPI_ALL_ITEMS` for a concept, `PRICES` for a
+domain, etc. Always UNIQUE within its table. The user-facing identifier; the UUID
+is internal.
 
 Codes are **UPPERCASE**. Internal, curated codes use **SCREAMING_SNAKE**
-(`CPI`, `GDP`, `UNEMPLOYMENT_RATE`, `US_CPI`, `NATIONAL_ACCOUNTS`). Codes
+(`CPI_ALL_ITEMS`, `GDP_REAL`, `UNEMPLOYMENT_RATE`, `NATIONAL_ACCOUNTS`). Codes
 adopted from an external standard follow that standard's own format
 (ISO 3166 hyphenated for `geographies`: `US-CA`, `JP-01`). `code` is `UNIQUE`
 within its table and is the user-facing key; the UUID is internal.
@@ -466,17 +453,17 @@ code format is a legitimate but separate, schema-wide decision (a shared
 annotated `Code` type across all `code` columns) and is out of scope here — no
 single table should become the lone one with a format validator (ADR 0022 §4).
 
-`tags.code` follows this rule: tags carry a canonical UPPERCASE `code` (the
-topical taxonomy — `PRICES`, `NATIONAL_ACCOUNTS`, …) with `name` as free
-display text, modeled like `concepts`.
+`categories.code` follows this rule: every node in the `categories` tree carries
+a canonical UPPERCASE `code` (`PRICES`, `CONSUMER_PRICES`, `CPI_ALL_ITEMS`) with
+`name` as free display text.
 
 ### Prose field
 
 A field that carries human-readable narrative rather than identity or
 structural meaning. In macrodb the prose fields are `description` on
-`concept`, `indicators`, and `series`; `name` on the same three;
-`alt_name` on `series`, `geographies`, and `providers`; and `label`
-on `indicator_variants`. Prose fields are read by humans navigating
+`categories` and `series`; `name` on the same two; and `alt_name` on
+`series`, `geographies`, and `providers`. Prose fields are read by humans
+navigating
 the catalog. They are distinct from identity fields (`code`),
 structural fields (enum-backed methodology columns like `frequency`,
 `seasonal_adjustment`, `unit_code`), and provider-mapping fields

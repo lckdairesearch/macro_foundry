@@ -8,13 +8,16 @@ fail() { echo "FAIL: $1"; FAIL=$((FAIL + 1)); }
 
 # ── CONTEXT.md ──────────────────────────────────────────────────────────────
 
-grep -q "^### Indicator$" CONTEXT.md \
-  && pass "CONTEXT.md has '### Indicator' heading" \
-  || fail "CONTEXT.md missing '### Indicator' heading"
+# V8 (ADR 0025/0026): the indicator is no longer a stored entity. CONTEXT.md
+# frames it as a derived (concept, geography) query, and the V7 'Indicator
+# variant' / 'Default variant' glossary entries are retired.
+grep -q "^### Indicator (derived, not stored)$" CONTEXT.md \
+  && pass "CONTEXT.md frames indicator as a derived query (V8)" \
+  || fail "CONTEXT.md missing V8 '### Indicator (derived, not stored)' heading"
 
-grep -q "^### Indicator variant$" CONTEXT.md \
-  && pass "CONTEXT.md has '### Indicator variant' heading" \
-  || fail "CONTEXT.md missing '### Indicator variant' heading"
+! grep -q "^### Indicator variant$" CONTEXT.md \
+  && pass "CONTEXT.md dropped the retired V7 '### Indicator variant' heading" \
+  || fail "CONTEXT.md still carries the retired V7 '### Indicator variant' heading"
 
 grep -qi "is_default" CONTEXT.md \
   && pass "CONTEXT.md documents is_default" \

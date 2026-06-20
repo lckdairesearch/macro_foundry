@@ -12,6 +12,69 @@ Most recent at the top.
 
 ## Log
 
+### [2026-06-20] Issues 83–85 — V8 rebootstrap, operator surface, and doc reconciliation
+
+Closed the V8 category collapse (ADR 0025/0026) across the catalog generator, the
+operator-facing surface, and the docs. Landed as three slices on one session,
+consolidated from two parallel worktree agents (#83, #84) plus an in-session #85.
+
+**#83 — rebootstrap concepts via FRED + registration.** `services/registration.py`
+gained `register_concept_node`: the accretion chokepoint that finds-or-mints a
+`kind=concept` node under a seeded subdomain (idempotent on `categories.code`),
+embeds it on creation, and links it via a `category_edge`; it rejects a missing
+parent or a non-concept code (no placeholders, ADR 0010). `services/embeddings.py`
+gained `compose_category_embedding_input` (concept-node recipe).
+`bootstrap/fred_us_macro.py` was reimplemented from its NotImplementedError stub
+(curated specs recovered from `531ecd4` and remapped onto concept nodes): four US
+series attach to concept nodes; reset removes series-and-below but keeps the
+taxonomy tree. New live tests: `tests/shared/test_concept_accretion.py`,
+`tests/shared/test_fred_bootstrap.py`.
+
+Judgment calls (this slice carried the concept-generation judgment, flagged AFK):
+- GDP nominal/real → `GDP_NOMINAL` / `GDP_REAL` (two distinct seeded concepts, per
+  the seed's documented "no bare GDP concept" stance); CPI headline →
+  `CPI_ALL_ITEMS`; CPI core → **accreted** `CPI_CORE` under `CONSUMER_PRICES` (the
+  literal ADR 0026 §5 accretion example, so no invented series).
+- `is_default` is now per `(category_id, geography_id)`. Each curated series is the
+  sole reading of its `(concept, USA)` pair, so all four are `is_default=True` — a
+  real shift from the V7 default-variant model.
+- `debug_smoke.py` left as a stub (a V8 request-centric smoke set is its own slice).
+- **Follow-up:** seeded universal concepts are returned unembedded
+  (`register_concept_node` only embeds nodes it mints; the seed runner never
+  embedded them), so they have `embedding IS NULL` after bootstrap. A
+  seeded-concept embedding backfill (extend `embeddings backfill` to `categories`)
+  is owed. The series embedding recipe was deliberately left without category
+  context (would drift every series hash; pre-existing #78 follow-up).
+
+**#84 — admin views + series API surface.** New SQLAdmin views
+`CategoryAdmin` / `CategoryEdgeAdmin` (`views/category.py`) and `SourceGroupAdmin`
+/ `SourceGroupMemberAdmin` (`views/source_group.py`), registered in `ADMIN_VIEWS`;
+`CategoryAdmin` hides the internal embedding columns. `SeriesReadDetail` gained
+`category_path: list[CategoryRead]` — the ancestor chain walked up `category_edges`
+via one explicit recursive CTE keyed by every `category_id` in the response (no
+N+1, no lazy load), concept-node-first then ancestors to the domain root
+(`[CPI_ALL_ITEMS, CONSUMER_PRICES, PRICES]`); null `category_id` → `[]`. Wired into
+both `GET /series/` and `GET /series/{id}`. The tag-flattening was already gone
+(#78). New live test: `tests/shared/test_series_category_path.py`.
+
+**#85 — docs.** `CONTEXT.md`: dropped the live V7 `Concept` (table) / `Indicator` /
+`Indicator variant` / `Default variant` glossary entries and rewrote them for the
+categories model (concept = `kind=concept` node that accretes; indicator = derived
+`(concept, geography)` query, not a row; default reading = `series.is_default` per
+`(category_id, geography_id)`); folded in the ADR 0026 concept-naming rules; fixed
+the `target_type`, code-example, `categories.code` natural-key, and prose-field
+references. `architecture.md`: corrected the model/schema/seed/api file tree
+(`category.py` / `source_group.py`, `CATEGORIES` seed data, `categories.py` runner),
+the seed-strategy prose, the `categories.code` natural key, and the testing-example
+table names.
+
+Verification: full live V8 suite `uv run pytest --import-mode=importlib tests/shared
+tests/docs tests/test_admin_auth.py tests/test_migrations.py` → **131 passed**;
+`ruff check` clean across all touched files; FastAPI app boots (109 routes).
+`tests/macrodb/` remains stale V7 cruft and is excluded. Deviation: #83's worked
+accretion exemplar is `CPI_CORE` rather than industrial production (kept scope to
+"full preset remapped" with zero invented series).
+
 ### [2026-06-20] Issue 79 — create the V8 categories tree (ADR 0025 §1, §2, §5)
 
 Constructive half of the V8 collapse, on top of #78: the single `categories`
