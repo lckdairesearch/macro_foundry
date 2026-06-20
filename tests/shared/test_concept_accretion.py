@@ -1,16 +1,18 @@
 """Issue #83: concept accretion via the registration service (ADR 0025/0026 §5).
 
-`register_concept_node` is the chokepoint by which the long tail of `kind=concept`
-nodes accretes under the seeded subdomain skeleton as series arrive: a universal
-concept already seeded under a subdomain is returned untouched, a not-yet-existing
-concept is minted as a `kind=concept` node + a `category_edge` under its parent and
-carries an embedding (ADR 0025 §1). The parent subdomain must exist — no
-placeholders (ADR 0010).
+`register_concept_node` is the chokepoint by which a genuinely novel `kind=concept`
+node accretes under the seeded subdomain skeleton when onboarding discovers a
+concept the curated taxonomy does not carry (the full taxonomy is now seeded —
+ADR 0027 — so this is a fallback, not the primary path): a concept already present
+is returned untouched, a not-yet-existing concept is minted as a `kind=concept`
+node + a `category_edge` under its parent and carries an embedding (ADR 0025 §1).
+The parent subdomain must exist — no placeholders (ADR 0010).
 
 Runs against the shared session test database (conftest migrates + seeds to head).
-The seeded skeleton provides `CONSUMER_PRICES` (subdomain) and `CPI_ALL_ITEMS`
-(universal concept) used as fixtures here. `embed_text` is mocked so no live
-OpenAI key is needed.
+The seeded taxonomy provides `CONSUMER_PRICES` (subdomain) and `CPI_ALL_ITEMS`
+(concept) used as fixtures here; `TEST_NOVEL_CONCEPT` is deliberately *not* in the
+seed so it exercises the mint path. `embed_text` is mocked so no live OpenAI key
+is needed.
 """
 
 from __future__ import annotations
@@ -45,16 +47,19 @@ async def _edge_for(session: AsyncSession, child_id: object) -> CategoryEdge | N
 
 @pytest.mark.asyncio
 async def test_mints_new_concept_under_seeded_subdomain(session: AsyncSession) -> None:
+    # A code deliberately absent from the seeded taxonomy → genuine mint.
+    assert await session.scalar(select(Category).where(Category.code == "TEST_NOVEL_CONCEPT")) is None
+
     concept = await register_concept_node(
         session,
-        code="CPI_CORE",
-        name="CPI Core",
+        code="TEST_NOVEL_CONCEPT",
+        name="Test Novel Concept",
         parent_code="CONSUMER_PRICES",
-        description="Consumer prices excluding food and energy (core inflation).",
+        description="A novel concept onboarding discovered that the taxonomy lacked.",
     )
 
     assert concept.kind is CategoryKind.CONCEPT
-    assert concept.code == "CPI_CORE"
+    assert concept.code == "TEST_NOVEL_CONCEPT"
     # Carries an embedding (ADR 0025 §1: the concept node holds it now).
     assert concept.embedding is not None
     assert concept.embedding_model == EMBEDDING_MODEL
@@ -70,10 +75,10 @@ async def test_mints_new_concept_under_seeded_subdomain(session: AsyncSession) -
 @pytest.mark.asyncio
 async def test_accretion_is_idempotent_on_code(session: AsyncSession) -> None:
     first = await register_concept_node(
-        session, code="CPI_CORE", name="CPI Core", parent_code="CONSUMER_PRICES",
+        session, code="TEST_NOVEL_CONCEPT", name="Test Novel Concept", parent_code="CONSUMER_PRICES",
     )
     second = await register_concept_node(
-        session, code="CPI_CORE", name="CPI Core (again)", parent_code="CONSUMER_PRICES",
+        session, code="TEST_NOVEL_CONCEPT", name="Test Novel Concept (again)", parent_code="CONSUMER_PRICES",
     )
 
     assert first.id == second.id

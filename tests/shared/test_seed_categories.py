@@ -23,15 +23,15 @@ from macro_foundry.models import Category, CategoryEdge
 from macro_foundry.seed import SeedTarget, reset_seed_tables, run_seed
 from macro_foundry.seed.data.categories import (
     CATEGORIES,
+    CONCEPTS,
     DOMAINS,
     SUBDOMAINS,
-    UNIVERSAL_CONCEPTS,
 )
 
 EXPECTED_DOMAINS = 15
 EXPECTED_SUBDOMAINS = 71
-EXPECTED_UNIVERSAL_CONCEPTS = len(UNIVERSAL_CONCEPTS)
-EXPECTED_NODES = EXPECTED_DOMAINS + EXPECTED_SUBDOMAINS + EXPECTED_UNIVERSAL_CONCEPTS
+EXPECTED_CONCEPTS = 157  # the full L3 long tail, seeded in full (ADR 0027)
+EXPECTED_NODES = EXPECTED_DOMAINS + EXPECTED_SUBDOMAINS + EXPECTED_CONCEPTS
 # Every node except the 15 roots carries exactly one parent edge.
 EXPECTED_EDGES = EXPECTED_NODES - EXPECTED_DOMAINS
 
@@ -57,6 +57,7 @@ async def _reseed_fresh(session: AsyncSession) -> None:
 def test_seed_data_matches_expected_tier_counts() -> None:
     assert len(DOMAINS) == EXPECTED_DOMAINS
     assert len(SUBDOMAINS) == EXPECTED_SUBDOMAINS
+    assert len(CONCEPTS) == EXPECTED_CONCEPTS
     assert len(CATEGORIES) == EXPECTED_NODES
     # Codes are unique across the whole tree.
     codes = [row["code"] for row in CATEGORIES]
@@ -82,18 +83,24 @@ def test_concept_leaf_l2s_are_the_documented_fourteen() -> None:
     }
 
 
-def test_universal_concepts_include_the_named_headlines() -> None:
-    universal_codes = {row["code"] for row in UNIVERSAL_CONCEPTS}
-    # ADR 0026 §5 names CPI_ALL_ITEMS, GDP, UNEMPLOYMENT_RATE, POLICY_RATE, ...
-    # GDP maps to the headline real/nominal tiers (no bare GDP concept exists).
+def test_concepts_cover_headlines_and_the_long_tail() -> None:
+    concept_codes = {row["code"] for row in CONCEPTS}
+    # Universal headlines (ADR 0026 §5) — GDP maps to the real/nominal tiers
+    # (no bare GDP concept exists) — AND the deeper long tail now seeded in full
+    # (ADR 0027), e.g. CPI_CORE / GDP_DEFLATOR that previously had to accrete.
     assert {
         "CPI_ALL_ITEMS",
         "GDP_REAL",
         "GDP_NOMINAL",
         "UNEMPLOYMENT_RATE",
         "POLICY_RATE",
-    }.issubset(universal_codes)
-    assert all(row["kind"] == "concept" for row in UNIVERSAL_CONCEPTS)
+        "CPI_CORE",
+        "GDP_DEFLATOR",
+    }.issubset(concept_codes)
+    assert all(row["kind"] == "concept" for row in CONCEPTS)
+    # The L3 concepts parent only onto seeded subdomains (no orphan edges).
+    subdomain_codes = {row["code"] for row in SUBDOMAINS}
+    assert all(row["parent_code"] in subdomain_codes for row in CONCEPTS)
 
 
 @pytest.mark.asyncio
@@ -183,8 +190,8 @@ async def test_node_kinds_match_topic_skeleton_and_concept_grain(
         expected = CategoryKind.CONCEPT if row["code"] in CONCEPT_LEAF_L2_CODES else CategoryKind.TOPIC
         assert kinds[row["code"]] == expected
 
-    # Universal concepts are all concepts.
-    for row in UNIVERSAL_CONCEPTS:
+    # The full L3 concept tail is all concepts.
+    for row in CONCEPTS:
         assert kinds[row["code"]] == CategoryKind.CONCEPT
 
 

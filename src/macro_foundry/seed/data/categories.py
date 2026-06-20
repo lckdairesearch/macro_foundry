@@ -6,15 +6,17 @@ Baked at authoring time from the "Seed rows (flat)" tab of
 dependency on openpyxl — the rows are Python literals, exactly as
 ``seed/data/geographies.py`` bakes geographies.
 
-Scope (ADR 0026 §5): seed the topic skeleton — the 15 domains (L1) and 71
-subdomains (L2) — plus the handful of *universal* concepts every country
-publishes. The long tail of L3 concepts is **not** seeded; it accretes via
-bootstrap/onboarding (no placeholder concepts, ADR 0010 / ADR 0026 §5).
+Scope: the **full** curated taxonomy — 15 domains (L1), 71 subdomains (L2), and
+157 L3 concepts (ADR 0027 reverses ADR 0026 §5's "seed only the universal
+concepts, accrete the long tail": the taxonomy is curated, human-reviewed
+reference data, so it is seeded in full, like geographies). Runtime accretion
+(``services.registration.register_concept_node``) remains the fallback for
+genuinely novel concepts discovered during onboarding, not the primary path.
 
-Note that 14 of the 71 subdomains are ``kind=concept`` "concept-leaf" L2s
-(ADR 0026 §5: an L2 that maps to one economic idea is itself the attachable
-concept, e.g. ``FISCAL_BALANCE``, ``EXCHANGE_RATE``). They are seeded with the
-subdomain skeleton and are universally attachable in their own right.
+Of the 71 subdomains, 14 are ``kind=concept`` "concept-leaf" L2s (ADR 0026 §5: an
+L2 that maps to one economic idea is itself the attachable concept, e.g.
+``FISCAL_BALANCE``, ``EXCHANGE_RATE``); the other 57 are ``kind=topic`` browse
+nodes. All 171 ``kind=concept`` nodes are attachable by a series.
 """
 
 from __future__ import annotations
@@ -127,34 +129,180 @@ SUBDOMAINS: list[CategorySeed] = [
 ]
 
 
-# --- Universal L3 concepts (kind=concept) -----------------------------------
-# The headline measures every country publishes (ADR 0026 §5: "the handful of
-# universal concepts every country has ... let the long tail accrete via
-# onboarding"). GDP maps to the two universal-headline tiers GDP_REAL and
-# GDP_NOMINAL (there is no bare GDP concept in the V8 tree).
-UNIVERSAL_CONCEPTS: list[CategorySeed] = [
+# --- L3 concepts (all kind=concept) -----------------------------------------
+# The full curated long tail (ADR 0027). Names are the idiomatic display labels
+# authored alongside the codes in the taxonomy workbook; refine freely.
+CONCEPTS: list[CategorySeed] = [
     {"code": "CPI_ALL_ITEMS", "name": "CPI All Items", "kind": "concept", "parent_code": "CONSUMER_PRICES"},
+    {"code": "CPI_CORE", "name": "CPI Core", "kind": "concept", "parent_code": "CONSUMER_PRICES"},
+    {"code": "PPI_ALL_ITEMS", "name": "PPI All Items", "kind": "concept", "parent_code": "PRODUCER_PRICES"},
+    {"code": "PPI_INPUT", "name": "PPI Input", "kind": "concept", "parent_code": "PRODUCER_PRICES"},
+    {"code": "PPI_OUTPUT", "name": "PPI Output", "kind": "concept", "parent_code": "PRODUCER_PRICES"},
+    {"code": "TRADE_PRICE_INDEX", "name": "Trade Price Index", "kind": "concept", "parent_code": "TRADE_PRICES"},
+    {"code": "TERMS_OF_TRADE", "name": "Terms Of Trade", "kind": "concept", "parent_code": "TRADE_PRICES"},
+    {"code": "PROPERTY_PRICE_INDEX", "name": "Property Price Index", "kind": "concept", "parent_code": "PROPERTY_PRICES"},
+    {"code": "RENT_INDEX", "name": "Rent Index", "kind": "concept", "parent_code": "PROPERTY_PRICES"},
+    {"code": "PRICE_LEVEL_INDEX", "name": "Price Level Index", "kind": "concept", "parent_code": "COMPARATIVE_PRICE_LEVELS"},
+    {"code": "PURCHASING_POWER_PARITY", "name": "Purchasing Power Parity", "kind": "concept", "parent_code": "COMPARATIVE_PRICE_LEVELS"},
     {"code": "GDP_NOMINAL", "name": "GDP Nominal", "kind": "concept", "parent_code": "GDP_AND_GROWTH"},
     {"code": "GDP_REAL", "name": "GDP Real", "kind": "concept", "parent_code": "GDP_AND_GROWTH"},
+    {"code": "GDP_DEFLATOR", "name": "GDP Deflator", "kind": "concept", "parent_code": "GDP_AND_GROWTH"},
+    {"code": "HOUSEHOLD_CONSUMPTION", "name": "Household Consumption", "kind": "concept", "parent_code": "EXPENDITURE_COMPONENTS"},
+    {"code": "GOVERNMENT_CONSUMPTION", "name": "Government Consumption", "kind": "concept", "parent_code": "EXPENDITURE_COMPONENTS"},
+    {"code": "GROSS_FIXED_CAPITAL_FORMATION", "name": "Gross Fixed Capital Formation", "kind": "concept", "parent_code": "EXPENDITURE_COMPONENTS"},
+    {"code": "CHANGE_IN_INVENTORIES", "name": "Changes in Inventories", "kind": "concept", "parent_code": "EXPENDITURE_COMPONENTS"},
+    {"code": "NET_EXPORTS", "name": "Net Exports", "kind": "concept", "parent_code": "EXPENDITURE_COMPONENTS"},
+    {"code": "GROSS_NATIONAL_INCOME", "name": "Gross National Income", "kind": "concept", "parent_code": "INCOME_AND_SAVING"},
+    {"code": "OPERATING_SURPLUS", "name": "Operating Surplus", "kind": "concept", "parent_code": "INCOME_AND_SAVING"},
+    {"code": "NATIONAL_SAVING", "name": "National Saving", "kind": "concept", "parent_code": "INCOME_AND_SAVING"},
+    {"code": "HOUSEHOLD_SAVING", "name": "Household Saving", "kind": "concept", "parent_code": "INCOME_AND_SAVING"},
+    {"code": "HOUSEHOLD_SECTOR_ACCOUNT", "name": "Household Sector Account", "kind": "concept", "parent_code": "SECTOR_ACCOUNTS"},
+    {"code": "CORPORATE_SECTOR_ACCOUNT", "name": "Corporate Sector Account", "kind": "concept", "parent_code": "SECTOR_ACCOUNTS"},
+    {"code": "FLOW_OF_FUNDS", "name": "Flow Of Funds", "kind": "concept", "parent_code": "SECTOR_ACCOUNTS"},
+    {"code": "CAPITAL_STOCK", "name": "Capital Stock", "kind": "concept", "parent_code": "NATIONAL_WEALTH"},
+    {"code": "NATIONAL_BALANCE_SHEET", "name": "National Balance Sheet", "kind": "concept", "parent_code": "NATIONAL_WEALTH"},
+    {"code": "HOUSEHOLD_NET_WORTH", "name": "Household Net Worth", "kind": "concept", "parent_code": "NATIONAL_WEALTH"},
+    {"code": "INDUSTRIAL_PRODUCTION_INDEX", "name": "Industrial Production Index", "kind": "concept", "parent_code": "INDUSTRIAL_PRODUCTION"},
+    {"code": "CAPACITY_UTILIZATION", "name": "Capacity Utilization", "kind": "concept", "parent_code": "INDUSTRIAL_PRODUCTION"},
+    {"code": "INVENTORIES", "name": "Inventories", "kind": "concept", "parent_code": "INDUSTRIAL_PRODUCTION"},
+    {"code": "CONSTRUCTION_OUTPUT", "name": "Construction Output", "kind": "concept", "parent_code": "CONSTRUCTION"},
+    {"code": "HOUSING_START", "name": "Housing Starts", "kind": "concept", "parent_code": "CONSTRUCTION"},
+    {"code": "BUILDING_PERMIT", "name": "Building Permits", "kind": "concept", "parent_code": "CONSTRUCTION"},
+    {"code": "PMI", "name": "PMI", "kind": "concept", "parent_code": "BUSINESS_SURVEYS"},
+    {"code": "BUSINESS_CONFIDENCE", "name": "Business Confidence", "kind": "concept", "parent_code": "BUSINESS_SURVEYS"},
+    {"code": "NEW_ORDERS", "name": "New Orders", "kind": "concept", "parent_code": "BUSINESS_SURVEYS"},
+    {"code": "BUSINESS_REGISTRATION", "name": "Business Registrations", "kind": "concept", "parent_code": "BUSINESS_DEMOGRAPHY"},
+    {"code": "BUSINESS_BANKRUPTCY", "name": "Business Bankruptcies", "kind": "concept", "parent_code": "BUSINESS_DEMOGRAPHY"},
+    {"code": "ENTERPRISE_COUNT", "name": "Enterprise Count", "kind": "concept", "parent_code": "BUSINESS_DEMOGRAPHY"},
+    {"code": "CORPORATE_PROFIT", "name": "Corporate Profits", "kind": "concept", "parent_code": "BUSINESS_PROFITS"},
+    {"code": "RETAIL_SALES", "name": "Retail Sales", "kind": "concept", "parent_code": "DISTRIBUTIVE_TRADE"},
+    {"code": "WHOLESALE_TRADE", "name": "Wholesale Trade", "kind": "concept", "parent_code": "DISTRIBUTIVE_TRADE"},
     {"code": "UNEMPLOYMENT_RATE", "name": "Unemployment Rate", "kind": "concept", "parent_code": "EMPLOYMENT_AND_UNEMPLOYMENT"},
+    {"code": "EMPLOYMENT_LEVEL", "name": "Employment Level", "kind": "concept", "parent_code": "EMPLOYMENT_AND_UNEMPLOYMENT"},
+    {"code": "PARTICIPATION_RATE", "name": "Participation Rate", "kind": "concept", "parent_code": "EMPLOYMENT_AND_UNEMPLOYMENT"},
+    {"code": "JOB_VACANCIES", "name": "Job Vacancies", "kind": "concept", "parent_code": "EMPLOYMENT_AND_UNEMPLOYMENT"},
+    {"code": "HOURS_WORKED", "name": "Hours Worked", "kind": "concept", "parent_code": "EMPLOYMENT_AND_UNEMPLOYMENT"},
+    {"code": "AVERAGE_EARNINGS", "name": "Average Earnings", "kind": "concept", "parent_code": "WAGES_AND_EARNINGS"},
+    {"code": "MINIMUM_WAGE", "name": "Minimum Wage", "kind": "concept", "parent_code": "WAGES_AND_EARNINGS"},
+    {"code": "LABOR_COST_INDEX", "name": "Labor Cost Index", "kind": "concept", "parent_code": "WAGES_AND_EARNINGS"},
+    {"code": "LABOR_PRODUCTIVITY", "name": "Labor Productivity", "kind": "concept", "parent_code": "PRODUCTIVITY"},
+    {"code": "UNIT_LABOR_COST", "name": "Unit Labor Cost", "kind": "concept", "parent_code": "PRODUCTIVITY"},
+    {"code": "MONETARY_BASE", "name": "Monetary Base", "kind": "concept", "parent_code": "MONETARY_AGGREGATES"},
+    {"code": "NARROW_MONEY", "name": "Narrow Money", "kind": "concept", "parent_code": "MONETARY_AGGREGATES"},
     {"code": "BROAD_MONEY", "name": "Broad Money", "kind": "concept", "parent_code": "MONETARY_AGGREGATES"},
     {"code": "POLICY_RATE", "name": "Policy Rate", "kind": "concept", "parent_code": "INTEREST_RATES"},
+    {"code": "INTERBANK_RATE", "name": "Interbank Rate", "kind": "concept", "parent_code": "INTEREST_RATES"},
+    {"code": "LENDING_RATE", "name": "Lending Rate", "kind": "concept", "parent_code": "INTEREST_RATES"},
+    {"code": "DEPOSIT_RATE", "name": "Deposit Rate", "kind": "concept", "parent_code": "INTEREST_RATES"},
+    {"code": "CREDIT_TO_PRIVATE_SECTOR", "name": "Credit To Private Sector", "kind": "concept", "parent_code": "CREDIT_AND_DEBT"},
+    {"code": "CENTRAL_BANK_ASSET", "name": "Central Bank Assets", "kind": "concept", "parent_code": "CENTRAL_BANK_BALANCE_SHEET"},
+    {"code": "BANK_RESERVE", "name": "Bank Reserves", "kind": "concept", "parent_code": "CENTRAL_BANK_BALANCE_SHEET"},
+    {"code": "BANK_DEPOSIT", "name": "Bank Deposits", "kind": "concept", "parent_code": "BANKING_SECTOR"},
+    {"code": "NON_PERFORMING_LOAN", "name": "Non-Performing Loans", "kind": "concept", "parent_code": "BANKING_SECTOR"},
+    {"code": "BANK_CAPITAL_ADEQUACY_RATIO", "name": "Bank Capital Adequacy Ratio", "kind": "concept", "parent_code": "BANKING_SECTOR"},
+    {"code": "BANK_PROFITABILITY", "name": "Bank Profitability", "kind": "concept", "parent_code": "BANKING_SECTOR"},
+    {"code": "BANK_LIQUIDITY_RATIO", "name": "Bank Liquidity Ratio", "kind": "concept", "parent_code": "BANKING_SECTOR"},
+    {"code": "FINANCIAL_ACCESS_POINT", "name": "Financial Access Points", "kind": "concept", "parent_code": "FINANCIAL_INCLUSION"},
+    {"code": "ACCOUNT_OWNERSHIP", "name": "Account Ownership", "kind": "concept", "parent_code": "FINANCIAL_INCLUSION"},
+    {"code": "MOBILE_MONEY_ACCOUNT", "name": "Mobile Money Accounts", "kind": "concept", "parent_code": "FINANCIAL_INCLUSION"},
+    {"code": "EQUITY_MARKET_INDEX", "name": "Equity Market Index", "kind": "concept", "parent_code": "EQUITY_MARKETS"},
+    {"code": "MARKET_CAPITALIZATION", "name": "Market Capitalization", "kind": "concept", "parent_code": "EQUITY_MARKETS"},
+    {"code": "DIVIDEND_YIELD", "name": "Dividend Yield", "kind": "concept", "parent_code": "EQUITY_MARKETS"},
+    {"code": "GOVERNMENT_BOND_YIELD", "name": "Government Bond Yield", "kind": "concept", "parent_code": "BOND_YIELDS_AND_SPREADS"},
+    {"code": "CORPORATE_BOND_YIELD", "name": "Corporate Bond Yield", "kind": "concept", "parent_code": "BOND_YIELDS_AND_SPREADS"},
+    {"code": "SOVEREIGN_YIELD_SPREAD", "name": "Sovereign Yield Spread", "kind": "concept", "parent_code": "BOND_YIELDS_AND_SPREADS"},
+    {"code": "EQUITY_VOLATILITY_INDEX", "name": "Equity Volatility Index", "kind": "concept", "parent_code": "VOLATILITY_AND_RISK"},
+    {"code": "SOVEREIGN_CDS_SPREAD", "name": "Sovereign CDS Spread", "kind": "concept", "parent_code": "VOLATILITY_AND_RISK"},
+    {"code": "GOVERNMENT_REVENUE", "name": "Government Revenue", "kind": "concept", "parent_code": "REVENUE_AND_TAXATION"},
+    {"code": "TAX_REVENUE", "name": "Tax Revenue", "kind": "concept", "parent_code": "REVENUE_AND_TAXATION"},
+    {"code": "GOVERNMENT_EXPENDITURE", "name": "Government Expenditure", "kind": "concept", "parent_code": "EXPENDITURE"},
+    {"code": "INTEREST_PAYMENT", "name": "Interest Payments", "kind": "concept", "parent_code": "EXPENDITURE"},
     {"code": "GENERAL_GOVERNMENT_DEBT", "name": "General Government Debt", "kind": "concept", "parent_code": "PUBLIC_DEBT"},
+    {"code": "MERCHANDISE_TRADE_FLOW", "name": "Merchandise Trade Flow", "kind": "concept", "parent_code": "MERCHANDISE_TRADE"},
+    {"code": "TRADE_BALANCE_GOODS", "name": "Trade Balance Goods", "kind": "concept", "parent_code": "MERCHANDISE_TRADE"},
+    {"code": "SERVICES_TRADE_FLOW", "name": "Services Trade Flow", "kind": "concept", "parent_code": "TRADE_IN_SERVICES"},
+    {"code": "SERVICES_BALANCE", "name": "Services Balance", "kind": "concept", "parent_code": "TRADE_IN_SERVICES"},
     {"code": "CURRENT_ACCOUNT_BALANCE", "name": "Current Account Balance", "kind": "concept", "parent_code": "BALANCE_OF_PAYMENTS"},
+    {"code": "FINANCIAL_ACCOUNT_BALANCE", "name": "Financial Account Balance", "kind": "concept", "parent_code": "BALANCE_OF_PAYMENTS"},
+    {"code": "REMITTANCES", "name": "Remittances", "kind": "concept", "parent_code": "BALANCE_OF_PAYMENTS"},
+    {"code": "FOREIGN_EXCHANGE_RESERVE", "name": "Foreign Exchange Reserves", "kind": "concept", "parent_code": "RESERVES_AND_INVESTMENT_POSITION"},
+    {"code": "INTERNATIONAL_INVESTMENT_POSITION", "name": "International Investment Position", "kind": "concept", "parent_code": "RESERVES_AND_INVESTMENT_POSITION"},
+    {"code": "EXTERNAL_DEBT", "name": "External Debt", "kind": "concept", "parent_code": "RESERVES_AND_INVESTMENT_POSITION"},
+    {"code": "FDI_FLOW", "name": "FDI Flows", "kind": "concept", "parent_code": "FOREIGN_INVESTMENT"},
+    {"code": "FDI_STOCK", "name": "FDI Stock", "kind": "concept", "parent_code": "FOREIGN_INVESTMENT"},
+    {"code": "PORTFOLIO_FLOW", "name": "Portfolio Flows", "kind": "concept", "parent_code": "FOREIGN_INVESTMENT"},
     {"code": "TOTAL_POPULATION", "name": "Total Population", "kind": "concept", "parent_code": "POPULATION_STOCK_AND_STRUCTURE"},
+    {"code": "MEDIAN_AGE", "name": "Median Age", "kind": "concept", "parent_code": "POPULATION_STOCK_AND_STRUCTURE"},
+    {"code": "DEPENDENCY_RATIO", "name": "Dependency Ratio", "kind": "concept", "parent_code": "POPULATION_STOCK_AND_STRUCTURE"},
+    {"code": "URBANIZATION_RATE", "name": "Urbanization Rate", "kind": "concept", "parent_code": "POPULATION_STOCK_AND_STRUCTURE"},
+    {"code": "BIRTH_RATE", "name": "Birth Rate", "kind": "concept", "parent_code": "VITAL_STATISTICS"},
+    {"code": "DEATH_RATE", "name": "Death Rate", "kind": "concept", "parent_code": "VITAL_STATISTICS"},
+    {"code": "FERTILITY_RATE", "name": "Fertility Rate", "kind": "concept", "parent_code": "VITAL_STATISTICS"},
+    {"code": "LIFE_EXPECTANCY", "name": "Life Expectancy", "kind": "concept", "parent_code": "VITAL_STATISTICS"},
+    {"code": "MIGRATION_FLOW", "name": "Migration Flow", "kind": "concept", "parent_code": "MIGRATION"},
+    {"code": "NET_MIGRATION", "name": "Net Migration", "kind": "concept", "parent_code": "MIGRATION"},
+    {"code": "HOUSEHOLD_COUNT", "name": "Household Count", "kind": "concept", "parent_code": "HOUSEHOLDS_AND_FAMILIES"},
+    {"code": "AVERAGE_HOUSEHOLD_SIZE", "name": "Average Household Size", "kind": "concept", "parent_code": "HOUSEHOLDS_AND_FAMILIES"},
+    {"code": "MARRIAGE_RATE", "name": "Marriage Rate", "kind": "concept", "parent_code": "HOUSEHOLDS_AND_FAMILIES"},
+    {"code": "DIVORCE_RATE", "name": "Divorce Rate", "kind": "concept", "parent_code": "HOUSEHOLDS_AND_FAMILIES"},
+    {"code": "DISEASE_PREVALENCE", "name": "Disease Prevalence", "kind": "concept", "parent_code": "HEALTH_STATUS_AND_OUTCOMES"},
+    {"code": "MORTALITY_RATE", "name": "Mortality Rate", "kind": "concept", "parent_code": "HEALTH_STATUS_AND_OUTCOMES"},
+    {"code": "OBESITY_RATE", "name": "Obesity Rate", "kind": "concept", "parent_code": "HEALTH_RISK_FACTORS"},
+    {"code": "SMOKING_RATE", "name": "Smoking Rate", "kind": "concept", "parent_code": "HEALTH_RISK_FACTORS"},
+    {"code": "ALCOHOL_CONSUMPTION", "name": "Alcohol Consumption", "kind": "concept", "parent_code": "HEALTH_RISK_FACTORS"},
+    {"code": "UNDERNOURISHMENT_RATE", "name": "Undernourishment Rate", "kind": "concept", "parent_code": "HEALTH_RISK_FACTORS"},
+    {"code": "HOSPITAL_BED", "name": "Hospital Beds", "kind": "concept", "parent_code": "HEALTH_SERVICES"},
+    {"code": "PHYSICIAN", "name": "Physicians", "kind": "concept", "parent_code": "HEALTH_SERVICES"},
+    {"code": "IMMUNIZATION_RATE", "name": "Immunization Rate", "kind": "concept", "parent_code": "HEALTH_SERVICES"},
+    {"code": "LITERACY_RATE", "name": "Literacy Rate", "kind": "concept", "parent_code": "ATTAINMENT_AND_LITERACY"},
+    {"code": "TERTIARY_ATTAINMENT", "name": "Tertiary Attainment", "kind": "concept", "parent_code": "ATTAINMENT_AND_LITERACY"},
+    {"code": "MEAN_YEARS_SCHOOLING", "name": "Mean Years Schooling", "kind": "concept", "parent_code": "ATTAINMENT_AND_LITERACY"},
+    {"code": "STUDENT_ASSESSMENT_SCORE", "name": "Student Assessment Score", "kind": "concept", "parent_code": "EDUCATION_OUTCOMES"},
+    {"code": "COMPLETION_RATE", "name": "Completion Rate", "kind": "concept", "parent_code": "EDUCATION_OUTCOMES"},
+    {"code": "GINI_COEFFICIENT", "name": "Gini Coefficient", "kind": "concept", "parent_code": "INCOME_AND_INEQUALITY"},
+    {"code": "POVERTY_RATE", "name": "Poverty Rate", "kind": "concept", "parent_code": "INCOME_AND_INEQUALITY"},
+    {"code": "MEDIAN_HOUSEHOLD_INCOME", "name": "Median Household Income", "kind": "concept", "parent_code": "INCOME_AND_INEQUALITY"},
+    {"code": "TOP_INCOME_SHARE", "name": "Top Income Share", "kind": "concept", "parent_code": "INCOME_AND_INEQUALITY"},
+    {"code": "CRIME_RATE", "name": "Crime Rate", "kind": "concept", "parent_code": "CRIME_AND_JUSTICE"},
+    {"code": "INCARCERATION_RATE", "name": "Incarceration Rate", "kind": "concept", "parent_code": "CRIME_AND_JUSTICE"},
+    {"code": "SOCIAL_SPENDING", "name": "Social Spending", "kind": "concept", "parent_code": "SOCIAL_PROTECTION"},
+    {"code": "CULTURAL_EXPENDITURE", "name": "Cultural Expenditure", "kind": "concept", "parent_code": "CULTURE_AND_RECREATION"},
+    {"code": "CULTURAL_PARTICIPATION", "name": "Cultural Participation", "kind": "concept", "parent_code": "CULTURE_AND_RECREATION"},
+    {"code": "HOMEOWNERSHIP_RATE", "name": "Homeownership Rate", "kind": "concept", "parent_code": "HOUSING_CONDITIONS"},
+    {"code": "OVERCROWDING_RATE", "name": "Overcrowding Rate", "kind": "concept", "parent_code": "HOUSING_CONDITIONS"},
+    {"code": "HOMELESSNESS", "name": "Homelessness", "kind": "concept", "parent_code": "HOUSING_CONDITIONS"},
+    {"code": "DWELLING_STOCK", "name": "Dwelling Stock", "kind": "concept", "parent_code": "HOUSING_CONDITIONS"},
+    {"code": "GHG_EMISSIONS", "name": "GHG Emissions", "kind": "concept", "parent_code": "EMISSIONS_AND_AIR_QUALITY"},
+    {"code": "AIR_QUALITY", "name": "Air Quality", "kind": "concept", "parent_code": "EMISSIONS_AND_AIR_QUALITY"},
+    {"code": "WATER_WITHDRAWAL", "name": "Water Withdrawal", "kind": "concept", "parent_code": "NATURAL_RESOURCES"},
+    {"code": "FOREST_AREA", "name": "Forest Area", "kind": "concept", "parent_code": "NATURAL_RESOURCES"},
+    {"code": "LAND_USE", "name": "Land Use", "kind": "concept", "parent_code": "NATURAL_RESOURCES"},
+    {"code": "AVERAGE_TEMPERATURE", "name": "Average Temperature", "kind": "concept", "parent_code": "CLIMATE"},
+    {"code": "PRECIPITATION", "name": "Precipitation", "kind": "concept", "parent_code": "CLIMATE"},
+    {"code": "ENERGY_CONSUMPTION", "name": "Energy Consumption", "kind": "concept", "parent_code": "ENERGY"},
+    {"code": "ENERGY_PRODUCTION", "name": "Energy Production", "kind": "concept", "parent_code": "ENERGY"},
+    {"code": "ELECTRICITY_GENERATION", "name": "Electricity Generation", "kind": "concept", "parent_code": "ENERGY"},
+    {"code": "RESEARCH_AND_DEVELOPMENT_EXPENDITURE", "name": "Research & Development Expenditure", "kind": "concept", "parent_code": "SCIENCE_AND_TECHNOLOGY"},
+    {"code": "PATENT_APPLICATION", "name": "Patent Applications", "kind": "concept", "parent_code": "SCIENCE_AND_TECHNOLOGY"},
+    {"code": "INTERNET_PENETRATION", "name": "Internet Penetration", "kind": "concept", "parent_code": "SCIENCE_AND_TECHNOLOGY"},
+    {"code": "TOURIST_ARRIVAL", "name": "Tourist Arrivals", "kind": "concept", "parent_code": "TOURISM"},
+    {"code": "TOURISM_RECEIPT", "name": "Tourism Receipts", "kind": "concept", "parent_code": "TOURISM"},
+    {"code": "FREIGHT_VOLUME", "name": "Freight Volume", "kind": "concept", "parent_code": "TRANSPORT"},
+    {"code": "PASSENGER_TRAFFIC", "name": "Passenger Traffic", "kind": "concept", "parent_code": "TRANSPORT"},
+    {"code": "VEHICLE_REGISTRATION", "name": "Vehicle Registrations", "kind": "concept", "parent_code": "TRANSPORT"},
 ]
 
 
-# All seeded nodes, in tree order (domains, then subdomains, then universal
-# concepts). The seed runner relies on this ordering: a node's parent always
-# appears before it, so edges resolve in one forward pass.
-CATEGORIES: list[CategorySeed] = [*DOMAINS, *SUBDOMAINS, *UNIVERSAL_CONCEPTS]
+# All seeded nodes, in tree order (domains, then subdomains, then concepts). The
+# seed runner loads every node id up front, so edge resolution does not depend on
+# this ordering; it only fixes each parent's child sort_order to the seed order.
+CATEGORIES: list[CategorySeed] = [*DOMAINS, *SUBDOMAINS, *CONCEPTS]
 
 
 __all__ = [
     "CATEGORIES",
     "DOMAINS",
     "SUBDOMAINS",
-    "UNIVERSAL_CONCEPTS",
+    "CONCEPTS",
     "CategorySeed",
 ]

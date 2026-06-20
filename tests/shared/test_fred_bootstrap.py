@@ -1,14 +1,15 @@
 """Issue #83: the curated FRED U.S. macro bootstrap, re-grained onto the V8 tree.
 
 The bootstrap attaches each curated series to its most-specific `kind=concept`
-node (`series.category_id`), minting a concept under the seeded subdomain
-skeleton when one does not yet exist (ADR 0025 §3, ADR 0026 §5). The V7
-concept/indicator/variant spine is gone.
+node (`series.category_id`). All four curated concepts now live in the full
+seeded taxonomy (ADR 0027), so the bootstrap *finds* them rather than minting;
+`register_concept_node` is find-or-mint, and the mint path is covered separately
+in `test_concept_accretion.py`. The V7 concept/indicator/variant spine is gone.
 
 Runs against the shared session test database (conftest migrates + seeds to head,
-so `CONSUMER_PRICES`, `GDP_AND_GROWTH`, `CPI_ALL_ITEMS`, `GDP_NOMINAL`,
-`GDP_REAL` are present). A fake FRED client and a mocked `embed_text` keep the
-run hermetic. Writes ride the per-test savepoint and roll back.
+so `CONSUMER_PRICES`, `CPI_ALL_ITEMS`, `CPI_CORE`, `GDP_NOMINAL`, `GDP_REAL` are
+present). A fake FRED client and a mocked `embed_text` keep the run hermetic.
+Writes ride the per-test savepoint and roll back.
 """
 
 from __future__ import annotations
@@ -35,7 +36,7 @@ from macro_foundry.models import (
     Observation,
     Series,
 )
-from macro_foundry.services.embeddings import EMBEDDING_DIMENSIONS, EMBEDDING_MODEL
+from macro_foundry.services.embeddings import EMBEDDING_DIMENSIONS
 
 
 class FakeFredClient:
@@ -194,14 +195,14 @@ async def test_bootstrap_attaches_series_to_concept_nodes(
 
 
 @pytest.mark.asyncio
-async def test_bootstrap_accretes_missing_concept_under_seeded_subdomain(
+async def test_bootstrap_attaches_to_seeded_concept_under_its_subdomain(
     test_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     client = _build_fake_client()
 
     async with test_session_factory() as session:
-        # CPI_CORE is NOT seeded; CPI_ALL_ITEMS is.
-        assert await session.scalar(select(Category).where(Category.code == "CPI_CORE")) is None
+        # CPI_CORE is part of the full seeded taxonomy (ADR 0027) — pre-exists.
+        assert await session.scalar(select(Category).where(Category.code == "CPI_CORE")) is not None
 
     await run_fred_us_macro_bootstrap(
         target=EnvTarget.TEST,
@@ -213,11 +214,10 @@ async def test_bootstrap_accretes_missing_concept_under_seeded_subdomain(
     async with test_session_factory() as session:
         cpi_core = await _category(session, "CPI_CORE")
         assert cpi_core.kind is CategoryKind.CONCEPT
-        # Carries an embedding (ADR 0025 §1).
-        assert cpi_core.embedding is not None
-        assert cpi_core.embedding_model == EMBEDDING_MODEL
+        # The core CPI series attaches to the seeded CPI_CORE concept.
+        assert (await _series(session, "US_CPI_CORE_M_SA")).category_id == cpi_core.id
 
-        # Accreted directly under the seeded CONSUMER_PRICES subdomain.
+        # CPI_CORE sits under the seeded CONSUMER_PRICES subdomain (single edge).
         consumer_prices = await _category(session, "CONSUMER_PRICES")
         edge = await session.scalar(
             select(CategoryEdge).where(CategoryEdge.child_category_id == cpi_core.id),
@@ -270,7 +270,7 @@ async def test_bootstrap_is_idempotent(
 
     async with test_session_factory() as session:
         assert await _count(session, Series) == 4
-        # CPI_CORE accreted exactly once, with a single parent edge.
+        # CPI_CORE (seeded) keeps its single parent edge across repeated runs.
         cpi_core = await _category(session, "CPI_CORE")
         edges = (
             await session.execute(
@@ -303,7 +303,7 @@ async def test_reset_removes_series_but_keeps_taxonomy(
     async with test_session_factory() as session:
         assert await _count(session, Series) == 0
         assert await _count(session, Observation) == 0
-        # The accreted concept node and the seeded skeleton both survive a reset.
+        # The seeded concept nodes survive a reset (only series-and-below go).
         assert await session.scalar(select(Category).where(Category.code == "CPI_CORE")) is not None
         assert await session.scalar(select(Category).where(Category.code == "CPI_ALL_ITEMS")) is not None
 
