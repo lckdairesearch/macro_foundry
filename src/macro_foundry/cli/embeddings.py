@@ -13,9 +13,11 @@ from sqlalchemy.orm import selectinload
 
 from macro_foundry.config import settings
 from macro_foundry.db import EnvTarget, app_url_for_target, create_async_engine_for_url, create_session_factory
-from macro_foundry.models import Series
+from macro_foundry.enums import CategoryKind
+from macro_foundry.models import Category, CategoryEdge, Series
 from macro_foundry.services.embeddings import (
     EMBEDDING_MODEL,
+    compose_category_embedding_input,
     compose_series_embedding_input,
     embed_texts,
     hash_embedding_input,
@@ -71,6 +73,20 @@ async def run_embeddings_backfill_with_session_factory(
             ).scalars().all(),
         )
 
+        # Concept nodes carry the catalog embedding now (ADR 0025 §1). The recipe
+        # needs the parent subdomain name, so eager-load each concept's parent edge.
+        concepts = list(
+            (
+                await session.execute(
+                    select(Category)
+                    .where(Category.kind == CategoryKind.CONCEPT)
+                    .options(
+                        selectinload(Category.parent_edge).selectinload(CategoryEdge.parent_category),
+                    ),
+                )
+            ).scalars().all(),
+        )
+
         summary = {
             "series": await _backfill_table(
                 session=session,
@@ -79,8 +95,22 @@ async def run_embeddings_backfill_with_session_factory(
                 embed=embed,
                 batch_size=batch_size,
             ),
+            "categories": await _backfill_table(
+                session=session,
+                rows=concepts,
+                compose=_compose_concept_embedding_input,
+                embed=embed,
+                batch_size=batch_size,
+            ),
         }
         return summary
+
+
+def _compose_concept_embedding_input(concept: Category) -> str:
+    """Concept recipe with its parent subdomain name (eager-loaded, no lazy load)."""
+    parent_edge = concept.parent_edge
+    parent_name = parent_edge.parent_category.name if parent_edge is not None else None
+    return compose_category_embedding_input(concept, parent_name=parent_name)
 
 
 def _batched[T](items: Sequence[T], size: int) -> list[Sequence[T]]:
@@ -150,5 +180,5 @@ def backfill(
             batch_size=50,
         ),
     )
-    for table_name in ("series",):
+    for table_name in ("series", "categories"):
         typer.echo(f"{table_name}: {summary[table_name]} stale -> embedded")
